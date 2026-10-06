@@ -6,7 +6,11 @@
     "orientation": "default",
     "scheme": "streetbiz",
     "userInterfaceStyle": "automatic",
-    "platforms": ["android", "ios", "web"],
+    "platforms": [
+      "android",
+      "ios",
+      "web"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.streetbiz.app"
@@ -18,7 +22,23 @@
       "bundler": "metro",
       "output": "static"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-splash-screen",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "StreetBiz cần camera để quét mã QR giấy phép."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "StreetBiz dùng vị trí để tìm quán và ô vỉa hè gần bạn."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }
