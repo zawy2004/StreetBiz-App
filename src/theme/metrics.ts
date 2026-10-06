@@ -14,6 +14,7 @@ export const spacing = {
 export const layout = {
   screenMargin: 16,
   touch: 48,
+  input: 44,
 } as const;
 
 export const radius = {

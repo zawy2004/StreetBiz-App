@@ -52,6 +52,7 @@ export function Button({
         styles.base,
         {
           minHeight: size === 'md' ? layout.touch : 40,
+          paddingHorizontal: size === 'md' ? spacing.lg : spacing.md,
           backgroundColor: pressed ? look.pressed : look.bg,
           borderColor: look.border,
           alignSelf: fullWidth ? 'stretch' : 'flex-start',

@@ -11,12 +11,14 @@ type Props = {
   subtitle?: string;
   icon?: IconName;
   trailing?: ReactNode;
+  /** Shown under the subtitle, e.g. a status chip. */
+  meta?: ReactNode;
   onPress?: () => void;
   showChevron?: boolean;
   testID?: string;
 };
 
-export function ListRow({ title, subtitle, icon, trailing, onPress, showChevron = !!onPress, testID }: Props) {
+export function ListRow({ title, subtitle, icon, trailing, meta, onPress, showChevron = !!onPress, testID }: Props) {
   const { colors } = useTheme();
   const content = (
     <>
@@ -28,6 +30,7 @@ export function ListRow({ title, subtitle, icon, trailing, onPress, showChevron 
       <View style={styles.body}>
         <AppText variant="label" numberOfLines={2}>{title}</AppText>
         {subtitle ? <AppText variant="small" color="muted" numberOfLines={2}>{subtitle}</AppText> : null}
+        {meta}
       </View>
       {trailing}
       {showChevron ? <Icon name="chevron-right" size={22} color="muted" /> : null}

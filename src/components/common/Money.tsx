@@ -1,8 +1,6 @@
-import { AppText } from './AppText';
+import { formatVnd } from '@/utils/format';
 
-export function formatVnd(amount: number) {
-  return `${new Intl.NumberFormat('vi-VN').format(amount)} đ`;
-}
+import { AppText } from './AppText';
 
 export function Money({ amountVnd, size = 'md', color = 'text' }: { amountVnd: number; size?: 'md' | 'lg'; color?: 'text' | 'primary' | 'error' }) {
   return (
