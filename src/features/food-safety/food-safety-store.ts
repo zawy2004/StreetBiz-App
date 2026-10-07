@@ -16,8 +16,9 @@ export const useFoodSafety = create<State>((set) => ({
     })),
 }));
 
+/** `type` is FoodSafetyEvidence.evidence_type on StreetBiz-BE. */
 export const FOOD_SAFETY_DOCS = [
-  { key: 'health', label: 'Giấy khám sức khoẻ' },
-  { key: 'training', label: 'Chứng nhận tập huấn' },
-  { key: 'tools', label: 'Ảnh dụng cụ chế biến' },
+  { key: 'health', type: 'HEALTH_CHECK', label: 'Giấy khám sức khoẻ' },
+  { key: 'training', type: 'TRAINING', label: 'Chứng nhận tập huấn ATTP' },
+  { key: 'tools', type: 'PREMISES_PHOTO', label: 'Ảnh khu chế biến' },
 ] as const;

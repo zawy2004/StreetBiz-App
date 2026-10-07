@@ -5,64 +5,61 @@ import { AppText } from '@/components/common/AppText';
 import { Card } from '@/components/common/Card';
 import { Icon, type IconName } from '@/components/common/Icon';
 import { KeyValueCard } from '@/components/common/KeyValueCard';
-import { EmptyState } from '@/components/feedback/States';
+import { EmptyState, QueryView } from '@/components/feedback/States';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { StatusChip } from '@/components/status/StatusChip';
 import { goTo } from '@/core/navigation/go';
-import { useMockDb } from '@/mocks/db';
+import { useContract } from '@/features/slots/use-rentals';
 import { spacing, useTheme } from '@/theme';
 import { formatDate, formatVnd } from '@/utils/format';
 
+/** SIDE-05: a rental contract and what can be done with it. */
 export default function ContractDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const contract = useMockDb((s) => s.contracts).find((c) => c.id === id);
-  const slot = useMockDb((s) => s.slots).find((s) => s.id === contract?.slotId);
-  const permit = useMockDb((s) => s.permits).find((p) => p.contractId === id);
-  const nextFee = useMockDb((s) => s.feeItems).find((f) => f.contractId === id && f.item_status !== 'PAID');
-
-  if (!contract) {
-    return (
-      <>
-        <StackHeader title="Hợp đồng" />
-        <Screen><EmptyState title="Không tìm thấy hợp đồng" /></Screen>
-      </>
-    );
-  }
-
-  const active = contract.contract_status === 'ACTIVE';
-  const actions: { label: string; icon: IconName; href: string; highlight?: boolean; hidden?: boolean }[] = [
-    { label: 'Giấy phép', icon: 'card-account-details-outline', href: `/vendor/permit/${permit?.id}`, highlight: true, hidden: !permit },
-    { label: 'Gia hạn', icon: 'calendar-refresh-outline', href: `/vendor/contracts/${id}/renewal`, hidden: !active },
-    { label: 'Trả ô', icon: 'logout-variant', href: `/vendor/contracts/${id}/return`, hidden: !active },
-    { label: 'Chuyển nhượng', icon: 'swap-horizontal', href: `/vendor/contracts/${id}/transfer`, hidden: !active },
-  ];
+  const contract = useContract(id);
 
   return (
     <>
-      <StackHeader title={`Hợp đồng ${slot?.slot_code ?? ''}`} />
-      <Screen>
-        <Card style={styles.head}>
-          <View style={styles.headBody}>
-            <AppText variant="title">{slot?.slot_code}</AppText>
-            <AppText variant="small" color="muted">{slot?.street}</AppText>
-          </View>
-          <StatusChip code={contract.contract_status} />
-        </Card>
+      <StackHeader title={contract.data ? `Hợp đồng ${contract.data.slotCode}` : 'Hợp đồng'} />
+      <Screen onRefresh={contract.refetch} refreshing={contract.isRefetching}>
+        <QueryView query={contract}>
+          {(c) => {
+            if (!c) return <EmptyState title="Không tìm thấy hợp đồng" />;
+            const active = c.status === 'ACTIVE';
+            const actions: { label: string; icon: IconName; href: string; highlight?: boolean; hidden?: boolean }[] = [
+              { label: 'Giấy phép', icon: 'card-account-details-outline', href: `/vendor/permit/${c.id}`, highlight: true, hidden: !active },
+              { label: 'Gia hạn', icon: 'calendar-refresh-outline', href: `/vendor/contracts/${c.id}/renewal`, hidden: !active },
+              { label: 'Trả ô', icon: 'logout-variant', href: `/vendor/contracts/${c.id}/return`, hidden: !active },
+              { label: 'Chuyển nhượng', icon: 'swap-horizontal', href: `/vendor/contracts/${c.id}/transfer`, hidden: !active },
+            ];
+            return (
+              <>
+                <Card style={styles.head}>
+                  <View style={styles.headBody}>
+                    <AppText variant="title">{c.slotCode}</AppText>
+                    <AppText variant="small" color="muted">{c.street}</AppText>
+                  </View>
+                  <StatusChip code={c.status} />
+                </Card>
 
-        <KeyValueCard
-          rows={[
-            { label: 'Kỳ hạn', value: `${formatDate(contract.start_date)} - ${formatDate(contract.end_date)}` },
-            { label: 'Phí', value: `${formatVnd(contract.fee_monthly)}/tháng` },
-            ...(nextFee ? [{ label: 'Hạn đóng tiếp', value: formatDate(nextFee.due_date) }] : []),
-          ]}
-        />
+                <KeyValueCard
+                  rows={[
+                    { label: 'Kỳ hạn', value: `${formatDate(c.startDate)} - ${formatDate(c.endDate)}` },
+                    ...(c.feeMonthly ? [{ label: 'Phí', value: `${formatVnd(c.feeMonthly)}/tháng` }] : []),
+                    ...(c.nextDueDate ? [{ label: 'Hạn đóng tiếp', value: formatDate(c.nextDueDate) }] : []),
+                  ]}
+                />
 
-        <View style={styles.grid}>
-          {actions.filter((a) => !a.hidden).map((a) => (
-            <ActionTile key={a.label} {...a} onPress={() => goTo(a.href)} />
-          ))}
-        </View>
+                <View style={styles.grid}>
+                  {actions.filter((a) => !a.hidden).map((a) => (
+                    <ActionTile key={a.label} {...a} onPress={() => goTo(a.href)} />
+                  ))}
+                </View>
+              </>
+            );
+          }}
+        </QueryView>
       </Screen>
     </>
   );
@@ -71,7 +68,7 @@ export default function ContractDetailScreen() {
 function ActionTile({ label, icon, highlight, onPress }: { label: string; icon: IconName; highlight?: boolean; onPress: () => void }) {
   const { colors } = useTheme();
   return (
-    <Card onPress={onPress} style={[styles.tile, highlight ? { backgroundColor: colors.errorBg, borderColor: colors.primary } : null]}>
+    <Card onPress={onPress} style={[styles.tile, highlight ? { backgroundColor: colors.primarySoft, borderColor: colors.primary } : null]}>
       <Icon name={icon} size={28} color={highlight ? 'primary' : 'indigo'} />
       <AppText variant="label">{label}</AppText>
     </Card>

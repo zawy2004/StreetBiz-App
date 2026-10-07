@@ -6,78 +6,76 @@ import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
 import { KeyValueCard } from '@/components/common/KeyValueCard';
 import { QrCode } from '@/components/common/QrCode';
-import { EmptyState } from '@/components/feedback/States';
+import { EmptyState, QueryView } from '@/components/feedback/States';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { StatusChip } from '@/components/status/StatusChip';
 import { goTo } from '@/core/navigation/go';
-import { useMockDb } from '@/mocks/db';
-import { useAuthStore } from '@/store/auth-store';
+import { usePermit } from '@/features/slots/use-rentals';
 import { spacing } from '@/theme';
 import { daysUntil, formatDate } from '@/utils/format';
 
+/** SIDE-08: the digital permit (signed QR) shown to ward officers and buyers. `id` is the contract. */
 export default function PermitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const permit = useMockDb((s) => s.permits).find((p) => p.id === id);
-  const contract = useMockDb((s) => s.contracts).find((c) => c.id === permit?.contractId);
-  const slot = useMockDb((s) => s.slots).find((s) => s.id === contract?.slotId);
-  const vendorId = useAuthStore((s) => s.user?.vendorId);
-  const vendor = useMockDb((s) => s.vendors).find((v) => v.id === vendorId);
-
-  if (!permit || !contract) {
-    return (
-      <>
-        <StackHeader title="Giấy phép số" />
-        <Screen><EmptyState title="Không tìm thấy giấy phép" /></Screen>
-      </>
-    );
-  }
-
-  const left = daysUntil(permit.expires_at);
-  const valid = permit.permit_status === 'VALID';
+  const permit = usePermit(id);
+  const p = permit.data;
+  const valid = p?.status === 'VALID';
 
   return (
     <>
       <StackHeader title="Giấy phép số" />
       <Screen
+        onRefresh={permit.refetch}
+        refreshing={permit.isRefetching}
         footer={
-          valid ? (
+          p && valid ? (
             <View style={styles.actions}>
               <View style={styles.half}>
-                <Button label="Gia hạn" onPress={() => goTo(`/vendor/contracts/${contract.id}/renewal`)} />
+                <Button label="Gia hạn" onPress={() => goTo(`/vendor/contracts/${p.contractId}/renewal`)} />
               </View>
               <View style={styles.half}>
-                <Button label="Chuyển nhượng" variant="outline" onPress={() => goTo(`/vendor/contracts/${contract.id}/transfer`)} />
+                <Button label="Chuyển nhượng" variant="outline" onPress={() => goTo(`/vendor/contracts/${p.contractId}/transfer`)} />
               </View>
             </View>
           ) : undefined
         }
       >
-        <View style={styles.center}>
-          <StatusChip code={permit.permit_status} />
-          <QrCode value={permit.permit_code} size={240} />
-          <AppText variant="code">{permit.permit_code}</AppText>
-          <View style={styles.hint}>
-            <Icon name="brightness-6" size={16} color="muted" />
-            <AppText variant="small" color="muted">Tăng độ sáng khi cho cán bộ quét</AppText>
-          </View>
-        </View>
-
-        <KeyValueCard
-          rows={[
-            { label: 'Hộ kinh doanh', value: vendor?.business_name || vendor?.owner_name || '' },
-            { label: 'Ô cấp phép', value: `${slot?.slot_code} · ${slot?.size_m2} m²` },
-            {
-              label: 'Hiệu lực',
-              node: (
-                <View style={styles.validity}>
-                  <AppText variant="label">{formatDate(contract.start_date)} - {formatDate(permit.expires_at)}</AppText>
-                  {valid && left >= 0 ? <StatusChip label={`Còn ${left} ngày`} tone={left <= 7 ? 'pending' : 'ok'} /> : null}
+        <QueryView query={permit}>
+          {(v) => {
+            if (!v) return <EmptyState icon="file-clock-outline" tone="secondary" title="Chưa có giấy phép" description="Phường chưa phát hành giấy phép QR cho hợp đồng này." />;
+            const left = daysUntil(v.endDate);
+            return (
+              <>
+                <View style={styles.center}>
+                  <StatusChip code={v.status} />
+                  <QrCode value={v.qr} size={240} />
+                  <AppText variant="code">{v.displayCode}</AppText>
+                  <View style={styles.hint}>
+                    <Icon name="brightness-6" size={16} color="muted" />
+                    <AppText variant="small" color="muted">Tăng độ sáng khi cho cán bộ quét</AppText>
+                  </View>
                 </View>
-              ),
-            },
-          ]}
-        />
+
+                <KeyValueCard
+                  rows={[
+                    { label: 'Hộ kinh doanh', value: v.vendorName },
+                    { label: 'Ô cấp phép', value: [v.slotCode, v.street].filter(Boolean).join(' · ') },
+                    {
+                      label: 'Hiệu lực',
+                      node: (
+                        <View style={styles.validity}>
+                          <AppText variant="label">{formatDate(v.startDate)} - {formatDate(v.endDate)}</AppText>
+                          {v.status === 'VALID' && left >= 0 ? <StatusChip label={`Còn ${left} ngày`} tone={left <= 7 ? 'pending' : 'ok'} /> : null}
+                        </View>
+                      ),
+                    },
+                  ]}
+                />
+              </>
+            );
+          }}
+        </QueryView>
       </Screen>
     </>
   );

@@ -4,27 +4,27 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/common/AppText';
 import { Card } from '@/components/common/Card';
 import { Money } from '@/components/common/Money';
-import { EmptyState } from '@/components/feedback/States';
+import { EmptyState, QueryView } from '@/components/feedback/States';
 import { SegmentedControl } from '@/components/forms/SegmentedControl';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { StatusChip } from '@/components/status/StatusChip';
 import { goTo } from '@/core/navigation/go';
-import { useMockDb } from '@/mocks/db';
-import { useAuthStore } from '@/store/auth-store';
+import { useViolations } from '@/features/finance/use-finance';
 import { spacing } from '@/theme';
 import { formatDate } from '@/utils/format';
 
+const OPEN = ['UNPAID', 'PENDING_SANCTION', 'PENDING'];
+
+/** FEE-05: violations recorded against the vendor. */
 export default function ViolationsScreen() {
-  const vendorId = useAuthStore((s) => s.user?.vendorId);
-  const penalties = useMockDb((s) => s.penalties).filter((p) => p.vendorId === vendorId);
+  const violations = useViolations();
   const [tab, setTab] = useState<'open' | 'done'>('open');
-  const list = penalties.filter((p) => (tab === 'open' ? p.penalty_status === 'PENDING' : p.penalty_status !== 'PENDING'));
 
   return (
     <>
       <StackHeader title="Vi phạm" />
-      <Screen>
+      <Screen onRefresh={violations.refetch} refreshing={violations.isRefetching}>
         <SegmentedControl
           value={tab}
           onChange={setTab}
@@ -33,20 +33,25 @@ export default function ViolationsScreen() {
             { value: 'done', label: 'Đã xử lý' },
           ]}
         />
-        {list.length ? (
-          list.map((p) => (
-            <Card key={p.id} onPress={() => goTo(`/vendor/finance/violations/${p.id}`)} style={styles.row}>
-              <View style={styles.body}>
-                <AppText variant="label" numberOfLines={2}>{p.reason}</AppText>
-                <AppText variant="small" color="muted">{formatDate(p.issued_at)}</AppText>
-                <StatusChip code={p.penalty_status === 'PENDING' ? 'PENDING_SANCTION' : p.penalty_status} />
-              </View>
-              <Money amountVnd={p.amount} />
-            </Card>
-          ))
-        ) : (
-          <EmptyState icon="shield-check-outline" title="Không có vi phạm" />
-        )}
+        <QueryView query={violations}>
+          {(all) => {
+            const list = all.filter((v) => (tab === 'open' ? OPEN.includes(v.status) : !OPEN.includes(v.status)));
+            return list.length ? (
+              list.map((v) => (
+                <Card key={v.id} onPress={() => goTo(`/vendor/finance/violations/${v.id}`)} style={styles.row}>
+                  <View style={styles.body}>
+                    <AppText variant="label" numberOfLines={2}>{v.reason}</AppText>
+                    <AppText variant="small" color="muted">{[v.slotCode, formatDate(v.recordedAt)].filter(Boolean).join(' · ')}</AppText>
+                    <StatusChip code={v.status} />
+                  </View>
+                  {v.amount ? <Money amountVnd={v.amount} /> : null}
+                </Card>
+              ))
+            ) : (
+              <EmptyState icon="shield-check-outline" tone="tertiary" title="Không có vi phạm" />
+            );
+          }}
+        </QueryView>
       </Screen>
     </>
   );

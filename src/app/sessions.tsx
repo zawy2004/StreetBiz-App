@@ -1,46 +1,60 @@
-import { Card } from '@/components/common/Card';
+import { View } from 'react-native';
+
 import { Button } from '@/components/common/Button';
+import { Card } from '@/components/common/Card';
 import { ListRow } from '@/components/common/ListRow';
-import { EmptyState } from '@/components/feedback/States';
+import { EmptyState, QueryView } from '@/components/feedback/States';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { StatusChip } from '@/components/status/StatusChip';
-import { useMockDb } from '@/mocks/db';
-import { useAuthStore } from '@/store/auth-store';
-import { View } from 'react-native';
+import { RequireAuth } from '@/core/auth/guards';
+import { useRevokeSession, useSessions } from '@/features/account/use-account';
 import { spacing } from '@/theme';
+import { formatDateTime } from '@/utils/format';
 
 export default function SessionsScreen() {
-  const user = useAuthStore((s) => s.user);
-  const sessions = useMockDb((s) => s.sessions).filter((s) => s.userId === user?.id);
-  const revoke = useMockDb((s) => s.revokeSession);
+  return (
+    <RequireAuth>
+      <Sessions />
+    </RequireAuth>
+  );
+}
+
+function Sessions() {
+  const sessions = useSessions();
+  const revoke = useRevokeSession();
 
   return (
     <>
       <StackHeader title="Phiên đăng nhập" />
-      <Screen>
-        {sessions.length ? (
-          <Card padded={false}>
-            {sessions.map((s) => (
-              <View key={s.id}>
-                <ListRow
-                  icon="cellphone"
-                  title={s.device}
-                  subtitle={`${s.location} · ${s.last_active}`}
-                  trailing={s.current ? <StatusChip label="Thiết bị này" tone="ok" /> : undefined}
-                  showChevron={false}
-                />
-                {s.current ? null : (
-                  <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}>
-                    <Button label="Thu hồi" variant="danger" size="sm" fullWidth={false} onPress={() => revoke(s.id)} />
+      <Screen onRefresh={sessions.refetch} refreshing={sessions.isRefetching}>
+        <QueryView query={sessions}>
+          {(list) =>
+            list.length ? (
+              <Card padded={false}>
+                {list.map((s, i) => (
+                  <View key={s.id}>
+                    <ListRow
+                      icon="cellphone"
+                      title={s.device}
+                      subtitle={[s.place, formatDateTime(s.lastActive)].filter(Boolean).join(' · ')}
+                      trailing={s.current ? <StatusChip label="Thiết bị này" tone="ok" /> : undefined}
+                      showChevron={false}
+                      last={i === list.length - 1 && s.current}
+                    />
+                    {s.current ? null : (
+                      <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md }}>
+                        <Button label="Thu hồi" variant="danger" size="sm" fullWidth={false} onPress={() => revoke.mutate(s.id)} />
+                      </View>
+                    )}
                   </View>
-                )}
-              </View>
-            ))}
-          </Card>
-        ) : (
-          <EmptyState icon="cellphone-off" title="Không có phiên nào" />
-        )}
+                ))}
+              </Card>
+            ) : (
+              <EmptyState icon="cellphone-off" title="Không có phiên nào" />
+            )
+          }
+        </QueryView>
       </Screen>
     </>
   );

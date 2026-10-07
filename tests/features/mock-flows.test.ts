@@ -6,13 +6,14 @@ import { useAuthStore } from '@/store/auth-store';
 describe('sign in', () => {
   afterEach(() => useAuthStore.setState({ user: null }));
 
-  it('accepts a seeded account regardless of phone formatting', () => {
-    expect(useAuthStore.getState().signIn('0905 000 002', '123456')).toBe('ok');
+  it('accepts a seeded account regardless of phone formatting', async () => {
+    const user = await useAuthStore.getState().signIn('0905 000 002', '123456');
+    expect(user.role_code).toBe('VENDOR');
     expect(useAuthStore.getState().user?.role_code).toBe('VENDOR');
   });
 
-  it('rejects a wrong password', () => {
-    expect(useAuthStore.getState().signIn('0905000002', 'wrong')).toBe('invalid');
+  it('rejects a wrong password with a readable message', async () => {
+    await expect(useAuthStore.getState().signIn('0905000002', 'wrong')).rejects.toThrow('Sai số điện thoại hoặc mật khẩu');
     expect(useAuthStore.getState().user).toBeNull();
   });
 });

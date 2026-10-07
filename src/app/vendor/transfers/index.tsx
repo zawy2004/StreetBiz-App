@@ -3,73 +3,75 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/common/AppText';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
-import { EmptyState } from '@/components/feedback/States';
+import { EmptyState, QueryView } from '@/components/feedback/States';
+import { showError, showToast } from '@/components/feedback/Toast';
 import { Screen } from '@/components/layout/Screen';
 import { Section } from '@/components/layout/Section';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { StatusChip } from '@/components/status/StatusChip';
-import { useMockDb } from '@/mocks/db';
-import { useAuthStore } from '@/store/auth-store';
+import { useAnswerTransfer, useTransfers, type TransferView } from '@/features/slots/use-rentals';
 import { spacing } from '@/theme';
-import { formatDate, phoneDigits } from '@/utils/format';
+import { formatDate } from '@/utils/format';
 
+/** SIDE-13: slot transfers offered to me, and the ones I offered. */
 export default function TransfersScreen() {
-  const user = useAuthStore((s) => s.user);
-  const transfers = useMockDb((s) => s.transfers);
-  const contracts = useMockDb((s) => s.contracts);
-  const slots = useMockDb((s) => s.slots);
-  const accept = useMockDb((s) => s.acceptTransfer);
-  const review = useMockDb((s) => s.reviewTransfer);
+  const transfers = useTransfers();
+  const answer = useAnswerTransfer();
 
-  const codeOf = (contractId: string) => slots.find((s) => s.id === contracts.find((c) => c.id === contractId)?.slotId)?.slot_code ?? '';
-  const incoming = transfers.filter((t) => phoneDigits(t.toVendorPhone) === phoneDigits(user?.phone ?? '') && t.fromVendorId !== user?.vendorId);
-  const outgoing = transfers.filter((t) => t.fromVendorId === user?.vendorId);
+  const respond = (t: TransferView, accept: boolean) =>
+    answer.mutateAsync({ id: t.id, accept }).then(() => showToast(accept ? 'Đã đồng ý nhận ô, chờ phường duyệt' : 'Đã từ chối'), showError);
 
   return (
     <>
       <StackHeader title="Chuyển nhượng" />
-      <Screen>
-        <Section title="Được chuyển cho bạn">
-          {incoming.length ? (
-            incoming.map((t) => (
-              <Card key={t.id} style={styles.card}>
-                <View style={styles.head}>
-                  <AppText variant="headline">Ô {codeOf(t.contractId)}</AppText>
-                  <StatusChip code={t.transfer_status} />
-                </View>
-                <AppText variant="small" color="muted">Gửi {formatDate(t.requested_at)}</AppText>
-                {t.transfer_status === 'PENDING' ? (
-                  <View style={styles.actions}>
-                    <View style={styles.half}>
-                      <Button label="Từ chối" variant="outline" size="sm" onPress={() => review(t.id, false)} />
-                    </View>
-                    <View style={styles.half}>
-                      <Button label="Chấp nhận" size="sm" onPress={() => user?.vendorId && accept(t.id, user.vendorId)} />
-                    </View>
-                  </View>
-                ) : null}
-              </Card>
-            ))
-          ) : (
-            <EmptyState icon="swap-horizontal" title="Chưa có yêu cầu nào" />
-          )}
-        </Section>
+      <Screen onRefresh={transfers.refetch} refreshing={transfers.isRefetching}>
+        <QueryView query={transfers}>
+          {({ incoming, outgoing }) => (
+            <>
+              <Section title="Được chuyển cho bạn">
+                {incoming.length ? (
+                  incoming.map((t) => (
+                    <Card key={t.id} style={styles.card}>
+                      <View style={styles.head}>
+                        <AppText variant="headline">Ô {t.slotCode}</AppText>
+                        <StatusChip code={t.status} />
+                      </View>
+                      <AppText variant="small" color="muted">{[t.detail, `gửi ${formatDate(t.date)}`].filter(Boolean).join(' · ')}</AppText>
+                      {t.status === 'PENDING' ? (
+                        <View style={styles.actions}>
+                          <View style={styles.half}>
+                            <Button label="Từ chối" variant="outline" size="sm" disabled={answer.isPending} onPress={() => void respond(t, false)} />
+                          </View>
+                          <View style={styles.half}>
+                            <Button label="Chấp nhận" size="sm" disabled={answer.isPending} onPress={() => void respond(t, true)} />
+                          </View>
+                        </View>
+                      ) : null}
+                    </Card>
+                  ))
+                ) : (
+                  <EmptyState icon="swap-horizontal" title="Chưa có yêu cầu nào" />
+                )}
+              </Section>
 
-        <Section title="Bạn đã gửi">
-          {outgoing.length ? (
-            outgoing.map((t) => (
-              <Card key={t.id} style={styles.card}>
-                <View style={styles.head}>
-                  <AppText variant="headline">Ô {codeOf(t.contractId)}</AppText>
-                  <StatusChip code={t.transfer_status} />
-                </View>
-                <AppText variant="small" color="muted">Cho {t.toVendorPhone} · {formatDate(t.requested_at)}</AppText>
-              </Card>
-            ))
-          ) : (
-            <EmptyState icon="send-outline" title="Chưa gửi yêu cầu nào" />
+              <Section title="Bạn đã gửi">
+                {outgoing.length ? (
+                  outgoing.map((t) => (
+                    <Card key={t.id} style={styles.card}>
+                      <View style={styles.head}>
+                        <AppText variant="headline">Ô {t.slotCode}</AppText>
+                        <StatusChip code={t.status} />
+                      </View>
+                      <AppText variant="small" color="muted">{[t.detail, formatDate(t.date)].filter(Boolean).join(' · ')}</AppText>
+                    </Card>
+                  ))
+                ) : (
+                  <EmptyState icon="send-outline" title="Chưa gửi yêu cầu nào" />
+                )}
+              </Section>
+            </>
           )}
-        </Section>
+        </QueryView>
       </Screen>
     </>
   );

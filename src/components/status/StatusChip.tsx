@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 4,
     paddingHorizontal: 10,
-    borderRadius: radius.chip,
+    borderRadius: radius.full,
   },
   dot: { width: 7, height: 7, borderRadius: 4 },
 });

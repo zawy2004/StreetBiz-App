@@ -7,99 +7,116 @@ import { AppText } from '@/components/common/AppText';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { Icon } from '@/components/common/Icon';
+import { EmptyState, LoadingState, QueryView } from '@/components/feedback/States';
 import { PhotoSlot } from '@/components/forms/PhotoSlot';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { StatusChip } from '@/components/status/StatusChip';
-import { EmptyState } from '@/components/feedback/States';
+import { isLiveApi } from '@/core/config/env';
 import { goTo } from '@/core/navigation/go';
-import { useMockDb } from '@/mocks/db';
+import { useInspectPermit } from '@/features/violation/use-patrol';
+import { useViolationDraft } from '@/features/violation/violation-draft';
 import { radius, spacing, useTheme } from '@/theme';
-import { daysUntil, formatDate } from '@/utils/format';
-import { distanceMeters } from '@/utils/geo';
+import { formatDate } from '@/utils/format';
 
+/** WARD-07: what a scanned permit says, and whether the stall stands on its slot. */
 export default function PatrolResultScreen() {
   const { colors } = useTheme();
   const { code } = useLocalSearchParams<{ code: string }>();
-  const permit = useMockDb((s) => s.permits).find((p) => p.permit_code.toLowerCase() === (code ?? '').toLowerCase());
-  const contract = useMockDb((s) => s.contracts).find((c) => c.id === permit?.contractId);
-  const vendor = useMockDb((s) => s.vendors).find((v) => v.id === contract?.vendorId);
-  const slot = useMockDb((s) => s.slots).find((s) => s.id === contract?.slotId);
-  const [photo, setPhoto] = useState<string>();
-  const [offset, setOffset] = useState<number>();
+  const draft = useViolationDraft();
+  const [at, setAt] = useState<{ latitude: number; longitude: number }>();
+  const [located, setLocated] = useState(false);
 
+  // Try for a GPS fix first, so the backend can compare it with the slot; inspect either way.
   useEffect(() => {
-    if (!slot) return;
     let cancelled = false;
     void (async () => {
       try {
         const perm = await Location.requestForegroundPermissionsAsync();
-        if (!perm.granted) return;
-        const pos = await Location.getCurrentPositionAsync({});
-        if (!cancelled) setOffset(distanceMeters({ lat: pos.coords.latitude, lng: pos.coords.longitude }, slot));
+        if (perm.granted) {
+          const pos = await Location.getCurrentPositionAsync({});
+          if (!cancelled) setAt({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        }
       } catch {
         // No GPS fix: the location row is simply not shown.
+      } finally {
+        if (!cancelled) setLocated(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [slot]);
+  }, []);
 
-  if (!permit || !vendor || !contract) {
+  const inspection = useInspectPermit(located ? code : undefined, at);
+  const r = inspection.data;
+
+  if (!located) {
     return (
       <>
         <StackHeader title="Tuần tra" />
-        <Screen footer={<Button label="Quét lại" onPress={() => router.back()} />}>
-          <EmptyState icon="qrcode-remove" title="Không tìm thấy giấy phép" description="Mã này không có trong hệ thống." />
-        </Screen>
+        <Screen><LoadingState label="Đang lấy vị trí…" /></Screen>
       </>
     );
   }
 
-  const valid = permit.permit_status === 'VALID' && daysUntil(permit.expires_at) >= 0;
-  const q = `vendorId=${vendor.id}&slotId=${slot?.id ?? ''}&permitId=${permit.id}`;
+  const params = r ? new URLSearchParams({ vendorId: r.vendorId ?? '', slotId: r.slotId ?? '', permitId: r.permitId ?? '', contractId: r.contractId ?? '', name: r.vendorName ?? '', slot: r.slotLabel ?? '' }).toString() : '';
+  const photo = draft.photos[0];
 
   return (
     <>
       <StackHeader title="Tuần tra" />
       <Screen
         footer={
-          <>
-            <Button label="Lập biên bản" onPress={() => goTo(`/ward/violation/new?${q}`)} />
-            <Button label="Đình chỉ" variant="danger" onPress={() => goTo(`/ward/permit-action?permitId=${permit.id}`)} />
-          </>
+          r?.found ? (
+            <>
+              <Button label="Lập biên bản" onPress={() => goTo(`/ward/violation/new?${params}`)} />
+              {r.permitId ? <Button label="Đình chỉ / thu hồi" variant="danger" onPress={() => goTo(`/ward/permit-action?${params}&status=${r.status}`)} /> : null}
+            </>
+          ) : (
+            <Button label="Quét lại" onPress={() => router.back()} />
+          )
         }
       >
-        <Card style={styles.info}>
-          <View style={styles.head}>
-            <AppText variant="title" style={styles.name}>{vendor.business_name || vendor.owner_name}</AppText>
-            <StatusChip code={valid ? 'VALID' : permit.permit_status === 'VALID' ? 'EXPIRED' : permit.permit_status} />
-          </View>
-          <View style={[styles.rule, { backgroundColor: colors.border }]} />
-          <Row label="Ô cấp phép" value={slot ? `${slot.slot_code} · ${slot.size_m2} m²` : ''} />
-          <Row label="Hiệu lực" value={`đến ${formatDate(permit.expires_at)}`} />
-          {offset !== undefined ? (
-            <View style={[styles.gps, { backgroundColor: offset <= 25 ? colors.tertiaryBg : colors.errorBg }]}>
-              <Icon name="crosshairs-gps" size={18} color={offset <= 25 ? 'tertiary' : 'error'} />
-              <AppText variant="label" color={offset <= 25 ? 'tertiary' : 'error'}>
-                {offset <= 25 ? `Vị trí khớp ô (cách ${offset} m)` : `Lệch ô cấp phép ${offset} m`}
-              </AppText>
-            </View>
-          ) : null}
-        </Card>
+        <QueryView query={inspection} loadingLabel="Đang kiểm tra giấy phép…">
+          {(v) =>
+            !v.found ? (
+              <EmptyState icon="qrcode-remove" tone="error" title="Không tìm thấy giấy phép" description="Mã này không có trong hệ thống." />
+            ) : (
+              <>
+                <Card style={styles.info}>
+                  <View style={styles.head}>
+                    <AppText variant="title" style={styles.name}>{v.vendorName}</AppText>
+                    <StatusChip code={v.status} />
+                  </View>
+                  <View style={[styles.rule, { backgroundColor: colors.border }]} />
+                  {v.slotLabel ? <Row label="Ô cấp phép" value={v.slotLabel} /> : null}
+                  {v.validUntil ? <Row label="Hiệu lực" value={`đến ${formatDate(v.validUntil)}`} /> : null}
+                  {v.offsetM !== undefined ? (
+                    <View style={[styles.gps, { backgroundColor: v.locationOk ? colors.tertiaryBg : colors.errorBg }]}>
+                      <Icon name="crosshairs-gps" size={18} color={v.locationOk ? 'tertiary' : 'error'} />
+                      <AppText variant="label" color={v.locationOk ? 'tertiary' : 'error'} style={styles.flex}>
+                        {v.locationOk ? `Vị trí khớp ô (cách ${v.offsetM} m)` : (v.locationWarning ?? `Lệch ô cấp phép ${v.offsetM} m`)}
+                      </AppText>
+                    </View>
+                  ) : null}
+                </Card>
 
-        <View style={styles.photo}>
-          <AppText variant="labelSm">Ảnh hiện trường</AppText>
-          <PhotoSlot uri={photo} onChange={setPhoto} label="Chụp ảnh" size={96} />
-        </View>
+                <View style={styles.photo}>
+                  <AppText variant="labelSm">Ảnh hiện trường</AppText>
+                  <PhotoSlot uri={photo} onChange={(u) => draft.patch({ photos: [u, ...draft.photos.slice(1)] })} label="Chụp ảnh" size={96} />
+                </View>
 
-        {photo ? (
-          <Card style={[styles.ai, { backgroundColor: colors.secondaryBg, borderColor: colors.secondary }]}>
-            <AppText variant="labelSm" color="onSecondary">Gợi ý AI · tin cậy 91%</AppText>
-            <AppText color="onSecondary">Có dấu hiệu lấn khoảng 35 cm. Cần đối chiếu thực địa.</AppText>
-          </Card>
-        ) : null}
+                {photo && !isLiveApi ? (
+                  <Card style={[styles.ai, { backgroundColor: colors.secondaryBg, borderColor: colors.secondary }]}>
+                    <AppText variant="labelSm" color="onSecondary">Gợi ý AI · tin cậy 91%</AppText>
+                    <AppText color="onSecondary">Có dấu hiệu lấn khoảng 35 cm. Cần đối chiếu thực địa.</AppText>
+                  </Card>
+                ) : null}
+              </>
+            )
+          }
+        </QueryView>
       </Screen>
     </>
   );
@@ -109,18 +126,19 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
       <AppText variant="small" color="muted">{label}</AppText>
-      <AppText variant="label">{value}</AppText>
+      <AppText variant="label" style={styles.value}>{value}</AppText>
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   info: { gap: spacing.md },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   name: { flex: 1 },
   rule: { height: 1 },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
+  value: { flexShrink: 1, textAlign: 'right' },
+  flex: { flex: 1 },
   gps: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, borderRadius: radius.control },
   photo: { gap: spacing.sm },
   ai: { borderWidth: 1, gap: spacing.xs },

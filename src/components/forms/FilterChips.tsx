@@ -3,13 +3,15 @@ import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { layout, radius, spacing, useTheme } from '@/theme';
 
 import { AppText } from '../common/AppText';
+import { Icon, type IconName } from '../common/Icon';
 
 type Props = {
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; icon?: IconName }[];
   selected: string[];
   onToggle: (value: string) => void;
 };
 
+/** Horizontally scrolling toggle chips; a selected chip inverts to the text colour. */
 export function FilterChips({ options, selected, onToggle }: Props) {
   const { colors } = useTheme();
   return (
@@ -30,11 +32,12 @@ export function FilterChips({ options, selected, onToggle }: Props) {
             style={[
               styles.chip,
               on
-                ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                ? { backgroundColor: colors.indigo, borderColor: colors.indigo }
                 : { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <AppText variant="label" color={on ? 'onPrimary' : 'text'}>{o.label}</AppText>
+            {o.icon ? <Icon name={o.icon} size={16} color={on ? 'onIndigo' : 'muted'} /> : null}
+            <AppText variant="labelSm" color={on ? 'onIndigo' : 'text'}>{o.label}</AppText>
           </Pressable>
         );
       })}
@@ -43,7 +46,15 @@ export function FilterChips({ options, selected, onToggle }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { marginHorizontal: -layout.screenMargin },
+  scroll: { marginHorizontal: -layout.screenMargin, flexGrow: 0 },
   row: { gap: spacing.sm, paddingHorizontal: layout.screenMargin },
-  chip: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.full, borderWidth: 1, justifyContent: 'center' },
+  chip: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md + 2,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
 });

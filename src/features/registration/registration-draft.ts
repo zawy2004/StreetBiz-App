@@ -21,6 +21,8 @@ type Draft = {
   businessName: string;
   category: string;
   address: string;
+  /** Live only: the ward (AdministrativeUnits.unit_id) the business registers with. */
+  wardUnitId?: number;
   ownerName: string;
   idNumber: string;
   birthDate: string;
@@ -34,6 +36,7 @@ const empty = {
   businessName: '',
   category: '',
   address: '',
+  wardUnitId: undefined,
   ownerName: '',
   idNumber: '',
   birthDate: '',

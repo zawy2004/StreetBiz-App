@@ -3,17 +3,19 @@ import { useColorScheme } from 'react-native';
 
 import { useThemePrefs } from '@/store/theme-prefs';
 
-import { darkColors, lightColors, statusTones, type ColorTokens, type ToneColors, type StatusTone } from './colors';
+import { darkColors, lightColors, statusTones, type ColorTokens, type StatusTone, type ToneColors } from './colors';
+import { elevation, type Elevation } from './metrics';
 
 type Theme = {
   scheme: 'light' | 'dark';
   colors: ColorTokens;
   tones: Record<StatusTone, ToneColors>;
+  shadow: Elevation;
 };
 
 function build(scheme: 'light' | 'dark'): Theme {
   const colors = scheme === 'dark' ? darkColors : lightColors;
-  return { scheme, colors, tones: statusTones(colors) };
+  return { scheme, colors, tones: statusTones(colors), shadow: elevation(scheme, colors) };
 }
 
 const ThemeContext = createContext<Theme>(build('light'));

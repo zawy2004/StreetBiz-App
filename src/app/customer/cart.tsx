@@ -5,57 +5,88 @@ import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { Money } from '@/components/common/Money';
 import { Thumb } from '@/components/common/Thumb';
-import { EmptyState } from '@/components/feedback/States';
+import { EmptyState, QueryView } from '@/components/feedback/States';
+import { showError } from '@/components/feedback/Toast';
 import { QuantityStepper } from '@/components/forms/QuantityStepper';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
+import { StatusChip } from '@/components/status/StatusChip';
 import { requireAuth } from '@/core/auth/require-auth';
 import { goReplace, goTo } from '@/core/navigation/go';
-import { useCart } from '@/features/cart/cart-store';
-import { useCartSummary } from '@/features/cart/useCartSummary';
-import { useMockDb } from '@/mocks/db';
-import { spacing } from '@/theme';
+import { useCartView, useSetCartQuantity } from '@/features/cart/use-cart';
+import { spacing, useTheme } from '@/theme';
 
 export default function CartScreen() {
-  const { lines, storefrontId, total } = useCartSummary();
-  const setQuantity = useCart((s) => s.setQuantity);
-  const store = useMockDb((s) => s.storefronts).find((s) => s.id === storefrontId);
+  const { colors } = useTheme();
+  const cart = useCartView();
+  const setQuantity = useSetCartQuantity();
+  const c = cart.data;
+  const locked = Boolean(c?.pendingOrderId);
+  const blocked = c?.lines.some((l) => l.soldOut);
 
   return (
     <>
       <StackHeader title="Giỏ hàng" />
       <Screen
+        onRefresh={cart.refetch}
+        refreshing={cart.isRefetching}
         footer={
-          lines.length ? (
-            <Button label="Đặt món" onPress={() => requireAuth() && goTo('/customer/checkout')} />
+          c?.lines.length ? (
+            locked ? (
+              <Button label="Tiếp tục thanh toán" icon="wallet-outline" onPress={() => goTo(`/customer/orders/${c.pendingOrderId}/payment`)} />
+            ) : (
+              <Button
+                label="Đặt món"
+                icon="arrow-right"
+                disabled={blocked}
+                onPress={() => requireAuth('/customer/checkout') && goTo('/customer/checkout')}
+              />
+            )
           ) : undefined
         }
       >
-        {lines.length ? (
-          <>
-            <AppText variant="headline">{store?.name}</AppText>
-            {lines.map((l) => (
-              <Card key={l.menuItemId} style={styles.row}>
-                <Thumb size={56} />
-                <View style={styles.body}>
-                  <AppText variant="label">{l.item.name}</AppText>
-                  <Money amountVnd={l.subtotal} />
-                  {l.note ? <AppText variant="small" color="muted">{l.note}</AppText> : null}
+        <QueryView query={cart}>
+          {(view) =>
+            view.lines.length ? (
+              <>
+                <AppText variant="headline">{view.storefrontName}</AppText>
+                {locked ? (
+                  <Card style={{ backgroundColor: colors.secondaryBg, borderColor: colors.secondaryBg }}>
+                    <AppText variant="small" color="onSecondary">Giỏ này có một đơn đang chờ thanh toán. Thanh toán hoặc huỷ đơn đó để sửa giỏ.</AppText>
+                  </Card>
+                ) : null}
+                {view.lines.map((l) => (
+                  <Card key={l.menuItemId} style={styles.row}>
+                    <Thumb size={56} seed={l.menuItemId} uri={l.imageUrl} />
+                    <View style={styles.body}>
+                      <AppText variant="label">{l.name}</AppText>
+                      <Money amountVnd={l.subtotal} />
+                      {l.soldOut ? <StatusChip code="SOLD_OUT" /> : null}
+                      {l.note ? <AppText variant="small" color="muted">{l.note}</AppText> : null}
+                    </View>
+                    {locked ? (
+                      <AppText variant="label">× {l.quantity}</AppText>
+                    ) : (
+                      <QuantityStepper
+                        value={l.quantity}
+                        onChange={(q) => setQuantity.mutateAsync({ menuItemId: l.menuItemId, quantity: q, note: l.note }).catch(showError)}
+                      />
+                    )}
+                  </Card>
+                ))}
+                {blocked ? <AppText variant="small" color="error">Có món đã hết, bỏ món đó ra để đặt.</AppText> : null}
+                <View style={styles.total}>
+                  <AppText variant="headline">Tổng</AppText>
+                  <Money amountVnd={view.total} size="lg" color="primary" />
                 </View>
-                <QuantityStepper value={l.quantity} onChange={(q) => setQuantity(l.menuItemId, q)} />
-              </Card>
-            ))}
-            <View style={styles.total}>
-              <AppText variant="headline">Tổng</AppText>
-              <Money amountVnd={total} size="lg" color="primary" />
-            </View>
-          </>
-        ) : (
-          <>
-            <EmptyState icon="cart-outline" title="Giỏ hàng trống" />
-            <Button label="Xem quán" onPress={() => goReplace('/customer/explore')} />
-          </>
-        )}
+              </>
+            ) : (
+              <EmptyState icon="cart-outline" tone="primary" title="Giỏ hàng trống" description="Chọn món ở trang gian hàng rồi quay lại đây để đặt.">
+                <Button label="Xem quán" variant="soft" onPress={() => goReplace('/customer/explore')} />
+              </EmptyState>
+            )
+          }
+        </QueryView>
       </Screen>
     </>
   );

@@ -4,13 +4,13 @@ import { goTo } from '@/core/navigation/go';
 
 export function GateNotice() {
   return (
-    <>
-      <EmptyState
-        icon="lock-outline"
-        title="Chưa mở được gian hàng"
-        description="Cần hồ sơ được duyệt và hợp đồng đang hoạt động"
-      />
+    <EmptyState
+      icon="lock-outline"
+      tone="secondary"
+      title="Chưa mở được gian hàng"
+      description="Cần hồ sơ được duyệt và hợp đồng đang hoạt động"
+    >
       <Button label="Xem hồ sơ" onPress={() => goTo('/vendor/registrations')} />
-    </>
+    </EmptyState>
   );
 }

@@ -4,10 +4,10 @@ import { AppText } from '@/components/common/AppText';
 import { Icon } from '@/components/common/Icon';
 import { radius, useTheme } from '@/theme';
 
-import type { ActiveVendor } from './useActiveVendors';
+import type { VendorListItem } from './use-discovery';
 
 type Props = {
-  vendors: ActiveVendor[];
+  vendors: VendorListItem[];
   selectedId?: string;
   onSelect: (id: string) => void;
   height?: number;
@@ -15,12 +15,12 @@ type Props = {
 
 /** Schematic street map with one pin per vendor (no tiles, so it works offline and on web). */
 export function VendorMap({ vendors, selectedId, onSelect, height = 340 }: Props) {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const line = colors.card;
 
   return (
     <View style={[styles.map, { height, backgroundColor: colors.sunken, borderColor: colors.border }]}>
-      <View style={[styles.river, { backgroundColor: '#CFE6F7' }]} />
+      <View style={[styles.river, { backgroundColor: scheme === 'dark' ? '#173247' : '#CFE6F7' }]} />
       <View style={[styles.road, styles.roadH1, { backgroundColor: line }]} />
       <View style={[styles.road, styles.roadH2, { backgroundColor: line }]} />
       <View style={[styles.road, styles.roadV1, { backgroundColor: line }]} />
@@ -29,14 +29,14 @@ export function VendorMap({ vendors, selectedId, onSelect, height = 340 }: Props
       <AppText variant="badge" color="muted" style={styles.label2}>Sông Hàn</AppText>
 
       {vendors.map((v) => {
-        const selected = v.vendor.id === selectedId;
+        const selected = v.key === selectedId;
         return (
           <Pressable
-            key={v.vendor.id}
+            key={v.key}
             accessibilityRole="button"
-            accessibilityLabel={v.storefront?.name ?? v.vendor.business_name}
+            accessibilityLabel={v.name}
             accessibilityState={{ selected }}
-            onPress={() => onSelect(v.vendor.id)}
+            onPress={() => onSelect(v.key)}
             style={[
               styles.pin,
               {
@@ -44,12 +44,12 @@ export function VendorMap({ vendors, selectedId, onSelect, height = 340 }: Props
                 top: `${v.pin.y * 100}%`,
                 width: selected ? 48 : 40,
                 height: selected ? 48 : 40,
-                backgroundColor: colors.primary,
-                borderColor: selected ? colors.card : colors.primary,
+                backgroundColor: selected ? colors.indigo : colors.primary,
+                borderColor: colors.card,
               },
             ]}
           >
-            <Icon name="silverware-fork-knife" size={selected ? 24 : 20} color="onPrimary" />
+            <Icon name="silverware-fork-knife" size={selected ? 24 : 20} color={selected ? 'onIndigo' : 'onPrimary'} />
           </Pressable>
         );
       })}

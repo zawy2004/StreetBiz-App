@@ -446,6 +446,33 @@ export const NOTIFICATIONS: AppNotification[] = [
     read: false,
     created_at: '2026-09-12T08:00:00.000Z',
   },
+  {
+    id: 'NOTI-002',
+    userId: 'USR-VEN-1',
+    notification_type: 'NEW_ORDER',
+    title: 'Có đơn mới',
+    body: 'Đơn DH1001 · 2 phần xôi gà xé đang chờ quán xác nhận.',
+    read: false,
+    created_at: '2026-09-15T06:40:00.000Z',
+  },
+  {
+    id: 'NOTI-003',
+    userId: 'USR-CUS',
+    notification_type: 'ORDER_PLACED',
+    title: 'Đã gửi đơn DH1001',
+    body: 'Xôi gà Bà Năm sẽ báo khi món sẵn sàng để bạn tới lấy.',
+    read: false,
+    created_at: '2026-09-15T06:40:00.000Z',
+  },
+  {
+    id: 'NOTI-004',
+    userId: 'USR-CUS',
+    notification_type: 'REVIEW_REMINDER',
+    title: 'Món hôm qua thế nào?',
+    body: 'Đánh giá đơn DH1002 để giúp người mua khác chọn quán.',
+    read: true,
+    created_at: '2026-09-14T12:00:00.000Z',
+  },
 ];
 
 export const USER_SESSIONS: UserSession[] = [

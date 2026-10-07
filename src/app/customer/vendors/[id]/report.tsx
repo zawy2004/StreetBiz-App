@@ -10,33 +10,33 @@ import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { SuccessView } from '@/components/layout/SuccessView';
+import { errorMessage } from '@/core/api/problem';
 import { requireAuth } from '@/core/auth/require-auth';
-import { useMockDb } from '@/mocks/db';
-import { useAuthStore } from '@/store/auth-store';
+import { useReportVendor, useVendorProfile } from '@/features/discovery/use-discovery';
 import { spacing } from '@/theme';
 
 const REASONS = ['Lấn chiếm lối đi', 'Bán ngoài ô được cấp', 'Hàng kém chất lượng', 'Khác'];
 
+/** BUY-05: report a vendor to the ward, optionally with a photo. */
 export default function VendorReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const user = useAuthStore((s) => s.user);
-  const addReport = useMockDb((s) => s.addReport);
+  const report = useReportVendor(id ?? '');
+  const slotId = useVendorProfile(id).data?.slotId;
   const [reason, setReason] = useState<string>();
   const [detail, setDetail] = useState('');
   const [photo, setPhoto] = useState<string>();
   const [error, setError] = useState<string>();
   const [done, setDone] = useState(false);
 
-  function send() {
-    if (!requireAuth() || !user) return;
+  async function send() {
+    if (!requireAuth(`/customer/vendors/${id}/report`)) return;
     if (!reason) return setError('Chọn lý do');
-    addReport({
-      vendorId: id,
-      reporterId: user.id,
-      reason: detail.trim() ? `${reason}: ${detail.trim()}` : reason,
-      photoUri: photo,
-    });
-    setDone(true);
+    try {
+      await report.mutateAsync({ reason: detail.trim() ? `${reason}: ${detail.trim()}` : reason, photoUri: photo, slotId });
+      setDone(true);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
   }
 
   if (done) {
@@ -53,7 +53,7 @@ export default function VendorReportScreen() {
   return (
     <>
       <StackHeader title="Báo cáo hộ kinh doanh" />
-      <Screen footer={<Button label="Gửi báo cáo" onPress={send} />}>
+      <Screen footer={<Button label="Gửi báo cáo" loading={report.isPending} onPress={() => void send()} />}>
         <View style={{ gap: spacing.sm }}>
           <AppText variant="labelSm">Lý do</AppText>
           {REASONS.map((r) => (

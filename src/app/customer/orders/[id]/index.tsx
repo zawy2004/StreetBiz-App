@@ -10,116 +10,159 @@ import { KeyValueCard } from '@/components/common/KeyValueCard';
 import { Money } from '@/components/common/Money';
 import { QrCode } from '@/components/common/QrCode';
 import { ConfirmDialog } from '@/components/feedback/ConfirmDialog';
-import { EmptyState } from '@/components/feedback/States';
+import { EmptyState, QueryView } from '@/components/feedback/States';
+import { showError, showToast } from '@/components/feedback/Toast';
 import { Screen } from '@/components/layout/Screen';
+import { Section } from '@/components/layout/Section';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { StatusChip } from '@/components/status/StatusChip';
+import { statusLabel } from '@/core/constants/status-labels';
 import { goTo } from '@/core/navigation/go';
-import { ORDER_STEPS, stepIndex } from '@/features/orders/order-utils';
-import { useMockDb } from '@/mocks/db';
+import { ORDER_STEPS, isCollectable, stepIndex } from '@/features/orders/order-utils';
+import { useCancelOrder, useMyOrder, useOrderReview, usePickupCode } from '@/features/orders/use-orders';
 import { spacing, useTheme } from '@/theme';
+import { formatDateTime, formatVnd } from '@/utils/format';
 
+/** ORD-03: one order, with its pickup code while it waits to be collected. */
 export default function CustomerOrderDetailScreen() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const order = useMockDb((s) => s.orders).find((o) => o.id === id);
-  const store = useMockDb((s) => s.storefronts).find((s) => s.id === order?.storefrontId);
-  const reviews = useMockDb((s) => s.reviews);
-  const cancel = useMockDb((s) => s.cancelOrder);
+  const order = useMyOrder(id, true);
+  const o = order.data;
+  const code = usePickupCode(o, Boolean(o && isCollectable(o.status)));
+  const review = useOrderReview(o?.status === 'COMPLETED' ? o.id : undefined);
+  const cancel = useCancelOrder();
   const [confirm, setConfirm] = useState(false);
 
-  if (!order) {
-    return (
-      <>
-        <StackHeader title="Đơn hàng" />
-        <Screen><EmptyState title="Không tìm thấy đơn" /></Screen>
-      </>
-    );
-  }
-
-  const current = stepIndex(order.order_status);
-  const done = order.order_status === 'COMPLETED';
-  const reviewed = reviews.some((r) => r.orderId === order.id);
-  const showQr = current >= 0 && !done;
+  const done = o?.status === 'COMPLETED';
+  const reviewed = Boolean(review.data);
 
   return (
     <>
-      <StackHeader title={`Đơn #${order.order_code}`} />
+      <StackHeader title={o ? `Đơn #${o.code.slice(-8)}` : 'Đơn hàng'} />
       <Screen
+        onRefresh={order.refetch}
+        refreshing={order.isRefetching}
         footer={
-          order.order_status === 'PLACED' ? (
+          o?.status === 'PLACED' ? (
             <Button label="Huỷ đơn" variant="danger" onPress={() => setConfirm(true)} />
-          ) : done ? (
+          ) : o?.status === 'PENDING_PAYMENT' ? (
+            <Button label="Tiếp tục thanh toán" icon="wallet-outline" onPress={() => goTo(`/customer/orders/${o.id}/payment`)} />
+          ) : done && o ? (
             <>
-              {!reviewed ? <Button label="Đánh giá" onPress={() => goTo(`/customer/orders/${order.id}/review`)} /> : null}
-              <Button label="Khiếu nại" variant="outline" onPress={() => goTo(`/customer/orders/${order.id}/complaint`)} />
+              <Button label={reviewed ? 'Sửa đánh giá' : 'Đánh giá'} icon="star-outline" onPress={() => goTo(`/customer/orders/${o.id}/review`)} />
+              <Button label="Khiếu nại" variant="outline" onPress={() => goTo(`/customer/orders/${o.id}/complaint`)} />
             </>
           ) : undefined
         }
       >
-        <View style={styles.status}>
-          <AppText variant="headline">{store?.name}</AppText>
-          <StatusChip code={order.order_status} />
-        </View>
+        <QueryView query={order}>
+          {(data) => {
+            if (!data) return <EmptyState title="Không tìm thấy đơn" />;
+            const current = stepIndex(data.status);
+            return (
+              <>
+                <View style={styles.status}>
+                  <AppText variant="headline">{data.storefrontName}</AppText>
+                  <StatusChip code={data.status} />
+                </View>
 
-        {current >= 0 ? (
-          <View style={styles.steps}>
-            {ORDER_STEPS.map((s, i) => (
-              <View key={s.status} style={styles.step}>
-                <View style={[styles.bar, { backgroundColor: i <= current ? colors.tertiary : colors.border }]} />
-                <AppText variant="small" color={i <= current ? 'tertiary' : 'muted'}>{s.label}</AppText>
-              </View>
-            ))}
-          </View>
-        ) : null}
+                {current >= 0 ? (
+                  <View style={styles.steps}>
+                    {ORDER_STEPS.map((s, i) => (
+                      <View key={s.status} style={styles.step}>
+                        <View style={[styles.bar, { backgroundColor: i <= current ? colors.tertiary : colors.border }]} />
+                        <AppText variant="caption" color={i <= current ? 'tertiary' : 'muted'}>{s.label}</AppText>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
 
-        {showQr ? (
-          <Card style={styles.qr}>
-            <QrCode value={order.order_code} size={200} />
-            <AppText variant="code">{order.order_code}</AppText>
-            <AppText variant="small" color="muted">Đưa mã này cho người bán</AppText>
-          </Card>
-        ) : null}
+                {isCollectable(data.status) ? (
+                  <Card style={styles.qr}>
+                    <QueryView query={code}>
+                      {(c) =>
+                        c ? (
+                          <>
+                            <QrCode value={c.qr} size={200} />
+                            <AppText variant="code">{c.shortCode}</AppText>
+                            <AppText variant="small" color="muted" align="center">
+                              {data.status === 'READY_FOR_PICKUP' ? 'Món đã sẵn sàng. Đưa mã này cho người bán để nhận món.' : 'Đưa mã này cho người bán khi tới lấy món.'}
+                            </AppText>
+                          </>
+                        ) : null
+                      }
+                    </QueryView>
+                  </Card>
+                ) : null}
 
-        <Card style={styles.items}>
-          {order.items.map((i) => (
-            <View key={i.menuItemId} style={styles.item}>
-              <AppText>{i.quantity} × {i.name}</AppText>
-              <AppText variant="label">{new Intl.NumberFormat('vi-VN').format(i.price * i.quantity)} đ</AppText>
-            </View>
-          ))}
-          <View style={[styles.item, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md }]}>
-            <AppText variant="headline">Tổng</AppText>
-            <Money amountVnd={order.total} />
-          </View>
-        </Card>
+                {data.rejectionReason ? (
+                  <Card style={{ backgroundColor: colors.errorBg, borderColor: colors.errorBg }}>
+                    <AppText variant="small" color="onError">Quán từ chối: {data.rejectionReason}</AppText>
+                  </Card>
+                ) : null}
 
-        {order.pickup_time || order.note ? (
-          <KeyValueCard
-            rows={[
-              ...(order.pickup_time ? [{ label: 'Giờ lấy', value: order.pickup_time }] : []),
-              ...(order.note ? [{ label: 'Ghi chú', value: order.note }] : []),
-            ]}
-          />
-        ) : null}
+                <Card style={styles.items}>
+                  {data.items.map((i) => (
+                    <View key={i.id} style={styles.item}>
+                      <AppText style={styles.flex}>{i.quantity} × {i.name}</AppText>
+                      <AppText variant="label">{formatVnd(i.price * i.quantity)}</AppText>
+                    </View>
+                  ))}
+                  <View style={[styles.item, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md }]}>
+                    <AppText variant="headline">Tổng</AppText>
+                    <Money amountVnd={data.total} />
+                  </View>
+                </Card>
 
-        {done ? (
-          <View style={styles.thanks}>
-            <Icon name="check-circle" size={20} color="tertiary" />
-            <AppText color="muted">Bạn đã nhận món</AppText>
-          </View>
-        ) : null}
+                <KeyValueCard
+                  rows={[
+                    { label: 'Đặt lúc', value: formatDateTime(data.createdAt) },
+                    ...(data.paymentProvider ? [{ label: 'Thanh toán', value: data.paymentProvider }] : []),
+                    ...(data.pickupTime ? [{ label: 'Giờ lấy', value: data.pickupTime }] : []),
+                    ...(data.note ? [{ label: 'Ghi chú', value: data.note }] : []),
+                    ...(data.refundStatus ? [{ label: 'Hoàn tiền', value: `${statusLabel(data.refundStatus).label}${data.refundAmount ? ` · ${formatVnd(data.refundAmount)}` : ''}` }] : []),
+                  ]}
+                />
+
+                {data.history.length ? (
+                  <Section title="Lịch sử đơn">
+                    <Card style={styles.history}>
+                      {data.history.map((h, i) => (
+                        <View key={`${h.status}-${i}`} style={styles.historyRow}>
+                          <Icon name="circle-medium" size={20} color={i === data.history.length - 1 ? 'primary' : 'muted'} />
+                          <View style={styles.flex}>
+                            <AppText variant="labelSm">{statusLabel(h.status).label}</AppText>
+                            {h.note ? <AppText variant="caption" color="muted">{h.note}</AppText> : null}
+                          </View>
+                          <AppText variant="caption" color="muted">{formatDateTime(h.at)}</AppText>
+                        </View>
+                      ))}
+                    </Card>
+                  </Section>
+                ) : null}
+
+                {done ? (
+                  <View style={styles.thanks}>
+                    <Icon name="check-circle" size={20} color="tertiary" />
+                    <AppText color="muted">Bạn đã nhận món</AppText>
+                  </View>
+                ) : null}
+              </>
+            );
+          }}
+        </QueryView>
       </Screen>
       <ConfirmDialog
         visible={confirm}
         title="Huỷ đơn này?"
-        description="Quán chưa nhận đơn nên bạn được huỷ miễn phí."
+        description="Quán chưa nhận đơn nên bạn được huỷ và hoàn tiền."
         confirmLabel="Huỷ đơn"
         danger
         onCancel={() => setConfirm(false)}
         onConfirm={() => {
-          cancel(order.id);
           setConfirm(false);
+          if (o) cancel.mutateAsync(o.id).then(() => showToast('Đã huỷ đơn'), showError);
         }}
       />
     </>
@@ -128,11 +171,14 @@ export default function CustomerOrderDetailScreen() {
 
 const styles = StyleSheet.create({
   status: { gap: spacing.sm },
-  steps: { flexDirection: 'row', gap: spacing.sm },
+  steps: { flexDirection: 'row', gap: 6 },
   step: { flex: 1, gap: 6 },
   bar: { height: 4, borderRadius: 2 },
   qr: { alignItems: 'center', gap: spacing.sm },
   items: { gap: spacing.md },
-  item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
+  flex: { flex: 1 },
+  history: { gap: spacing.md },
+  historyRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   thanks: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, justifyContent: 'center' },
 });

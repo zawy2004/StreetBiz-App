@@ -2,14 +2,15 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/common/AppText';
 import { Icon } from '@/components/common/Icon';
-import type { SidewalkSlot } from '@/mocks/types';
 import { radius, spacing, useTheme } from '@/theme';
 
+import type { SlotView } from './use-rentals';
+
 type Props = {
-  slots: SidewalkSlot[];
+  slots: SlotView[];
   street: string;
   selectedId?: string;
-  onSelect?: (slot: SidewalkSlot) => void;
+  onSelect?: (slot: SlotView) => void;
   /** Slots that should be dimmed because a filter excludes them. */
   hiddenIds?: string[];
 };
@@ -23,7 +24,7 @@ export function SlotMap({ slots, street, selectedId, onSelect, hiddenIds = [] }:
   const top = slots.slice(0, half);
   const bottom = slots.slice(half);
 
-  const renderRow = (row: SidewalkSlot[]) => (
+  const renderRow = (row: SlotView[]) => (
     <View style={styles.row}>
       {row.map((slot) => (
         <Tile
@@ -51,10 +52,10 @@ export function SlotMap({ slots, street, selectedId, onSelect, hiddenIds = [] }:
   );
 }
 
-function Tile({ slot, selected, dimmed, onPress }: { slot: SidewalkSlot; selected: boolean; dimmed: boolean; onPress: () => void }) {
+function Tile({ slot, selected, dimmed, onPress }: { slot: SlotView; selected: boolean; dimmed: boolean; onPress: () => void }) {
   const { colors } = useTheme();
-  const free = slot.slot_status === 'AVAILABLE';
-  const pending = slot.slot_status === 'PENDING';
+  const free = slot.status === 'AVAILABLE';
+  const pending = slot.status === 'PENDING' || slot.status === 'PENDING_APPLICATION';
 
   const tone = free
     ? { bg: colors.tertiaryBg, border: colors.tertiary, fg: colors.tertiary }
@@ -65,7 +66,7 @@ function Tile({ slot, selected, dimmed, onPress }: { slot: SidewalkSlot; selecte
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${slot.slot_code}, ${free ? 'còn trống' : pending ? 'chờ duyệt' : 'đã thuê'}`}
+      accessibilityLabel={`${slot.code}, ${free ? 'còn trống' : pending ? 'chờ duyệt' : 'đã thuê'}`}
       accessibilityState={{ selected }}
       onPress={onPress}
       style={[
@@ -73,7 +74,7 @@ function Tile({ slot, selected, dimmed, onPress }: { slot: SidewalkSlot; selecte
         { backgroundColor: tone.bg, borderColor: selected ? colors.primary : tone.border, borderWidth: selected ? 3 : 1.5, opacity: dimmed ? 0.35 : 1 },
       ]}
     >
-      <AppText variant="labelSm" style={{ color: tone.fg }}>{shortCode(slot.slot_code)}</AppText>
+      <AppText variant="labelSm" style={{ color: tone.fg }} numberOfLines={1}>{shortCode(slot.code)}</AppText>
       {free ? (
         <AppText variant="badge" style={{ color: tone.fg }}>Trống</AppText>
       ) : (
@@ -105,7 +106,7 @@ export function SlotLegend() {
 const styles = StyleSheet.create({
   map: { borderRadius: radius.card, borderWidth: 1, padding: spacing.md, gap: spacing.md },
   row: { flexDirection: 'row', gap: spacing.sm },
-  tile: { flex: 1, height: 76, borderRadius: radius.card, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  tile: { flex: 1, minWidth: 0, height: 76, borderRadius: radius.card, alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 2 },
   road: { height: 56, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' },
   centerLine: { position: 'absolute', left: 8, right: 8, borderTopWidth: 2, borderStyle: 'dashed' },
   street: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.control, borderWidth: 1 },

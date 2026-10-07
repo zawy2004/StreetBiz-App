@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
-
-import { feeStatus, isFeeDue } from '@/features/finance/utils';
-import { useMockDb } from '@/mocks/db';
+import { isFeeOpen, isPenaltyOpen, useFees, usePenalties } from '@/features/finance/use-finance';
+import { useRegistrations } from '@/features/registration/use-registrations';
+import { useActivePermit } from '@/features/slots/use-rentals';
 import { useAuthStore } from '@/store/auth-store';
+import { formatVnd } from '@/utils/format';
 
 export type TodoItem = {
   id: string;
@@ -14,55 +14,47 @@ export type TodoItem = {
   href: string;
 };
 
+/** What the seller's home screen needs, from whichever source is active. */
 export function useVendorHome() {
   const user = useAuthStore((s) => s.user);
-  const db = useMockDb();
+  const registrations = useRegistrations();
+  const active = useActivePermit();
+  const fees = useFees();
+  const penalties = usePenalties();
 
-  return useMemo(() => {
-    const vendorId = user?.vendorId;
-    const contract = db.contracts.find((c) => c.vendorId === vendorId && c.contract_status === 'ACTIVE');
-    const permit = contract ? db.permits.find((p) => p.contractId === contract.id) : undefined;
-    const slot = contract ? db.slots.find((s) => s.id === contract.slotId) : undefined;
+  const contract = active.data?.contract;
+  const permit = active.data?.permit ?? undefined;
 
-    const todos: TodoItem[] = [];
+  const openFees = (fees.data ?? []).filter(isFeeOpen);
+  const openPenalties = (penalties.data ?? []).filter(isPenaltyOpen);
 
-    for (const r of db.registrations) {
-      if (r.vendorId === vendorId && r.registration_status === 'MORE_INFORMATION_REQUIRED') {
-        todos.push({
-          id: r.id,
-          kind: 'registration',
-          title: 'Bổ sung giấy tờ',
-          subtitle: r.review_note ?? r.business_name,
-          href: `/vendor/registrations/${r.id}`,
-        });
-      }
-    }
-    for (const f of db.feeItems) {
-      if (f.vendorId === vendorId && isFeeDue(f)) {
-        todos.push({
-          id: f.id,
-          kind: 'fee',
-          title: `Đóng phí thuê ô ${f.period_label}`,
-          subtitle: `${new Intl.NumberFormat('vi-VN').format(f.amount)} đ`,
-          chip: feeStatus(f) === 'OVERDUE' ? 'OVERDUE' : 'PENDING_PAYMENT',
-          href: `/vendor/finance/fees/${f.id}`,
-        });
-      }
-    }
-    for (const p of db.penalties) {
-      if (p.vendorId === vendorId && p.penalty_status === 'PENDING') {
-        todos.push({
-          id: p.id,
-          kind: 'penalty',
-          title: 'Biên bản vi phạm',
-          subtitle: p.reason,
-          danger: true,
-          href: `/vendor/finance/penalties/${p.id}`,
-        });
-      }
-    }
+  const todos: TodoItem[] = [
+    ...(registrations.data ?? [])
+      .filter((r) => r.status === 'MORE_INFORMATION_REQUIRED')
+      .map((r): TodoItem => ({ id: `reg-${r.id}`, kind: 'registration', title: 'Bổ sung giấy tờ', subtitle: r.reviewNote ?? r.name, href: `/vendor/registrations/${r.id}` })),
+    ...openFees.map(
+      (f): TodoItem => ({
+        id: `fee-${f.id}`,
+        kind: 'fee',
+        title: `Đóng phí thuê ô ${f.period}`,
+        subtitle: [formatVnd(f.amount), f.slotCode].filter(Boolean).join(' · '),
+        chip: f.status === 'OVERDUE' ? 'OVERDUE' : 'PENDING_PAYMENT',
+        href: `/vendor/finance/fees/${f.id}`,
+      }),
+    ),
+    ...openPenalties.map(
+      (p): TodoItem => ({ id: `pen-${p.id}`, kind: 'penalty', title: 'Biên bản vi phạm', subtitle: p.reason, danger: true, href: `/vendor/finance/penalties/${p.id}` }),
+    ),
+  ];
 
-    const unreadCount = db.notifications.filter((n) => n.userId === user?.id && !n.read).length;
-    return { user, permit, slot, todos, unreadCount };
-  }, [db, user]);
+  const dueTotal = openFees.reduce((n, f) => n + f.amount, 0) + openPenalties.reduce((n, p) => n + p.amount, 0);
+  const loading = registrations.isLoading || active.isLoading || fees.isLoading || penalties.isLoading;
+  const refetch = () => {
+    registrations.refetch();
+    active.refetch();
+    fees.refetch();
+    penalties.refetch();
+  };
+
+  return { user, contract, permit, todos, dueTotal, loading, refetch };
 }

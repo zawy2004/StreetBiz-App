@@ -8,6 +8,10 @@ import { PasswordField } from '@/components/forms/PasswordField';
 import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
+import { authApi } from '@/core/api/auth-api';
+import { errorMessage } from '@/core/api/problem';
+import { passwordProblem } from '@/core/auth/password-policy';
+import { isDev, isLiveApi } from '@/core/config/env';
 import { usePendingAuth } from '@/features/auth/pending-store';
 import { useMockDb } from '@/mocks/db';
 import { spacing, useTheme } from '@/theme';
@@ -31,6 +35,7 @@ export default function ResetPasswordScreen() {
   const [next, setNext] = useState('');
   const [again, setAgain] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
 
   if (!phone) {
     return <Redirect href={'/(auth)/reset-request' as never} />;
@@ -38,18 +43,31 @@ export default function ResetPasswordScreen() {
 
   const score = strength(next);
 
-  function submit() {
+  async function submit() {
     const found: Record<string, string> = {};
     if (code.replace(/\D/g, '').length !== 6) found.code = 'Mã gồm 6 số';
-    if (next.length < 6) found.next = 'Mật khẩu cần ít nhất 6 ký tự';
+    const weak = passwordProblem(next);
+    if (weak) found.next = weak;
     if (again !== next) found.again = 'Mật khẩu nhập lại không khớp';
     setErrors(found);
-    if (Object.keys(found).length) return;
+    if (Object.keys(found).length || !phone) return;
 
-    const db = useMockDb.getState();
-    const digits = (v: string) => v.replace(/\D/g, '');
-    const user = db.users.find((u) => digits(u.phone) === digits(phone ?? ''));
-    if (user) db.updateUserPassword(user.id, next);
+    if (isLiveApi) {
+      setBusy(true);
+      try {
+        await authApi.resetPassword(phone, code.replace(/\D/g, ''), next);
+      } catch (e) {
+        setErrors({ code: errorMessage(e) });
+        return;
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      const db = useMockDb.getState();
+      const digits = (v: string) => v.replace(/\D/g, '');
+      const user = db.users.find((u) => digits(u.phone) === digits(phone));
+      if (user) db.updateUserPassword(user.id, next);
+    }
     setResetPhone(null);
     router.replace('/(auth)/sign-in' as never);
   }
@@ -57,7 +75,10 @@ export default function ResetPasswordScreen() {
   return (
     <>
       <StackHeader title="Mật khẩu mới" />
-      <Screen footer={<Button label="Đổi mật khẩu" onPress={submit} />}>
+      <Screen footer={<Button label="Đổi mật khẩu" loading={busy} onPress={() => void submit()} />}>
+        {isLiveApi && isDev ? (
+          <AppText variant="caption" color="muted">Môi trường phát triển: mã được in trong cửa sổ chạy API (dòng [DEV-SMS]).</AppText>
+        ) : null}
         <TextField
           label="Mã xác nhận"
           icon="message-text-outline"

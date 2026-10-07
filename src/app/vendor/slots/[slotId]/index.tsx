@@ -5,70 +5,74 @@ import { AppText } from '@/components/common/AppText';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { Icon } from '@/components/common/Icon';
-import { Money } from '@/components/common/Money';
-import { EmptyState } from '@/components/feedback/States';
+import { EmptyState, QueryView } from '@/components/feedback/States';
 import { Screen } from '@/components/layout/Screen';
 import { StackHeader } from '@/components/layout/StackHeader';
 import { StatusChip } from '@/components/status/StatusChip';
 import { goTo } from '@/core/navigation/go';
-import { useMockDb } from '@/mocks/db';
+import { useSlot } from '@/features/slots/use-rentals';
 import { radius, spacing, useTheme } from '@/theme';
 
+/** SIDE-02: one slot's place, size, price and hours. */
 export default function SlotDetailScreen() {
   const { colors } = useTheme();
   const { slotId } = useLocalSearchParams<{ slotId: string }>();
-  const slot = useMockDb((s) => s.slots).find((s) => s.id === slotId);
-
-  if (!slot) {
-    return (
-      <>
-        <StackHeader title="Chi tiết ô" />
-        <Screen><EmptyState title="Không tìm thấy ô" /></Screen>
-      </>
-    );
-  }
-
-  const free = slot.slot_status === 'AVAILABLE';
+  const slot = useSlot(slotId);
+  const s = slot.data;
 
   return (
     <>
-      <StackHeader title={slot.slot_code} />
+      <StackHeader title={s?.code ?? 'Chi tiết ô'} />
       <Screen
         footer={
-          free ? (
-            <Button label="Nộp đơn thuê" onPress={() => goTo(`/vendor/slots/${slot.id}/apply`)} />
-          ) : (
-            <Button label="Ô này chưa thể thuê" disabled onPress={() => undefined} />
-          )
+          s ? (
+            s.status === 'AVAILABLE' ? (
+              <Button label="Nộp đơn thuê" onPress={() => goTo(`/vendor/slots/${s.id}/apply`)} />
+            ) : (
+              <Button label="Ô này chưa thể thuê" disabled onPress={() => undefined} />
+            )
+          ) : undefined
         }
       >
-        <Card style={styles.place}>
-          <View style={[styles.pin, { backgroundColor: colors.sunken }]}>
-            <Icon name="map-marker-outline" size={26} color="primary" />
-          </View>
-          <View style={styles.placeBody}>
-            <AppText variant="headline">{slot.street}</AppText>
-            <AppText variant="small" color="muted">Phường Hải Châu 1</AppText>
-          </View>
-          <StatusChip code={slot.slot_status} />
-        </Card>
+        <QueryView query={slot}>
+          {(v) =>
+            !v ? (
+              <EmptyState title="Không tìm thấy ô" />
+            ) : (
+              <>
+                <Card style={styles.place}>
+                  <View style={[styles.pin, { backgroundColor: colors.primarySoft }]}>
+                    <Icon name="map-marker-outline" size={26} color="primary" />
+                  </View>
+                  <View style={styles.placeBody}>
+                    <AppText variant="headline">{v.street}</AppText>
+                    <AppText variant="small" color="muted">{v.lat.toFixed(5)}, {v.lng.toFixed(5)}</AppText>
+                  </View>
+                  <StatusChip code={v.status} />
+                </Card>
 
-        <View style={styles.tiles}>
-          <Card style={styles.tile}>
-            <AppText variant="small" color="muted">Phí thuê</AppText>
-            <Money amountVnd={slot.price_monthly} color="primary" />
-            <AppText variant="small" color="muted">/tháng</AppText>
-          </Card>
-          <Card style={styles.tile}>
-            <AppText variant="small" color="muted">Diện tích</AppText>
-            <AppText variant="money">{slot.size_m2} m²</AppText>
-          </Card>
-        </View>
+                <View style={styles.tiles}>
+                  <Card style={styles.tile}>
+                    <AppText variant="small" color="muted">Phí thuê</AppText>
+                    <AppText variant="money" color="primary">{v.priceLabel}</AppText>
+                  </Card>
+                  <Card style={styles.tile}>
+                    <AppText variant="small" color="muted">Kích thước</AppText>
+                    <AppText variant="money">{v.sizeLabel}</AppText>
+                  </Card>
+                </View>
 
-        <Card style={styles.hours}>
-          <Icon name="clock-outline" size={22} color="indigo" />
-          <AppText variant="label">Giờ bán {slot.time_window}</AppText>
-        </Card>
+                {v.timeWindow ? (
+                  <Card style={styles.hours}>
+                    <Icon name="clock-outline" size={22} color="indigo" />
+                    <AppText variant="label">Giờ bán {v.timeWindow}</AppText>
+                  </Card>
+                ) : null}
+                {v.tenantName ? <AppText variant="small" color="muted">Đang thuê: {v.tenantName}</AppText> : null}
+              </>
+            )
+          }
+        </QueryView>
       </Screen>
     </>
   );

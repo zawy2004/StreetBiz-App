@@ -14,7 +14,7 @@ type Props<T extends string> = {
 };
 
 export function SegmentedControl<T extends string>({ options, value, onChange }: Props<T>) {
-  const { colors } = useTheme();
+  const { colors, shadow } = useTheme();
   return (
     <View style={[styles.track, { backgroundColor: colors.sunken }]} accessibilityRole="tablist">
       {options.map((o) => {
@@ -25,10 +25,12 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
             accessibilityRole="tab"
             accessibilityState={{ selected }}
             onPress={() => onChange(o.value)}
-            style={[styles.item, selected ? { backgroundColor: colors.card, borderColor: colors.border } : null]}
+            style={[styles.item, selected ? [shadow.card, { backgroundColor: colors.card }] : null]}
           >
             {o.icon ? <Icon name={o.icon} size={18} color={selected ? 'primary' : 'muted'} /> : null}
-            <AppText variant="label" color={selected ? 'primary' : 'muted'}>{o.label}</AppText>
+            <AppText variant="labelSm" color={selected ? 'text' : 'muted'} numberOfLines={1}>
+              {o.label}
+            </AppText>
           </Pressable>
         );
       })}
@@ -37,7 +39,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
 }
 
 const styles = StyleSheet.create({
-  track: { flexDirection: 'row', borderRadius: radius.card, padding: 3 },
+  track: { flexDirection: 'row', borderRadius: radius.full, padding: 4 },
   item: {
     flex: 1,
     minHeight: 40,
@@ -45,8 +47,7 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    paddingHorizontal: 6,
+    borderRadius: radius.full,
   },
 });
