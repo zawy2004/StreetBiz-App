@@ -1,18 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Redirect } from 'expo-router';
+
+import { ROLE_HOME, useAuthStore } from '@/store/auth-store';
 
 export default function IndexScreen() {
-  return (
-    <View style={styles.container}>
-      <Text>StreetBiz</Text>
-      <Text>Source foundation is ready.</Text>
-    </View>
-  );
+  const user = useAuthStore((s) => s.user);
+  return <Redirect href={(user ? ROLE_HOME[user.role_code] : '/(auth)/sign-in') as never} />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-});
