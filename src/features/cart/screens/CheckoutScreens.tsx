@@ -1,0 +1,357 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
+import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Linking, Pressable, Text, View } from 'react-native';
+
+import { Card, KeyValueList } from '@/components/common/Blocks';
+import { Button } from '@/components/common/Button';
+import { Icon } from '@/components/common/Icon';
+import { Banner } from '@/components/feedback/Banner';
+import { ErrorState, ListSkeleton } from '@/components/feedback/States';
+import { StateView } from '@/components/feedback/StateView';
+import { showToast } from '@/components/feedback/Toast';
+import { Screen } from '@/components/layout/Screen';
+import { commerceApi, errorMessage } from '@/core/api';
+import { env, isDev } from '@/core/config/env';
+import { uuid } from '@/core/utils/uuid';
+import { directionsUrl } from '@/features/buyer-discovery/discovery-format';
+import { LOCATE_MESSAGES } from '@/features/buyer-discovery/geolocation';
+import { WalletPicker } from '@/features/fee-schedules/components/FinanceParts';
+import { orderApi } from '@/features/orders/api/orderApi';
+import { useOnline, providerName } from '@/features/orders/components/order-display';
+import { formatOrderDate } from '@/features/orders/components/order-format';
+import { useCheckoutOrder, useCustomerOrder, useRefreshAfterOrderMutation } from '@/features/orders/hooks/useOrders';
+import { isSandboxPaymentUrl, redirectToPayment } from '@/features/orders/payment-redirect';
+import { distanceLabel } from '@/features/orders/pickup/pickup-range';
+import { usePickupRange } from '@/features/orders/pickup/usePickupRange';
+import { useAuthStore } from '@/store/auth-store';
+import { colors, fonts, radius, tabular, text } from '@/theme';
+import { formatVnd } from '@/utils/format';
+import { CART_KEY, useCart } from '../cart-api';
+
+type Provider = 'MOMO' | 'ZALOPAY';
+/** Only Development has the sandbox confirm/fail endpoints; elsewhere a real gateway is used. */
+const sandboxPayments = isDev && env.enablePaymentSandbox;
+
+function blockReason(storefrontStatus: string | undefined, availability: string[]): string | null {
+  if (storefrontStatus !== 'OPEN') {
+    return storefrontStatus === 'PAUSED' ? 'Quán đang tạm dừng nhận đơn nên chưa đặt được. Giỏ vẫn được giữ.' : 'Quán đang đóng cửa nên chưa đặt được. Giỏ vẫn được giữ.';
+  }
+  if (availability.some((s) => s !== 'AVAILABLE')) return 'Có món không còn bán. Giảm món đó về 0 để tiếp tục.';
+  return null;
+}
+
+/**
+ * V-C09 Thanh toán (ORD-01, BR-37): the pickup point and whether the buyer is near enough to
+ * collect, the dishes, the wallet, one button. One idempotency key per attempt; the server
+ * re-checks the very position this screen judged.
+ */
+export function CheckoutScreen() {
+  const user = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
+  const online = useOnline();
+  const cart = useCart();
+  const place = useCheckoutOrder();
+  const [provider, setProvider] = useState<Provider>('MOMO');
+  const [attemptKey, setAttemptKey] = useState<string | null>(null);
+  const range = usePickupRange(cart.data?.items.length && !cart.data.pendingOrderId ? cart.data.storefrontId : undefined);
+  const [lastCart, setLastCart] = useState<number | undefined>(undefined);
+  if (cart.data?.cartId !== lastCart) {
+    // A different cart is a different purchase: it gets its own key.
+    setLastCart(cart.data?.cartId);
+    setAttemptKey(null);
+  }
+
+  if (user?.role_code !== 'CUSTOMER') {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Thanh toán' }} />
+        <StateView icon={{ sf: 'person.crop.circle', md: 'account_circle' }} title="Đăng nhập để đặt hàng" body="Giỏ hàng và đơn đặt trước gắn với tài khoản người mua." action={{ label: 'Đăng nhập', onPress: () => router.push('/auth/sign-in') }} />
+      </Screen>
+    );
+  }
+  if (cart.isPending) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Thanh toán' }} />
+        <ListSkeleton rows={4} height={70} />
+      </Screen>
+    );
+  }
+  if (cart.isError) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Thanh toán' }} />
+        <ErrorState error={cart.error} onRetry={() => void cart.refetch()} />
+      </Screen>
+    );
+  }
+  const data = cart.data;
+  if (!data || data.items.length === 0) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Thanh toán' }} />
+        <StateView icon={{ sf: 'bag', md: 'shopping_bag' }} title="Giỏ hàng trống" body="Chọn món ở Khám phá rồi quay lại thanh toán." action={{ label: 'Về Khám phá', onPress: () => router.dismissTo('/customer/explore' as Href) }} />
+      </Screen>
+    );
+  }
+  if (data.pendingOrderId) {
+    const pendingId = data.pendingOrderId;
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Thanh toán' }} />
+        <StateView icon={{ sf: 'clock.fill', md: 'schedule' }} title="Bạn có một đơn đang chờ thanh toán" body="Thanh toán hoặc huỷ đơn đó trước khi đặt đơn mới từ giỏ này." action={{ label: 'Tiếp tục thanh toán', onPress: () => router.replace(`/customer/orders/${pendingId}/payment` as Href) }} />
+      </Screen>
+    );
+  }
+
+  const reason = blockReason(data.storefrontStatus, data.items.map((i) => i.availabilityStatus));
+  const count = data.items.reduce((n, i) => n + i.quantity, 0);
+  const pay = () => {
+    if (place.isPending || reason || !range.canOrder) return;
+    // The same key for a retried tap on the same cart, so the server never charges twice (BR-37).
+    const idempotencyKey = attemptKey ?? uuid();
+    setAttemptKey(idempotencyKey);
+    place.mutate(
+      { cartId: data.cartId, provider, idempotencyKey, location: range.location },
+      {
+        onSuccess: async (checkout) => {
+          await Promise.all([queryClient.invalidateQueries({ queryKey: CART_KEY }), queryClient.invalidateQueries({ queryKey: ['orders', 'customer', 'list'] })]);
+          router.replace(`/customer/orders/${checkout.orderId}/payment` as Href);
+          // A configured MoMo merchant returns a real https page: open it; the payment screen checks on return.
+          if (!isSandboxPaymentUrl(checkout.paymentUrl)) {
+            showToast('Đang mở ví để thanh toán', 'info');
+            redirectToPayment(checkout.paymentUrl);
+          }
+        },
+      },
+    );
+  };
+
+  return (
+    <Screen
+      footer={
+        <View style={{ gap: 8 }}>
+          {place.isError ? <Text style={[text.footnote, { color: colors.onDanger }]}>{errorMessage(place.error)}</Text> : null}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View>
+              <Text style={[text.caption, { color: colors.muted }]}>Tổng · {count} món</Text>
+              <Text style={[{ fontFamily: fonts.heavy, fontSize: 19, color: colors.ink }, tabular]}>{formatVnd(data.subtotal)}</Text>
+            </View>
+            <Button label={place.isPending ? 'Đang khởi tạo…' : 'Thanh toán'} size={56} icon={{ sf: 'lock.fill', md: 'lock' }} loading={place.isPending} disabled={!!reason || !range.canOrder || !online} onPress={pay} style={{ flex: 1 }} />
+          </View>
+        </View>
+      }
+    >
+      <Stack.Screen options={{ title: 'Thanh toán' }} />
+      {!online ? <Banner tone="warning">Mất kết nối. Cần có mạng để thanh toán.</Banner> : null}
+      {reason ? <Banner tone="danger">{reason}</Banner> : null}
+
+      <Card style={{ gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon sf="storefront.fill" md="storefront" size={20} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[text.caption, { color: colors.muted }]}>Đến lấy tại quầy</Text>
+            <Text style={[text.headline, { color: colors.ink }]}>{data.storefrontName}</Text>
+            <Text style={[text.footnote, { color: colors.muted }]}>{data.storefrontAddress || 'Địa chỉ điểm bán chưa được cập nhật'}</Text>
+          </View>
+        </View>
+        <RangeNotice range={range} />
+      </Card>
+
+      <Card style={{ gap: 10 }}>
+        <Text style={[text.subhead, { color: colors.ink }]}>Món của bạn</Text>
+        {data.items.map((i) => (
+          <View key={i.cartItemId} style={{ flexDirection: 'row', gap: 10 }}>
+            <Text style={[{ fontFamily: fonts.heavy, fontSize: 15, color: colors.primary, minWidth: 30 }, tabular]}>{i.quantity}×</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[text.callout, { color: colors.ink }]}>{i.itemName}</Text>
+              {i.note ? <Text style={[text.caption, { color: colors.onMango }]}>Ghi chú: {i.note}</Text> : null}
+              {i.availabilityStatus !== 'AVAILABLE' ? <Text style={[text.caption, { color: colors.onDanger }]}>Món này không còn bán</Text> : null}
+            </View>
+            <Text style={[text.callout, { color: colors.ink }, tabular]}>{formatVnd(i.unitPrice * i.quantity)}</Text>
+          </View>
+        ))}
+        <View style={{ height: 1, backgroundColor: colors.separator }} />
+        <KeyValueList rows={[{ label: 'Tạm tính', value: formatVnd(data.subtotal), emphasis: true }]} />
+      </Card>
+
+      <WalletPicker value={provider} onChange={setProvider} disabled={place.isPending} />
+      <Text style={[text.caption, { color: colors.muted }]}>
+        Giá và tên món được lưu lúc đặt. Đơn chỉ chuyển cho quán sau khi ví xác nhận thanh toán; bạn tự đến quầy lấy món.
+      </Text>
+    </Screen>
+  );
+}
+
+/** ORD-01: is the buyer close enough to collect? Updates as they move, and always says how to fix it. */
+function RangeNotice({ range }: { range: ReturnType<typeof usePickupRange> }) {
+  const { info, live, verdict, enforced } = range;
+  if (!enforced) return null;
+  const radius = info.data ? distanceLabel(info.data.radiusMeters) : null;
+  const why = `StreetBiz chỉ nhận đơn khi bạn ở trong phạm vi ${radius ?? 'cho phép'} quanh quán, vì bạn sẽ tự đến quầy lấy món.`;
+  const panel = (title: string, body: string, action?: { label: string; onPress: () => void }) => (
+    <Banner tone="warning" icon={{ sf: 'location.fill', md: 'location_on' }} title={title} action={action}>
+      {body}
+    </Banner>
+  );
+  if (live.status === 'DENIED') return panel('Cần quyền vị trí để đặt món', `${why} Cho phép định vị trong Cài đặt rồi thử lại.`, { label: 'Mở Cài đặt', onPress: () => void Linking.openSettings() });
+  if (live.status === 'UNAVAILABLE' || live.status === 'FAILED') return panel(LOCATE_MESSAGES[live.status], why, { label: 'Thử lại', onPress: live.retry });
+  if (!verdict) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <ActivityIndicator size="small" color={colors.cta} />
+        <Text style={[text.footnote, { color: colors.muted }]}>Đang xác định vị trí của bạn…</Text>
+      </View>
+    );
+  }
+  if (verdict.status === 'INACCURATE') return panel(`Vị trí chưa đủ chính xác (sai số ${distanceLabel(verdict.accuracyMeters)})`, 'Bật GPS hoặc chế độ định vị chính xác, ra chỗ thoáng hơn rồi thử lại.', { label: 'Thử lại', onPress: live.retry });
+  if (verdict.status === 'OUT_OF_RANGE') {
+    const p = info.data?.pickupPoint;
+    return panel(`Bạn đang cách quán ${distanceLabel(verdict.distanceMeters)}`, `${why} Khoảng cách tự cập nhật khi bạn đến gần hơn.`, p ? { label: 'Chỉ đường đến quán', onPress: () => void Linking.openURL(directionsUrl(p.latitude, p.longitude)) } : undefined);
+  }
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, backgroundColor: colors.leafTint }}>
+      <Icon sf="figure.walk" md="directions_walk" size={16} color={colors.onLeaf} />
+      <Text style={[text.footnote, { flex: 1, color: colors.onLeaf }]}>
+        Bạn cách quán {distanceLabel(verdict.distanceMeters)} · trong phạm vi nhận món {radius}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * V-C10 Trạng thái thanh toán: only what the server says counts (BR-32). Back from MoMo, the
+ * server asks MoMo; in the development sandbox the buyer picks the outcome.
+ */
+export function OrderPaymentScreen() {
+  const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const order = useCustomerOrder(orderId);
+  const queryClient = useQueryClient();
+  const refresh = useRefreshAfterOrderMutation('customer', Number(orderId));
+  const options = useQuery({ queryKey: ['orders', 'payment-options'], queryFn: commerceApi.paymentOptions, staleTime: 5 * 60_000 });
+  const action = useMutation({
+    mutationFn: (kind: 'pay' | 'fail' | 'cancel' | 'sync') => {
+      const id = Number(orderId);
+      if (kind === 'pay') return orderApi.confirmSandboxPayment(id);
+      if (kind === 'fail') return orderApi.failSandboxPayment(id);
+      if (kind === 'sync') return orderApi.syncPayment(id);
+      return orderApi.cancel(id);
+    },
+    onSuccess: async (next, kind) => {
+      await refresh.update(next);
+      await queryClient.invalidateQueries({ queryKey: CART_KEY });
+      if (kind === 'sync') {
+        if (next.orderStatus === 'PLACED') {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          showToast('Ví đã xác nhận thanh toán');
+        }
+        return;
+      }
+      if (kind === 'pay') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(kind === 'pay' ? 'Thanh toán thành công' : kind === 'fail' ? 'Đã giả lập thanh toán thất bại' : 'Đã huỷ đơn', kind === 'pay' ? 'success' : 'info');
+    },
+    onError: async (error) => {
+      await refresh.handleError(error);
+      showToast(errorMessage(error), 'error');
+    },
+  });
+  const pendingNow = order.data?.orderStatus === 'PENDING_PAYMENT';
+  const syncedOnce = useRef(false);
+  const viaGateway = order.data?.paymentProvider === 'MOMO' && options.data?.mode === 'LIVE';
+  useEffect(() => {
+    if (pendingNow && !syncedOnce.current) {
+      syncedOnce.current = true;
+      action.mutate('sync');
+    }
+  }, [pendingNow, action]);
+  // Back from the wallet app: ask the server again.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active' && pendingNow && viaGateway && !action.isPending) action.mutate('sync');
+    });
+    return () => sub.remove();
+  }, [pendingNow, viaGateway, action]);
+
+  if (order.isPending) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Thanh toán' }} />
+        <ListSkeleton rows={1} height={240} />
+      </Screen>
+    );
+  }
+  if (order.isError || !order.data) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Thanh toán' }} />
+        <ErrorState title="Không tải được trạng thái thanh toán" error={order.error} onRetry={() => void order.refetch()} />
+      </Screen>
+    );
+  }
+  const data = order.data;
+  const pending = data.orderStatus === 'PENDING_PAYMENT';
+  const placed = data.orderStatus === 'PLACED';
+  const failed = data.orderStatus === 'CANCELLED';
+  const showSandbox = sandboxPayments && !viaGateway;
+  const gateway = providerName(data.paymentProvider) ?? 'ví';
+  const busy = (k: string) => action.isPending && action.variables === k;
+  const look = pending
+    ? { wash: colors.mangoTint, ink: colors.onMango, sf: 'hourglass', md: 'hourglass_top', title: 'Đang chờ ví xác nhận', body: viaGateway ? `Nếu bạn đã thanh toán trên ${gateway}, bấm "Kiểm tra lại".` : showSandbox ? 'Môi trường thử nghiệm chưa nối cổng thanh toán thật. Chọn kết quả bên dưới.' : 'Hệ thống tự kiểm tra trạng thái với máy chủ.' }
+    : placed
+      ? { wash: colors.leafTint, ink: colors.onLeaf, sf: 'checkmark.seal.fill', md: 'verified', title: 'Đặt món thành công', body: 'Máy chủ đã xác nhận thanh toán và chuyển đơn cho quán.' }
+      : failed
+        ? { wash: colors.dangerTint, ink: colors.onDanger, sf: 'xmark.octagon.fill', md: 'error', title: 'Thanh toán thất bại hoặc đơn đã huỷ', body: 'Giỏ hàng vẫn được giữ để bạn kiểm tra và đặt lại.' }
+        : { wash: colors.leafTint, ink: colors.onLeaf, sf: 'checkmark.circle.fill', md: 'check_circle', title: 'Đã thanh toán', body: 'Thanh toán đã được máy chủ xác nhận.' };
+
+  return (
+    <Screen onRefresh={() => void order.refetch()} refreshing={order.isRefetching}>
+      <Stack.Screen options={{ title: `Đơn #${data.orderCode}` }} />
+      <View style={{ padding: 22, gap: 10, alignItems: 'center', borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: look.wash }}>
+        <View style={{ width: 68, height: 68, borderRadius: 34, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
+          {busy('sync') ? <ActivityIndicator color={look.ink} /> : <Icon sf={look.sf} md={look.md} size={34} color={look.ink} />}
+        </View>
+        <Text accessibilityRole="header" style={[text.title3, { color: look.ink, textAlign: 'center', fontFamily: fonts.heavy }]}>{look.title}</Text>
+        <Text style={[text.footnote, { color: look.ink, textAlign: 'center' }]}>{look.body}</Text>
+        {pending ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Icon sf="lock.fill" md="lock" size={13} color={look.ink} />
+            <Text style={[text.caption, { color: look.ink }]}>Giỏ bị khoá cho tới khi đơn được thanh toán hoặc huỷ.</Text>
+          </View>
+        ) : null}
+      </View>
+      <Card style={{ gap: 8 }}>
+        <KeyValueList
+          rows={[
+            { label: 'Mã đơn', value: `#${data.orderCode}`, mono: true },
+            { label: 'Quán', value: data.storefront.storefrontName },
+            { label: 'Số tiền', value: formatVnd(data.totalAmount), emphasis: true },
+            { label: 'Ví', value: gateway },
+            { label: 'Đặt lúc', value: formatOrderDate(data.placedAt ?? data.createdAt) },
+          ]}
+        />
+        {order.dataUpdatedAt ? <Text style={[text.caption, { color: colors.muted }]}>Kiểm tra gần nhất lúc {new Date(order.dataUpdatedAt).toLocaleTimeString('vi-VN')}</Text> : null}
+        {options.data?.message?.trim() ? <Text style={[text.caption, { color: colors.muted }]}>{options.data.message.trim()}</Text> : null}
+      </Card>
+
+      {pending && showSandbox ? (
+        <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.mango }}>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.onMango }}>THỬ NGHIỆM · KHÔNG PHẢI TIỀN THẬT</Text>
+          <Button label="Thanh toán thử (thành công)" loading={busy('pay')} disabled={action.isPending} onPress={() => action.mutate('pay')} />
+          <Button label="Giả lập thanh toán thất bại" variant="secondary" loading={busy('fail')} disabled={action.isPending} onPress={() => action.mutate('fail')} />
+        </View>
+      ) : null}
+      {pending && viaGateway ? <Button label="Kiểm tra lại" variant="sign" loading={busy('sync')} disabled={action.isPending} onPress={() => action.mutate('sync')} /> : null}
+      {failed ? <Button label="Về giỏ hàng" onPress={() => router.dismissTo('/customer/explore' as Href)} /> : null}
+      <Button label="Xem chi tiết đơn" variant={placed ? 'primary' : 'secondary'} onPress={() => router.replace(`/customer/orders/${data.orderId}` as Href)} />
+      {pending ? (
+        <Pressable onPress={() => action.mutate('cancel')} disabled={action.isPending} accessibilityRole="button" style={{ alignSelf: 'center', padding: 10 }}>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.onDanger }}>{busy('cancel') ? 'Đang huỷ…' : 'Huỷ đơn này'}</Text>
+        </Pressable>
+      ) : null}
+    </Screen>
+  );
+}

@@ -1,12 +1,5 @@
-import { ComingSoon } from '@/components/layout/ComingSoon';
+import { CustomerOrdersScreen } from '@/features/orders/screens/CustomerOrderScreens';
 
 export default function Route() {
-  return (
-    <ComingSoon
-      title="Đơn hàng"
-      icon={{ sf: 'bag', md: 'receipt_long' }}
-      body="Đơn đặt trước và mã lấy món."
-      group="G4"
-    />
-  );
+  return <CustomerOrdersScreen />;
 }
