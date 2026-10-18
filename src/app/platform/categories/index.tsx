@@ -1,12 +1,5 @@
-import { ComingSoon } from '@/components/layout/ComingSoon';
+import { AdminCategoriesScreen } from '@/features/platform-administration/screens/AdminScreens';
 
 export default function Route() {
-  return (
-    <ComingSoon
-      title="Danh mục"
-      icon={{ sf: 'list.bullet', md: 'category' }}
-      body="Danh mục món ăn."
-      group="G6"
-    />
-  );
+  return <AdminCategoriesScreen />;
 }

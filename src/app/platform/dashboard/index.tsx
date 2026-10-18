@@ -1,12 +1,5 @@
-import { ComingSoon } from '@/components/layout/ComingSoon';
+import { AdminDashboardScreen } from '@/features/platform-administration/screens/AdminScreens';
 
 export default function Route() {
-  return (
-    <ComingSoon
-      title="Tổng quan"
-      icon={{ sf: 'chart.bar', md: 'insights' }}
-      body="Tình hình nền tảng."
-      group="G6"
-    />
-  );
+  return <AdminDashboardScreen />;
 }

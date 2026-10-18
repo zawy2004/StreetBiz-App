@@ -1,12 +1,5 @@
-import { ComingSoon } from '@/components/layout/ComingSoon';
+import { AdminAccountsScreen } from '@/features/platform-administration/screens/AdminScreens';
 
 export default function Route() {
-  return (
-    <ComingSoon
-      title="Tài khoản"
-      icon={{ sf: 'person.2', md: 'group' }}
-      body="Người dùng nền tảng."
-      group="G6"
-    />
-  );
+  return <AdminAccountsScreen />;
 }
