@@ -27,7 +27,8 @@ export default function VendorTabs() {
       <NativeTabs.Trigger name="orders" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'bag', selected: 'bag.fill' }} md="receipt_long" />
         <NativeTabs.Trigger.Label>Đơn hàng</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Badge hidden={newOrders === 0}>{newOrders > 99 ? '99+' : String(newOrders)}</NativeTabs.Trigger.Badge>
+        {/* Only mounted with a count: Android draws hidden={true} as a "0" badge. */}
+        {newOrders > 0 ? <NativeTabs.Trigger.Badge>{newOrders > 99 ? '99+' : String(newOrders)}</NativeTabs.Trigger.Badge> : null}
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="finance" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'banknote', selected: 'banknote.fill' }} md="payments" />

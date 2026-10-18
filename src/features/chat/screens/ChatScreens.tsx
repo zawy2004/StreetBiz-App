@@ -31,10 +31,8 @@ import { CHAT_MESSAGE_MAX_LENGTH, type ChatConversation } from '../types/chat.ty
 
 const go = (href: string) => router.push(href as Href);
 
-/** Where a thread opens from the inbox of each role. */
-function threadPath(role: string | undefined, conversationId: number): string {
-  return role === 'VENDOR' ? `/vendor/home/chat/${conversationId}` : `/customer/chat/${conversationId}`;
-}
+/** A thread opens above the tabs for both roles, so back returns to wherever it was opened from. */
+export const threadPath = (conversationId: number) => `/chat/${conversationId}`;
 
 /** The stall's sign: its photo when it has one, else the initials on a soft colour. */
 function CounterpartAvatar({ conversation, role, size = 48 }: { conversation: ChatConversation; role: string | undefined; size?: number }) {
@@ -170,7 +168,7 @@ export function ConversationsScreen() {
             />
           )
         }
-        renderItem={({ item }) => <ConversationRow conversation={item} role={role} now={now} onPress={() => go(threadPath(role, item.conversationId))} />}
+        renderItem={({ item }) => <ConversationRow conversation={item} role={role} now={now} onPress={() => go(threadPath(item.conversationId))} />}
       />
     </View>
   );
@@ -286,7 +284,8 @@ export function ChatThreadScreen() {
         }}
       />
       <FlatList
-        inverted
+        // Inverted only with messages: an inverted list also turns its empty state round.
+        inverted={items.length > 0}
         data={items}
         keyExtractor={(item) => String(item.message.messageId)}
         keyboardShouldPersistTaps="handled"
@@ -313,8 +312,7 @@ export function ChatThreadScreen() {
           ) : null
         }
         ListEmptyComponent={
-          // Inverted lists flip the empty component too; flip it back.
-          <View style={{ flex: 1, transform: [{ scaleY: -1 }], justifyContent: 'center' }}>
+          <View style={{ flex: 1, justifyContent: 'center' }}>
             <StateView
               icon={{ sf: 'hand.wave', md: 'waving_hand' }}
               title="Chưa có tin nhắn"

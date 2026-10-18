@@ -114,7 +114,7 @@ export function useAssistant(role: AssistantRole, accountKey: string) {
     const hub = new HubConnectionBuilder()
       .withUrl(chatbotHubUrl(), { accessTokenFactory: () => getAccessToken() ?? '', withCredentials: false })
       .withAutomaticReconnect([0, 2000, 5000, 10000])
-      .configureLogging(LogLevel.Warning)
+      .configureLogging(LogLevel.Critical)
       .build();
     connection.current = hub;
     let disposed = false;

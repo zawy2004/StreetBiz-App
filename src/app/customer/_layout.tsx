@@ -30,7 +30,8 @@ export default function CustomerTabs() {
       <NativeTabs.Trigger name="chat" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} md="chat" />
         <NativeTabs.Trigger.Label>Tin nhắn</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Badge hidden={unread === 0}>{unread > 99 ? '99+' : String(unread)}</NativeTabs.Trigger.Badge>
+        {/* Only mounted with a count: Android draws hidden={true} as a "0" badge. */}
+        {unread > 0 ? <NativeTabs.Trigger.Badge>{unread > 99 ? '99+' : String(unread)}</NativeTabs.Trigger.Badge> : null}
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="account" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'person.crop.circle', selected: 'person.crop.circle.fill' }} md="account_circle" />

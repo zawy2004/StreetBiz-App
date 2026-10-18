@@ -73,7 +73,7 @@ export function AssistantScreen() {
       options={{
         title: 'Trợ lý StreetBiz',
         headerLeft: () => (
-          <Pressable onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="Đóng trợ lý" style={{ paddingHorizontal: 4, height: 40, justifyContent: 'center' }}>
+          <Pressable onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="Đóng trợ lý" style={{ paddingHorizontal: 4, marginRight: 16, height: 40, justifyContent: 'center' }}>
             <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.primary }}>Đóng</Text>
           </Pressable>
         ),
@@ -121,7 +121,8 @@ export function AssistantScreen() {
     <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={headerHeight} style={{ flex: 1, backgroundColor: colors.bg }}>
       {header}
       <FlatList
-        inverted
+        // Inverted only with messages: an inverted list also turns its empty state round.
+        inverted={items.length > 0}
         data={items}
         keyExtractor={(m) => m.id}
         keyboardShouldPersistTaps="handled"
@@ -153,7 +154,7 @@ export function AssistantScreen() {
           ) : null
         }
         ListEmptyComponent={
-          <View style={{ flex: 1, transform: [{ scaleY: -1 }] }}>
+          <View style={{ flex: 1 }}>
             <Welcome role={role} briefing={role === 'VENDOR' || role === 'WARD_AUTHORITY' ? briefing.data : undefined} onAsk={ask} onOpen={open} capabilityError={chat.capabilityError} />
           </View>
         }
@@ -251,7 +252,7 @@ function Welcome({ role, briefing, onAsk, onOpen, capabilityError }: { role: Ass
         <LinearGradient colors={[colors.mango, colors.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' }}>
           <Icon sf="sparkles" md="auto_awesome" size={30} color={colors.white} />
         </LinearGradient>
-        <AiTag label="Trợ lý StreetBiz" />
+        <AiTag label="Trợ lý StreetBiz" style={{ alignSelf: 'center' }} />
         <Text style={[text.title2, { color: colors.ink, textAlign: 'center' }]}>{w.title}</Text>
         <Text style={[text.callout, { color: colors.muted, textAlign: 'center', maxWidth: 340 }]}>{w.description}</Text>
       </View>

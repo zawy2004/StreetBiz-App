@@ -43,7 +43,17 @@ const permit = (effectiveStatus: string, contractStatus = 'ACTIVE'): DigitalPerm
   effectiveStatus,
 });
 
-const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const clients: QueryClient[] = [];
+// No garbage-collection timers (gcTime Infinity) and every cache cleared after each test,
+// so no query timer outlives its test and Jest's worker exits cleanly.
+const newClient = () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  clients.push(client);
+  return client;
+};
+afterEach(() => {
+  clients.splice(0).forEach((client) => client.clear());
+});
 
 function renderScreen(client = newClient()) {
   return render(
@@ -90,7 +100,7 @@ describe('DigitalPermitScreen (live server reads)', () => {
     const client = newClient();
     const first = await renderScreen(client);
     await screen.findByText('SBP1.signed-payload', {}, { timeout: 15000 });
-    first.unmount();
+    await first.unmount();
     await renderScreen(client);
     await screen.findByText('SBP1.signed-payload', {}, { timeout: 15000 });
 

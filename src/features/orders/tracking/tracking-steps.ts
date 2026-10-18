@@ -17,7 +17,7 @@ export type TrackingStep = {
 };
 
 // Short, even-length labels in the status chips' own words: five columns share a 360 px phone.
-const FLOW: ReadonlyArray<{ status: OrderStatus; label: string; icon: string }> = [
+const FLOW: readonly { status: OrderStatus; label: string; icon: string }[] = [
   { status: 'PLACED', label: 'Đã đặt', icon: 'receipt' },
   { status: 'ACCEPTED', label: 'Xác nhận', icon: 'storefront-outline' },
   { status: 'PREPARING', label: 'Đang làm', icon: 'silverware-fork-knife' },

@@ -61,7 +61,7 @@ export function useOrderRealtime(
         withCredentials: false,
       })
       .withAutomaticReconnect([0, 2_000, 5_000, 10_000])
-      .configureLogging(LogLevel.Warning)
+      .configureLogging(LogLevel.Critical)
       .build();
 
     connection.on('OrderUpdated', onOrderUpdated);

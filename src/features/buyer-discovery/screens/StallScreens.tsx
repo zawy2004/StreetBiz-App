@@ -115,7 +115,7 @@ function StallPage({ detail, cart }: { detail: StorefrontDetail; cart: CommerceC
     }
     if (startChat.isPending) return;
     startChat.mutate(s.storefrontId, {
-      onSuccess: (c) => go(`/customer/explore/chat/${c.conversationId}`),
+      onSuccess: (c) => go(`/chat/${c.conversationId}`),
       onError: (e) => showToast(errorMessage(e), 'error'),
     });
   };

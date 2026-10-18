@@ -33,7 +33,7 @@ function buildConnection(delays: number[]): HubConnection {
       withCredentials: false,
     })
     .withAutomaticReconnect(delays)
-    .configureLogging(LogLevel.Warning)
+    .configureLogging(LogLevel.Critical)
     .build();
 }
 

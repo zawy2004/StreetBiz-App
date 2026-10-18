@@ -1,6 +1,6 @@
 import { appendFile, type PickedFile } from '@/core/api/upload';
 import { downloadToCache } from '@/core/api/client';
-import { apiGet, apiGetBlob, apiPathFromFileUrl, apiPost, apiPut, apiUpload } from '@/core/api';
+import { apiGet, apiGetBlob, apiPost, apiPut, apiUpload } from '@/core/api';
 import type { PlacementIssue } from './ward-config-api';
 
 // Business-registration review ("registrations") is NOT a CaseKind: it goes through

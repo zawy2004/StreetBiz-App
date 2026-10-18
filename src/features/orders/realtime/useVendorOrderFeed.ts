@@ -42,7 +42,7 @@ export function useVendorOrderFeed(enabled: boolean) {
         withCredentials: false,
       })
       .withAutomaticReconnect([0, 2_000, 5_000, 10_000, 30_000])
-      .configureLogging(LogLevel.Warning)
+      .configureLogging(LogLevel.Critical)
       .build();
 
     connection.on('VendorOrderChanged', () => void refresh());

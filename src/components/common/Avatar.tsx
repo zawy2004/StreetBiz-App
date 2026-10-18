@@ -1,6 +1,6 @@
 import { Text, View } from 'react-native';
 
-import { colors, fonts } from '@/theme';
+import { fonts } from '@/theme';
 
 const WASHES = ['#FFE8DB', '#FFF4D1', '#E6F6EC', '#E5F0FA', '#FDEBEA'];
 const INKS = ['#CF4A0B', '#6B4100', '#0B5D33', '#0A5FA8', '#8F1717'];

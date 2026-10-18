@@ -1,7 +1,8 @@
-/** A native symbol pair: SF Symbol on iPhone, Material Symbol on Android. */
-export type IconName = { sf: string; md: string };
 import type { BusinessCategory, StreetFeatureType } from '@/core/api/side-api';
 import type { SlotDisplayState } from './slot-stats';
+
+/** A native symbol pair: SF Symbol on iPhone, Material Symbol on Android. */
+export type IconName = { sf: string; md: string };
 
 /**
  * Slot colours for the street plan, keyed by what a slot looks like right now

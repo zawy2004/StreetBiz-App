@@ -12,7 +12,6 @@ const memoryStorage: StateStorage = {
   removeItem: (k) => void memoryStore.delete(k),
 };
 
-import { env } from '@/core/config/env';
 
 export type ActiveVendor = {
   vendorId: number;

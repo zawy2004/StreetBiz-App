@@ -514,13 +514,34 @@ export function RegistrationOwnerStep() {
       const r = await vendorKycApi.extractIdCard({ frontFileUrl: front.uploadedUrl, backFileUrl: back?.uploadedUrl ?? null, biometricConsent: true });
       setExtraction(r);
       const filled: AiKey[] = [];
-      if (r.dateOfBirth) (draft.setField('ownerDateOfBirth', r.dateOfBirth), filled.push('ownerDateOfBirth'));
-      if (r.gender) (draft.setField('ownerGender', r.gender), filled.push('ownerGender'));
-      if (r.nationality) (draft.setField('ownerNationality', r.nationality), filled.push('ownerNationality'));
-      if (r.ethnicity) (draft.setField('ownerEthnicity', r.ethnicity), filled.push('ownerEthnicity'));
-      if (r.permanentAddress) (draft.setField('permanentAddress', r.permanentAddress), filled.push('permanentAddress'));
-      if (r.idIssuedDate) (draft.setField('idIssuedDate', r.idIssuedDate), filled.push('idIssuedDate'));
-      if (r.idIssuedPlace) (draft.setField('idIssuedPlace', r.idIssuedPlace), filled.push('idIssuedPlace'));
+      if (r.dateOfBirth) {
+        draft.setField('ownerDateOfBirth', r.dateOfBirth);
+        filled.push('ownerDateOfBirth');
+      }
+      if (r.gender) {
+        draft.setField('ownerGender', r.gender);
+        filled.push('ownerGender');
+      }
+      if (r.nationality) {
+        draft.setField('ownerNationality', r.nationality);
+        filled.push('ownerNationality');
+      }
+      if (r.ethnicity) {
+        draft.setField('ownerEthnicity', r.ethnicity);
+        filled.push('ownerEthnicity');
+      }
+      if (r.permanentAddress) {
+        draft.setField('permanentAddress', r.permanentAddress);
+        filled.push('permanentAddress');
+      }
+      if (r.idIssuedDate) {
+        draft.setField('idIssuedDate', r.idIssuedDate);
+        filled.push('idIssuedDate');
+      }
+      if (r.idIssuedPlace) {
+        draft.setField('idIssuedPlace', r.idIssuedPlace);
+        filled.push('idIssuedPlace');
+      }
       setAi((cur) => new Set([...cur, ...filled]));
       showToast(r.isAiGenerated ? 'Đã đọc thông tin từ CCCD. Hãy kiểm tra lại từng trường.' : r.summary);
     } catch (err) {

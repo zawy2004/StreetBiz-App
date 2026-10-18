@@ -76,6 +76,10 @@ export default function RootLayout() {
                   <Stack.Screen name="platform" />
                 </Stack.Protected>
 
+                <Stack.Protected guard={role === 'CUSTOMER' || role === 'VENDOR'}>
+                  <Stack.Screen name="chat/[conversationId]" options={{ headerShown: true, title: '' }} />
+                </Stack.Protected>
+
                 <Stack.Protected guard={!!role}>
                   <Stack.Screen name="account" />
                   <Stack.Screen name="notifications" options={{ headerShown: true }} />
