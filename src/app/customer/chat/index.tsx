@@ -1,12 +1,3 @@
-import { ComingSoon } from '@/components/layout/ComingSoon';
+import { ConversationsScreen } from '@/features/chat/screens/ChatScreens';
 
-export default function Route() {
-  return (
-    <ComingSoon
-      title="Tin nhắn"
-      icon={{ sf: 'bubble.left.and.bubble.right', md: 'chat' }}
-      body="Trò chuyện với quầy."
-      group="G7"
-    />
-  );
-}
+export default ConversationsScreen;

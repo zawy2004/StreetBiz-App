@@ -1,5 +1,7 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
+import { useCanChat } from '@/features/chat/hooks/useChat';
+import { useChatInboxFeed } from '@/features/chat/realtime/useChatRealtime';
 import { useVendorOrderAlerts } from '@/features/orders/alerts/useVendorOrderAlerts';
 import { colors } from '@/theme';
 
@@ -10,6 +12,8 @@ import { colors } from '@/theme';
  */
 export default function VendorTabs() {
   const newOrders = useVendorOrderAlerts();
+  // Buyers' messages, live on every vendor screen (the unread count shows on Trang chủ).
+  useChatInboxFeed(useCanChat());
   return (
     <NativeTabs tintColor={colors.cta} minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="home" labelVisibilityMode="labeled">

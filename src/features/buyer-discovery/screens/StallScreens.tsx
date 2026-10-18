@@ -17,6 +17,7 @@ import { TextField } from '@/components/forms/TextField';
 import { LeafletMap } from '@/components/map/LeafletMap';
 import { StockTag } from '@/components/status/MockBadge';
 import { commerceApi, errorMessage, type CommerceCart, type MarketplaceMenuItem, type StorefrontDetail } from '@/core/api';
+import { useStartChat } from '@/features/chat/hooks/useChat';
 import { CART_KEY, askToSignIn, cartCount, useAddToCart, useCart, useSetCartQuantity } from '@/features/cart/cart-api';
 import { CartBar, CartSheet, QtyStepper } from '@/features/cart/components/cart-parts';
 import { useAuthStore } from '@/store/auth-store';
@@ -104,6 +105,20 @@ function StallPage({ detail, cart }: { detail: StorefrontDetail; cart: CommerceC
   const qtyOf = (menuItemId: number) => (cart?.storefrontId === s.storefrontId ? (cart.items.find((i) => i.menuItemId === menuItemId)?.quantity ?? 0) : 0);
   const markers = useMemo(() => [{ id: 's', latitude: s.latitude, longitude: s.longitude, label: `Ô ${s.slotCode}`, fill: colors.cta, ink: colors.white }], [s.latitude, s.longitude, s.slotCode]);
   const hasCart = cart?.storefrontId === s.storefrontId && cartCount(cart) > 0;
+  const role = useAuthStore((st) => st.user?.role_code);
+  const startChat = useStartChat();
+  // Only a buyer may open a thread; a visitor is asked to sign in first.
+  const openChat = () => {
+    if (role !== 'CUSTOMER') {
+      askToSignIn('Đăng nhập để nhắn tin với quán.');
+      return;
+    }
+    if (startChat.isPending) return;
+    startChat.mutate(s.storefrontId, {
+      onSuccess: (c) => go(`/customer/explore/chat/${c.conversationId}`),
+      onError: (e) => showToast(errorMessage(e), 'error'),
+    });
+  };
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: (hasCart ? 100 : 32) + insets.bottom }}>
@@ -133,7 +148,8 @@ function StallPage({ detail, cart }: { detail: StorefrontDetail; cart: CommerceC
           </View>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Action icon={{ sf: 'bubble.left.and.bubble.right.fill', md: 'chat' }} label={startChat.isPending ? 'Đang mở…' : 'Nhắn tin'} onPress={openChat} />
           <Action icon={{ sf: 'arrow.triangle.turn.up.right.diamond.fill', md: 'directions' }} label="Chỉ đường" onPress={() => void Linking.openURL(directionsUrl(s.latitude, s.longitude))} />
           <Action icon={{ sf: 'person.text.rectangle', md: 'badge' }} label="Hộ kinh doanh" onPress={() => go(`/customer/explore/vendors/${s.vendorId}`)} />
           <Action icon={{ sf: 'exclamationmark.bubble', md: 'report' }} label="Phản ánh" onPress={() => go(`/customer/explore/vendors/${s.vendorId}/report`)} />
@@ -203,7 +219,7 @@ function Action({ icon, label, onPress }: { icon: { sf: string; md: string }; la
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => ({ flex: 1, minHeight: 64, gap: 5, borderRadius: 16, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? colors.sunken : colors.card })}>
       <Icon sf={icon.sf} md={icon.md} size={19} color={colors.primary} />
-      <Text style={[text.caption, { color: colors.ink }]}>{label}</Text>
+      <Text style={[text.caption, { color: colors.ink, textAlign: 'center' }]}>{label}</Text>
     </Pressable>
   );
 }

@@ -1,5 +1,7 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
+import { useCanChat, useChatUnreadCount } from '@/features/chat/hooks/useChat';
+import { useChatInboxFeed } from '@/features/chat/realtime/useChatRealtime';
 import { colors } from '@/theme';
 
 /**
@@ -8,6 +10,9 @@ import { colors } from '@/theme';
  * tabs never slide, at most five (the web's longer lists are folded in, see master prompt v3 §8).
  */
 export default function CustomerTabs() {
+  const canChat = useCanChat();
+  useChatInboxFeed(canChat);
+  const unread = useChatUnreadCount().data ?? 0;
   return (
     <NativeTabs tintColor={colors.cta} minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="explore" labelVisibilityMode="labeled">
@@ -25,6 +30,7 @@ export default function CustomerTabs() {
       <NativeTabs.Trigger name="chat" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} md="chat" />
         <NativeTabs.Trigger.Label>Tin nhắn</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Badge hidden={unread === 0}>{unread > 99 ? '99+' : String(unread)}</NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="account" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'person.crop.circle', selected: 'person.crop.circle.fill' }} md="account_circle" />

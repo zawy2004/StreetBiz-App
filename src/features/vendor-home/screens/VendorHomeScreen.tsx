@@ -15,6 +15,8 @@ import { StatusPill } from '@/components/status/StatusPill';
 import { sideApi } from '@/core/api/side-api';
 import { statusLabel } from '@/core/constants/status-labels';
 import { useRegistrations } from '@/features/business-registrations/useRegistrations';
+import { AssistantButton } from '@/features/assistant/components/AssistantButton';
+import { useChatUnreadCount } from '@/features/chat/hooks/useChat';
 import { useFeeItems, usePenalties } from '@/features/fee-schedules/useFinance';
 import { useNotificationUnreadCount } from '@/features/notifications/notifications-api';
 import { formatCountdown, hkdCode, secondsUntil } from '@/features/sidewalk-slots/slot-format';
@@ -170,6 +172,7 @@ export function VendorHomeScreen() {
   const permit = useCurrentPermit();
   const { holds, refresh: refreshHolds } = useHolds();
   const unread = useNotificationUnreadCount();
+  const chatUnread = useChatUnreadCount().data ?? 0;
   const now = useNow();
   const [expanded, setExpanded] = useState(false);
 
@@ -208,7 +211,8 @@ export function VendorHomeScreen() {
             <Text style={[text.footnote, { color: colors.muted }]}>Hộ kinh doanh</Text>
           )}
         </View>
-        <HeaderIconButton icon={{ sf: 'bubble.left.and.bubble.right.fill', md: 'chat' }} label="Tin nhắn" onPress={() => go('/vendor/home/chat')} />
+        <AssistantButton />
+        <HeaderIconButton icon={{ sf: 'bubble.left.and.bubble.right.fill', md: 'chat' }} label="Tin nhắn" badge={chatUnread} onPress={() => go('/vendor/home/chat')} />
         <HeaderIconButton icon={{ sf: 'bell.fill', md: 'notifications' }} label="Thông báo" badge={unread} onPress={() => go('/notifications')} />
       </View>
 

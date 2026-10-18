@@ -55,6 +55,8 @@ export default function RootLayout() {
                 <Stack.Screen name="index" />
                 <Stack.Screen name="auth" />
                 <Stack.Screen name="legal/[doc]" options={{ headerShown: true, title: '' }} />
+                {/* Every role and guests: the assistant answers within the asker's own scope. */}
+                <Stack.Screen name="assistant" options={{ headerShown: true, presentation: 'modal', title: 'Trợ lý StreetBiz' }} />
 
                 <Stack.Protected guard={!role || role === 'CUSTOMER'}>
                   <Stack.Screen name="customer" />

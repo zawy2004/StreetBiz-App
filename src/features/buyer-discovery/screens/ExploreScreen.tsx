@@ -14,6 +14,7 @@ import { Icon } from '@/components/common/Icon';
 import { StateView } from '@/components/feedback/StateView';
 import type { MarketplaceMenuItem, StorefrontSummary } from '@/core/api/types';
 import { colors, easeOut, fonts, space, tabular } from '@/theme';
+import { AssistantButton } from '@/features/assistant/components/AssistantButton';
 import { cartCount, useAddToCart, useCart, useSetCartQuantity } from '@/features/cart/cart-api';
 import { ActiveOrderCard, CartBar, CartSheet } from '@/features/cart/components/cart-parts';
 import { useCustomerOrders } from '@/features/orders/hooks/useOrders';
@@ -371,7 +372,10 @@ export function ExploreScreen() {
         }}
       >
         <LocationButton wardName={wardName} onPress={() => setSheet('area')} />
-        <CartButton count={cartCount(cart)} onPress={() => setSheet('cart')} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <AssistantButton />
+          <CartButton count={cartCount(cart)} onPress={() => setSheet('cart')} />
+        </View>
         <Animated.View
           pointerEvents="none"
           style={[

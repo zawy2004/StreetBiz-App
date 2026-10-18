@@ -18,6 +18,7 @@ import { Screen } from '@/components/layout/Screen';
 import { StatusPill } from '@/components/status/StatusPill';
 import { errorMessage } from '@/core/api';
 import { statusLabel } from '@/core/constants/status-labels';
+import { AssistantButton } from '@/features/assistant/components/AssistantButton';
 import { useNotificationUnreadCount } from '@/features/notifications/notifications-api';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, space, tabular, text } from '@/theme';
@@ -55,6 +56,7 @@ export function AdminDashboardScreen() {
           <Text style={{ fontFamily: fonts.heavy, fontSize: 22, lineHeight: 28, color: colors.ink }}>Quản trị nền tảng</Text>
           <Text style={[text.footnote, { color: colors.muted }]}>{user?.fullName ?? ''}</Text>
         </View>
+        <AssistantButton />
         <HeaderIconButton icon={{ sf: 'bell.fill', md: 'notifications' }} label="Thông báo" badge={unread} onPress={() => go('/notifications')} />
       </View>
       <ScrollView contentContainerStyle={{ padding: space.md, paddingTop: 4, gap: 16, paddingBottom: 40 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void Promise.all([reports.refetch(), complaints.refetch(), categories.refetch()])} tintColor={colors.cta} colors={[colors.cta]} />}>

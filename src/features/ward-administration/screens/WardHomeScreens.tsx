@@ -20,6 +20,7 @@ import { StatusPill } from '@/components/status/StatusPill';
 import { errorMessage } from '@/core/api';
 import { useWards } from '@/core/auth/useWards';
 import { statusLabel } from '@/core/constants/status-labels';
+import { AssistantButton } from '@/features/assistant/components/AssistantButton';
 import { useNotificationUnreadCount } from '@/features/notifications/notifications-api';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, space, tabular, text } from '@/theme';
@@ -60,6 +61,7 @@ export function WardDashboardScreen() {
             {todayVi()}
           </Text>
         </View>
+        <AssistantButton />
         <HeaderIconButton icon={{ sf: 'bell.fill', md: 'notifications' }} label="Thông báo" badge={unread} onPress={() => go('/notifications')} />
       </View>
       <ScrollView contentContainerStyle={{ padding: space.md, paddingTop: 4, paddingBottom: 40, gap: 16 }} refreshControl={<RefreshControl refreshing={dash.isRefetching} onRefresh={() => void dash.refetch()} tintColor={colors.cta} colors={[colors.cta]} />}>
