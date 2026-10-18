@@ -58,6 +58,11 @@ export const STATUS_LABELS: Record<string, { label: string; tone: StatusTone }> 
   ARCHIVED: { label: 'Đã lưu trữ', tone: 'neutral' },
   // ATTP file sent on by the ward to the food-safety department.
   FORWARDED: { label: 'Đã chuyển cục', tone: 'pending' },
+  // A recorded violation still waiting for the sanction decision (WARD-12/13).
+  PENDING_SANCTION: { label: 'Chờ xử phạt', tone: 'pending' },
+  SANCTIONED: { label: 'Đã ra quyết định', tone: 'ok' },
+  INACTIVE: { label: 'Ngừng hoạt động', tone: 'neutral' },
+  LOCKED: { label: 'Đã khoá', tone: 'danger' },
 };
 
 export function statusLabel(code: string) {

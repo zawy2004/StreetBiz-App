@@ -1,12 +1,5 @@
-import { ComingSoon } from '@/components/layout/ComingSoon';
+import { PermitScanScreen } from '@/features/ward-administration/screens/PatrolScreens';
 
 export default function Route() {
-  return (
-    <ComingSoon
-      title="Tuần tra"
-      icon={{ sf: 'qrcode.viewfinder', md: 'qr_code_scanner' }}
-      body="Quét giấy phép, ghi vi phạm."
-      group="G5"
-    />
-  );
+  return <PermitScanScreen />;
 }

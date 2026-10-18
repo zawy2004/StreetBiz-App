@@ -1,12 +1,5 @@
-import { ComingSoon } from '@/components/layout/ComingSoon';
+import { WardInboxScreen } from '@/features/ward-administration/screens/WardHomeScreens';
 
 export default function Route() {
-  return (
-    <ComingSoon
-      title="Hộp duyệt"
-      icon={{ sf: 'tray.full', md: 'inbox' }}
-      body="Hồ sơ chờ quyết định."
-      group="G5"
-    />
-  );
+  return <WardInboxScreen />;
 }
