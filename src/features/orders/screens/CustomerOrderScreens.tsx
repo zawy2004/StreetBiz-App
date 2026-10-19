@@ -1,22 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Brightness from 'expo-brightness';
+import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, FlatList, Linking, Modal, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, KeyValueList } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Chip } from '@/components/common/Chip';
+import { Card } from '@/components/common/Blocks';
 import { Icon } from '@/components/common/Icon';
+import { ListGroup, ListRow } from '@/components/common/ListGroup';
 import { PermitQr } from '@/components/common/PermitQr';
 import { Banner } from '@/components/feedback/Banner';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
 import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
+import { MoreButton } from '@/components/native/ActionMenu';
+import { StatusHeader } from '@/components/native/StatusHeader';
 import { StatusPill } from '@/components/status/StatusPill';
 import { commerceApi, errorMessage } from '@/core/api';
 import { statusLabel } from '@/core/constants/status-labels';
@@ -24,7 +29,7 @@ import { directionsUrl } from '@/features/buyer-discovery/discovery-format';
 import { detectPosition } from '@/features/buyer-discovery/geolocation';
 import { useNow } from '@/features/sidewalk-slots/useNow';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, tabular, text } from '@/theme';
 import { formatVnd } from '@/utils/format';
 import { orderApi } from '../api/orderApi';
 import { haversineMeters, walkingMinutes } from '../pickup/pickup-range';
@@ -32,7 +37,7 @@ import { dayHeading, orderItemsSummary, providerName, refundPresentation, useOnl
 import { formatOrderDate, formatOrderTime } from '../components/order-format';
 import { useAnnounceArrival, useOrderTracking } from '../hooks/useOrderTracking';
 import { useCustomerOrder, useCustomerOrders, useRefreshAfterOrderMutation } from '../hooks/useOrders';
-import { buildTrackingSteps, hasTrackingJourney, TRACKING_HEADLINES, trackingProgress } from '../tracking/tracking-steps';
+import { buildTrackingSteps, TRACKING_HEADLINES, trackingProgress } from '../tracking/tracking-steps';
 import { useReadyNotice } from '../tracking/useReadyNotice';
 import { COLLECTABLE_ORDER_STATUSES, TERMINAL_ORDER_STATUSES, type Order, type OrderStatus } from '../types/order.types';
 
@@ -174,24 +179,47 @@ function OrderRow({ order }: { order: Order }) {
   );
 }
 
-/** The pickup code: the signed QR the stall scans, and the short code to read out. Never cached. */
-function PickupCode({ order }: { order: Order }) {
+/**
+ * The pickup code as a pass: the signed QR the stall scans and the short code to read out,
+ * fetched fresh every time (never cached). Tapping it opens it full screen at full brightness.
+ */
+function PickupPass({ order, open, setOpen }: { order: Order; open: boolean; setOpen: (v: boolean) => void }) {
   const { width } = useWindowDimensions();
-  const [full, setFull] = useState(false);
   const code = useQuery({ queryKey: ['orders', 'customer', 'pickup-code', order.orderId, order.orderStatus], queryFn: () => orderApi.pickupCode(order.orderId), staleTime: 0, gcTime: 0 });
-  const size = Math.min(220, width - 120);
-  if (code.isPending) return <ListSkeleton rows={1} height={size + 80} />;
+  const size = Math.min(210, width - 140);
+  const ready = order.orderStatus === 'READY_FOR_PICKUP';
+  if (code.isPending) return <Skeleton height={size + 150} radius={radius.pass} />;
   if (code.isError) return <ErrorState title="Chưa lấy được mã nhận món" error={code.error} onRetry={() => void code.refetch()} />;
   return (
-    <View style={{ alignItems: 'center', gap: 10, padding: 18, borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.card }}>
-      <Text style={{ fontFamily: fonts.bold, fontSize: 12, letterSpacing: 0.6, color: colors.muted }}>MÃ NHẬN MÓN</Text>
-      <Pressable onPress={() => setFull(true)} accessibilityRole="button" accessibilityLabel="Phóng to mã nhận món" style={{ padding: 12, borderRadius: 18, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line }}>
-        <PermitQr value={code.data.token} size={size} />
-      </Pressable>
-      <Text selectable style={[{ fontFamily: fonts.code, fontSize: 26, letterSpacing: 4, color: colors.ink }, tabular]}>{code.data.shortCode}</Text>
-      <Text style={[text.footnote, { color: colors.muted, textAlign: 'center' }]}>Đưa mã này cho quán quét khi lấy món. Không quét được thì đọc mã chữ.</Text>
-      <Button label="Phóng to mã" variant="secondary" icon={{ sf: 'arrow.up.left.and.arrow.down.right', md: 'open_in_full' }} onPress={() => setFull(true)} />
-      {full ? <FullCode token={code.data.token} shortCode={code.data.shortCode} onClose={() => setFull(false)} /> : null}
+    <View style={{ borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
+      <View style={{ alignItems: 'center', gap: 12, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 12, letterSpacing: 0.8, color: colors.muted }}>MÃ NHẬN MÓN</Text>
+          {ready ? <StatusPill label="Sẵn sàng" tone="ok" /> : null}
+        </View>
+        <Pressable
+          onPress={() => setOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Mã QR nhận món. Chạm để phóng to"
+          style={({ pressed }) => ({ padding: 12, borderRadius: 18, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}
+        >
+          <PermitQr value={code.data.token} size={size} />
+        </Pressable>
+        <Text selectable accessibilityLabel={`Mã chữ ${code.data.shortCode.split('').join(' ')}`} style={[{ fontFamily: fonts.code, fontSize: 28, letterSpacing: 5, color: colors.ink }, tabular]}>
+          {code.data.shortCode}
+        </Text>
+      </View>
+      {/* The perforation of a ticket stub. */}
+      <View style={{ height: 20, justifyContent: 'center' }}>
+        <View style={{ marginHorizontal: 18, borderTopWidth: 1.5, borderStyle: 'dashed', borderColor: colors.line }} />
+        <View style={{ position: 'absolute', left: -10, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.bg }} />
+        <View style={{ position: 'absolute', right: -10, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.bg }} />
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 16 }}>
+        <Icon sf="hand.tap" md="touch_app" size={18} color={colors.primary} />
+        <Text style={[text.footnote, { flex: 1, color: colors.muted }]}>Đưa quán quét mã, hoặc đọc mã chữ. Chạm vào mã để phóng to, sáng tối đa.</Text>
+      </View>
+      {open ? <FullCode token={code.data.token} shortCode={code.data.shortCode} onClose={() => setOpen(false)} /> : null}
     </View>
   );
 }
@@ -217,14 +245,87 @@ function FullCode({ token, shortCode, onClose }: { token: string; shortCode: str
     <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', gap: 20, paddingTop: insets.top }}>
         <PermitQr value={token} size={Math.min(width - 48, 360)} />
-        <Text style={[{ fontFamily: fonts.code, fontSize: 34, letterSpacing: 6, color: colors.ink }, tabular]}>{shortCode}</Text>
+        <Text selectable style={[{ fontFamily: fonts.code, fontSize: 34, letterSpacing: 6, color: colors.ink }, tabular]}>
+          {shortCode}
+        </Text>
         <Button label="Đóng" variant="secondary" onPress={onClose} style={{ paddingHorizontal: 28 }} />
       </View>
     </Modal>
   );
 }
 
-/** V-C12 Chi tiết đơn: where it is, the pickup code, where to collect, the receipt, and what you can do. */
+/** A label and its value on one row of a grouped list (receipt, payment). */
+function ValueRow({ label, value, strong, sub }: { label: string; value: string; strong?: boolean; sub?: string }) {
+  return (
+    <View accessible style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.card }}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[text.body, { color: colors.ink, fontFamily: strong ? fonts.bold : fonts.regular }]}>{label}</Text>
+        {sub ? <Text style={[text.footnote, { color: colors.onMango }]}>{sub}</Text> : null}
+      </View>
+      <Text selectable style={[strong ? { fontFamily: fonts.heavy, fontSize: 17, color: colors.ink } : [text.callout, { color: colors.muted }], tabular, { textAlign: 'right', maxWidth: '55%' }]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** The 5-step journey (or the steps reached and where it stopped), with the time of each. */
+function JourneyBar({ status, history }: { status: OrderStatus; history: Order['statusHistory'] }) {
+  const steps = buildTrackingSteps(status, history);
+  const progress = trackingProgress(steps);
+  const stopped = status === 'CANCELLED' || status === 'REJECTED';
+  return (
+    <View accessible accessibilityRole="progressbar" accessibilityLabel={`Tiến trình đơn: ${steps.map((s) => `${s.label}${s.state === 'current' ? ' (hiện tại)' : ''}`).join(', ')}`}>
+      <View style={{ position: 'absolute', left: 14, right: 14, top: 13, height: 4, borderRadius: 2, backgroundColor: colors.sunken }}>
+        <View style={{ width: `${progress * 100}%`, height: '100%', borderRadius: 2, backgroundColor: stopped ? colors.danger : colors.leaf }} />
+      </View>
+      <View style={{ flexDirection: 'row' }}>
+        {steps.map((s) => {
+          const bg = s.state === 'done' ? colors.leaf : s.state === 'current' ? colors.cta : s.state === 'stopped' ? colors.danger : colors.sunken;
+          return (
+            <View key={s.status} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+              <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: bg, borderWidth: 3, borderColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
+                {s.state === 'done' ? (
+                  <Icon sf="checkmark" md="check" size={12} color={colors.white} weight="bold" />
+                ) : s.state === 'stopped' ? (
+                  <Icon sf="xmark" md="close" size={12} color={colors.white} weight="bold" />
+                ) : s.state === 'current' ? (
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.white }} />
+                ) : null}
+              </View>
+              <Text maxFontSizeMultiplier={1.4} style={[text.caption, { color: s.state === 'upcoming' ? colors.muted : colors.ink, textAlign: 'center' }]}>
+                {s.label}
+              </Text>
+              {s.reachedAt ? (
+                <Text maxFontSizeMultiplier={1.4} style={[{ fontFamily: fonts.medium, fontSize: 11, color: colors.muted }, tabular]}>
+                  {formatOrderTime(s.reachedAt)}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function OrderDetailSkeleton() {
+  return (
+    <Screen gap={20}>
+      <Stack.Screen options={{ title: 'Đơn hàng', headerRight: () => null }} />
+      <Skeleton height={170} radius={radius.card} />
+      <Skeleton height={330} radius={radius.pass} />
+      <Skeleton height={72} radius={radius.card} />
+      <Skeleton height={160} radius={radius.card} />
+    </Screen>
+  );
+}
+
+/**
+ * V-C12 Chi tiết đơn (ORD-02): where the order stands and when it will be ready, the pickup code
+ * as a pass, where to collect, then the receipt. One action at the bottom, chosen by the stage
+ * (pay, say you are coming, open the code, review); rare ones (complain, cancel) sit behind "…".
+ */
 export function CustomerOrderDetailScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const online = useOnline();
@@ -234,11 +335,18 @@ export function CustomerOrderDetailScreen() {
   const refresh = useRefreshAfterOrderMutation('customer', Number(orderId));
   const announce = useAnnounceArrival(order.data?.orderId);
   const [locatingEta, setLocatingEta] = useState(false);
+  // Remembered per order: a link can swap the order under this same screen.
+  const [codeOpenFor, setCodeOpenFor] = useState<string | null>(null);
+  const [historyOpenFor, setHistoryOpenFor] = useState<string | null>(null);
+  const codeOpen = codeOpenFor === orderId;
+  const historyOpen = historyOpenFor === orderId;
+  const setCodeOpen = (v: boolean) => setCodeOpenFor(v ? orderId : null);
   const arrivalNow = useNow(15_000);
   const cancel = useMutation({
     mutationFn: () => orderApi.cancel(order.data!.orderId),
     onSuccess: async (next) => {
       await refresh.update(next);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('Đã huỷ đơn; yêu cầu hoàn tiền đang được xử lý nếu đã thanh toán');
     },
     onError: async (e) => {
@@ -247,18 +355,11 @@ export function CustomerOrderDetailScreen() {
     },
   });
 
-  if (order.isPending) {
-    return (
-      <Screen>
-        <Stack.Screen options={{ title: 'Đơn hàng' }} />
-        <ListSkeleton rows={1} height={300} />
-      </Screen>
-    );
-  }
+  if (order.isPending) return <OrderDetailSkeleton />;
   if (order.isError || !order.data) {
     return (
       <Screen>
-        <Stack.Screen options={{ title: 'Đơn hàng' }} />
+        <Stack.Screen options={{ title: 'Đơn hàng', headerRight: () => null }} />
         <ErrorState error={order.error ?? new Error('Không tìm thấy đơn.')} onRetry={() => void order.refetch()} />
       </Screen>
     );
@@ -266,161 +367,194 @@ export function CustomerOrderDetailScreen() {
   const d = order.data;
   const pending = d.orderStatus === 'PENDING_PAYMENT';
   const collectable = COLLECTABLE_ORDER_STATUSES.has(d.orderStatus);
+  const ready = d.orderStatus === 'READY_FOR_PICKUP';
+  const stopped = d.orderStatus === 'CANCELLED' || d.orderStatus === 'REJECTED';
+  const live = !TERMINAL_ORDER_STATUSES.has(d.orderStatus);
   const canCancel = d.orderStatus === 'PLACED';
   const canComplain = d.paymentStatus === 'SUCCESS' && !['PENDING_PAYMENT', 'PLACED'].includes(d.orderStatus);
   const canReview = d.orderStatus === 'COMPLETED';
   const refund = d.refundStatus ? refundPresentation(d.refundStatus) : null;
-  const steps = hasTrackingJourney(d.orderStatus) ? buildTrackingSteps(d.orderStatus, d.statusHistory) : [];
-  const progress = trackingProgress(steps);
   const t = tracking.data;
   const point = t?.pickupPoint;
   // At most 3 notices an order (the server refuses more), one every 2 minutes, none once the stall has seen it.
   const sentAt = announce.data?.notifiedAt ?? t?.arrivalNotifiedAt ?? null;
-  const canAnnounce =
-    (!sentAt || arrivalNow - Date.parse(sentAt) >= 2 * 60_000) && (t?.arrivalNoticeCount ?? 0) < 3 && !t?.arrivalAcknowledgedAt;
+  const canAnnounce = (!sentAt || arrivalNow - Date.parse(sentAt) >= 2 * 60_000) && (t?.arrivalNoticeCount ?? 0) < 3 && !t?.arrivalAcknowledgedAt;
   const est = t?.readyEstimate;
+  const cooking = d.orderStatus === 'PLACED' || d.orderStatus === 'ACCEPTED' || d.orderStatus === 'PREPARING';
+
+  const sayComing = async () => {
+    // With the buyer's position, the stall gets a walking ETA (as on the web); without it, none.
+    setLocatingEta(true);
+    let etaMinutes: number | undefined;
+    try {
+      if (point) etaMinutes = walkingMinutes(haversineMeters(point, await detectPosition()));
+    } catch {
+      etaMinutes = undefined;
+    } finally {
+      setLocatingEta(false);
+    }
+    announce.mutate(etaMinutes, {
+      onSuccess: (notice) => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showToast(notice.alreadySent ? 'Quán đã nhận được thông báo của bạn.' : 'Đã báo quán bạn đang đến.');
+      },
+      onError: (e) => showToast(errorMessage(e), 'error'),
+    });
+  };
+  const askCancel = () =>
+    Alert.alert('Huỷ đơn hàng?', 'Chỉ đơn quán chưa nhận mới huỷ được. Nếu đã thanh toán, hệ thống tạo yêu cầu hoàn tiền.', [
+      { text: 'Giữ đơn', style: 'cancel' },
+      { text: 'Huỷ đơn', style: 'destructive', onPress: () => cancel.mutate() },
+    ]);
+  const openDirections = () => {
+    if (point) void Linking.openURL(directionsUrl(point.latitude, point.longitude));
+  };
+  const announceLabel = t?.arrivalAcknowledgedAt ? 'Quán đã thấy bạn' : sentAt ? 'Báo lại quán' : 'Tôi đang đến';
+  const announceButton = (primary: boolean) => (
+    <Button
+      label={announceLabel}
+      variant={primary ? 'primary' : 'secondary'}
+      size={56}
+      icon={{ sf: 'figure.walk', md: 'directions_walk' }}
+      loading={announce.isPending || locatingEta}
+      disabled={!canAnnounce || announce.isPending || locatingEta}
+      onPress={() => void sayComing()}
+      style={{ flex: 1 }}
+    />
+  );
+
+  const footer = pending ? (
+    <Button label="Kiểm tra thanh toán" size={56} icon={{ sf: 'creditcard.fill', md: 'payments' }} onPress={() => go(`/customer/orders/${d.orderId}/payment`)} />
+  ) : ready ? (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      {announceButton(false)}
+      <Button label="Mở mã" size={56} icon={{ sf: 'qrcode', md: 'qr_code_2' }} onPress={() => setCodeOpen(true)} style={{ flex: 1 }} />
+    </View>
+  ) : collectable ? (
+    announceButton(true)
+  ) : canReview ? (
+    <Button label="Đánh giá đơn" size={56} icon={{ sf: 'star.fill', md: 'star' }} onPress={() => go(`/customer/orders/${d.orderId}/review`)} />
+  ) : stopped && canComplain ? (
+    <Button label="Khiếu nại, hoàn tiền" variant="secondary" size={56} icon={{ sf: 'exclamationmark.bubble', md: 'feedback' }} onPress={() => go(`/customer/orders/${d.orderId}/complaint`)} />
+  ) : undefined;
+
+  const menu = [
+    ...(canComplain && !stopped ? [{ id: 'complain', title: 'Khiếu nại, yêu cầu hoàn tiền', icon: { sf: 'exclamationmark.bubble', md: 'feedback' }, onPress: () => go(`/customer/orders/${d.orderId}/complaint`) }] : []),
+    ...(canCancel ? [{ id: 'cancel', title: cancel.isPending ? 'Đang huỷ…' : 'Huỷ đơn', icon: { sf: 'xmark.circle', md: 'cancel' }, destructive: true, disabled: cancel.isPending, onPress: askCancel }] : []),
+  ];
+  const history = [...d.statusHistory].sort((a, b) => Date.parse(b.changedAt) - Date.parse(a.changedAt));
+  const payRows = [
+    <ValueRow key="wallet" label="Ví" value={providerName(d.paymentProvider) ?? 'Chưa chọn ví'} />,
+    d.paymentStatus ? <ValueRow key="pay" label="Trạng thái" value={statusLabel(d.paymentStatus).label} /> : null,
+    d.placedAt ? <ValueRow key="placed" label="Đặt lúc" value={formatOrderDate(d.placedAt)} /> : null,
+    d.completedAt ? <ValueRow key="done" label="Nhận lúc" value={formatOrderDate(d.completedAt)} /> : null,
+  ];
 
   return (
-    <Screen onRefresh={() => void Promise.all([order.refetch(), tracking.refetch()])} refreshing={order.isRefetching}>
-      <Stack.Screen options={{ title: `#${d.orderCode}` }} />
-      {!online ? <Banner tone="warning">Mất kết nối. Trạng thái đơn có thể chưa mới.</Banner> : null}
+    <Screen gap={20} footer={footer} onRefresh={() => void Promise.all([order.refetch(), tracking.refetch()])} refreshing={order.isRefetching}>
+      <Stack.Screen options={{ title: `#${d.orderCode}`, headerRight: () => (menu.length ? <MoreButton title={`Đơn #${d.orderCode}`} items={menu} /> : null) }} />
+      {!online ? <StatusHeader tone="neutral" icon={{ sf: 'wifi.slash', md: 'wifi_off' }} title="Mất kết nối" detail="Trạng thái đơn có thể chưa mới." /> : null}
+
       {pending ? (
-        <Banner tone="warning" title="Đang chờ xác nhận thanh toán" action={{ label: 'Kiểm tra thanh toán', onPress: () => go(`/customer/orders/${d.orderId}/payment`) }}>
-          Trạng thái chỉ đổi khi máy chủ nhận xác nhận hợp lệ từ ví.
-        </Banner>
-      ) : null}
-
-      {steps.length ? (
-        <Card style={{ gap: 14 }}>
-          <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 18, color: colors.ink }}>{TRACKING_HEADLINES[d.orderStatus]}</Text>
-          {est && (d.orderStatus === 'PLACED' || d.orderStatus === 'ACCEPTED' || d.orderStatus === 'PREPARING') ? (
-            <Text style={[text.footnote, { color: est.isLate ? colors.onDanger : colors.ink }]}>
-              {est.isLate ? 'Đơn đang lâu hơn thường lệ. ' : ''}
-              {est.earliestReadyAt && est.latestReadyAt ? `Dự kiến xong khoảng ${formatOrderTime(est.earliestReadyAt)}–${formatOrderTime(est.latestReadyAt)}` : `Thường mất ${est.lowMinutes}–${est.highMinutes} phút`}
-              {t && t.ordersAhead > 0 ? ` · ${t.ordersAhead} đơn trước bạn` : ''}
+        <StatusHeader tone="pending" icon={{ sf: 'creditcard.fill', md: 'payments' }} title="Đang chờ xác nhận thanh toán" detail="Trạng thái chỉ đổi khi máy chủ nhận xác nhận hợp lệ từ ví." />
+      ) : (
+        <View accessibilityLiveRegion="polite" style={{ gap: 16, padding: 16, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: ready ? colors.leafTint : stopped ? colors.dangerTint : colors.card }}>
+          <View style={{ gap: 6 }}>
+            {live ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: online ? colors.leaf : colors.muted }} />
+                <Text style={[text.caption, { color: colors.muted }]}>{online ? 'Tự cập nhật' : 'Tạm dừng cập nhật'}</Text>
+              </View>
+            ) : null}
+            <Text accessibilityRole="header" style={[text.title2, { color: ready ? colors.onLeaf : stopped ? colors.onDanger : colors.ink }]}>
+              {TRACKING_HEADLINES[d.orderStatus]}
             </Text>
-          ) : null}
-          <View>
-            <View style={{ position: 'absolute', left: 14, right: 14, top: 13, height: 4, borderRadius: 2, backgroundColor: colors.sunken }}>
-              <View style={{ width: `${progress * 100}%`, height: '100%', borderRadius: 2, backgroundColor: d.orderStatus === 'CANCELLED' || d.orderStatus === 'REJECTED' ? colors.danger : colors.leaf }} />
-            </View>
-            <View style={{ flexDirection: 'row' }}>
-              {steps.map((s) => {
-                const bg = s.state === 'done' ? colors.leaf : s.state === 'current' ? colors.cta : s.state === 'stopped' ? colors.danger : colors.sunken;
-                return (
-                  <View key={s.status} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
-                    <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: bg, borderWidth: 3, borderColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
-                      {s.state === 'done' ? <Icon sf="checkmark" md="check" size={12} color={colors.white} weight="bold" /> : s.state === 'stopped' ? <Icon sf="xmark" md="close" size={12} color={colors.white} weight="bold" /> : s.state === 'current' ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.white }} /> : null}
-                    </View>
-                    <Text style={[text.caption, { color: s.state === 'upcoming' ? colors.muted : colors.ink, textAlign: 'center' }]}>{s.label}</Text>
-                    {s.reachedAt ? <Text style={[{ fontFamily: fonts.medium, fontSize: 10.5, color: colors.muted }, tabular]}>{formatOrderTime(s.reachedAt)}</Text> : null}
-                  </View>
-                );
-              })}
-            </View>
+            {est && cooking ? (
+              <Text style={[text.subhead, { color: est.isLate ? colors.onDanger : colors.ink }, tabular]}>
+                {est.isLate ? 'Lâu hơn thường lệ một chút. ' : ''}
+                {est.earliestReadyAt && est.latestReadyAt ? `Dự kiến xong ${formatOrderTime(est.earliestReadyAt)}–${formatOrderTime(est.latestReadyAt)}` : `Thường mất ${est.lowMinutes}–${est.highMinutes} phút`}
+                {t && t.ordersAhead > 0 ? ` · ${t.ordersAhead} đơn trước bạn` : ''}
+              </Text>
+            ) : null}
           </View>
-        </Card>
+          <JourneyBar status={d.orderStatus} history={d.statusHistory} />
+        </View>
+      )}
+
+      {collectable ? (
+        <PickupPass order={d} open={codeOpen} setOpen={setCodeOpen} />
+      ) : pending ? (
+        <View style={{ alignItems: 'center', gap: 6, padding: 20, borderRadius: radius.pass, borderCurve: 'continuous', borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.line }}>
+          <Icon sf="qrcode" md="qr_code_2" size={28} color={colors.muted} />
+          <Text style={[text.footnote, { color: colors.muted, textAlign: 'center' }]}>Mã nhận món hiện khi thanh toán được xác nhận.</Text>
+        </View>
       ) : null}
 
-      {collectable ? <PickupCode order={d} /> : null}
-
-      <Card style={{ gap: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon sf="mappin.and.ellipse" md="location_on" size={19} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[text.caption, { color: colors.muted }]}>Lấy món tại</Text>
-            <Text style={[text.subhead, { color: colors.ink }]}>{d.storefront.storefrontName}</Text>
-            {point?.address || d.storefront.address ? <Text style={[text.caption, { color: colors.muted }]}>{point?.address ?? d.storefront.address}</Text> : null}
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          {point ? <Button label="Chỉ đường" variant="secondary" icon={{ sf: 'arrow.triangle.turn.up.right.diamond.fill', md: 'directions' }} onPress={() => void Linking.openURL(directionsUrl(point.latitude, point.longitude))} style={{ flex: 1 }} /> : null}
-          {collectable ? (
-            <Button
-              label={t?.arrivalAcknowledgedAt ? 'Quán đã thấy' : sentAt ? 'Báo lại' : 'Tôi đang đến'}
-              variant="sign"
-              icon={{ sf: 'figure.walk', md: 'directions_walk' }}
-              loading={announce.isPending || locatingEta}
-              disabled={!canAnnounce || announce.isPending || locatingEta}
-              onPress={async () => {
-                // With the buyer's position, the stall gets a walking ETA (as on the web); without it, none.
-                setLocatingEta(true);
-                let etaMinutes: number | undefined;
-                try {
-                  if (point) etaMinutes = walkingMinutes(haversineMeters(point, await detectPosition()));
-                } catch {
-                  etaMinutes = undefined;
-                } finally {
-                  setLocatingEta(false);
-                }
-                announce.mutate(etaMinutes, {
-                  onSuccess: (notice) => showToast(notice.alreadySent ? 'Quán đã nhận được thông báo của bạn.' : 'Đã báo quán bạn đang đến.'),
-                  onError: (e) => showToast(errorMessage(e), 'error'),
-                });
-              }}
-              style={{ flex: 1 }}
-            />
-          ) : null}
-        </View>
-        {t?.arrivalNotifiedAt ? <Text style={[text.caption, { color: colors.sign }]}>Đã báo quán lúc {formatOrderTime(t.arrivalNotifiedAt)}{t.arrivalAcknowledgedAt ? ` · quán đã thấy lúc ${formatOrderTime(t.arrivalAcknowledgedAt)}` : ''}</Text> : null}
-      </Card>
-
-      <Card style={{ gap: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>Hoá đơn</Text>
-          <StatusPill label={statusLabel(d.orderStatus).label} tone={statusLabel(d.orderStatus).tone} />
-        </View>
-        {d.items.map((i) => (
-          <View key={i.orderItemId} style={{ flexDirection: 'row', gap: 10 }}>
-            <Text style={[{ fontFamily: fonts.heavy, fontSize: 15, color: colors.primary, minWidth: 30 }, tabular]}>{i.quantity}×</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[text.callout, { color: colors.ink }]}>{i.itemName}</Text>
-              {i.note ? <Text style={[text.caption, { color: colors.onMango }]}>Ghi chú: {i.note}</Text> : null}
-            </View>
-            <Text style={[text.callout, { color: colors.ink }, tabular]}>{formatVnd(i.lineTotal)}</Text>
-          </View>
-        ))}
-        <View style={{ height: 1, backgroundColor: colors.separator }} />
-        <KeyValueList
-          rows={[
-            { label: 'Tổng tiền', value: formatVnd(d.totalAmount), emphasis: true },
-            { label: 'Thanh toán', value: providerName(d.paymentProvider) ?? 'Chưa chọn ví' },
-            d.paymentStatus ? { label: 'Trạng thái thanh toán', value: statusLabel(d.paymentStatus).label } : null,
-            d.placedAt ? { label: 'Đặt lúc', value: formatOrderDate(d.placedAt) } : null,
-            d.completedAt ? { label: 'Nhận lúc', value: formatOrderDate(d.completedAt) } : null,
-          ]}
+      <ListGroup title="Lấy món tại">
+        <ListRow
+          title={d.storefront.storefrontName}
+          subtitle={point?.address ?? d.storefront.address ?? undefined}
+          icon={{ sf: 'mappin.and.ellipse', md: 'location_on' }}
+          chevron={false}
         />
-      </Card>
+        {point ? <ListRow title="Chỉ đường tới quán" subtitle="Mở bản đồ của máy" icon={{ sf: 'arrow.triangle.turn.up.right.diamond.fill', md: 'directions' }} onPress={openDirections} /> : null}
+        {collectable ? (
+          <ListRow
+            title={t?.arrivalAcknowledgedAt ? 'Quán đã thấy bạn đang đến' : sentAt ? `Đã báo quán lúc ${formatOrderTime(sentAt)}` : 'Sắp tới quầy?'}
+            subtitle={t?.arrivalAcknowledgedAt ? `Lúc ${formatOrderTime(t.arrivalAcknowledgedAt)}` : sentAt ? 'Báo lại được sau 2 phút, tối đa 3 lần.' : 'Báo quán để món vừa xong khi bạn tới.'}
+            icon={{ sf: 'figure.walk', md: 'directions_walk' }}
+            tint={colors.sign}
+            tileColor={colors.signTint}
+            chevron={false}
+          />
+        ) : null}
+      </ListGroup>
 
-      {d.rejectionReason ? <Banner tone="danger" title="Lý do quán từ chối">{d.rejectionReason}</Banner> : null}
+      {d.rejectionReason ? <StatusHeader tone="danger" title="Lý do quán từ chối" detail={d.rejectionReason} /> : null}
       {refund ? (
-        <Banner tone={refund.tone === 'ok' ? 'success' : refund.tone === 'danger' ? 'danger' : 'warning'} title={`${refund.label}${d.refundAmount ? ` · ${formatVnd(d.refundAmount)}` : ''}`}>
-          {refund.message}
-        </Banner>
+        <StatusHeader
+          tone={refund.tone === 'ok' ? 'ok' : refund.tone === 'danger' ? 'danger' : 'pending'}
+          icon={{ sf: 'arrow.uturn.backward.circle.fill', md: 'currency_exchange' }}
+          title={`${refund.label}${d.refundAmount ? ` · ${formatVnd(d.refundAmount)}` : ''}`}
+          detail={refund.message}
+        />
       ) : null}
 
-      {canReview || canComplain ? (
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          {canReview ? <Button label="Đánh giá" icon={{ sf: 'star.fill', md: 'star' }} onPress={() => go(`/customer/orders/${d.orderId}/review`)} style={{ flex: 1 }} /> : null}
-          {canComplain ? <Button label="Khiếu nại" variant="secondary" icon={{ sf: 'exclamationmark.bubble', md: 'feedback' }} onPress={() => go(`/customer/orders/${d.orderId}/complaint`)} style={{ flex: 1 }} /> : null}
+      <ListGroup title="Món đã đặt" inset={16}>
+        {d.items.map((i) => (
+          <ValueRow key={i.orderItemId} label={`${i.quantity}× ${i.itemName}`} value={formatVnd(i.lineTotal)} sub={i.note ? `Ghi chú: ${i.note}` : undefined} />
+        ))}
+        <ValueRow key="total" label="Tổng thanh toán" value={formatVnd(d.totalAmount)} strong />
+      </ListGroup>
+
+      <ListGroup title="Thanh toán" inset={16} footer="Nhận món trực tiếp tại điểm bán.">
+        {payRows.filter(Boolean)}
+      </ListGroup>
+
+      {history.length ? (
+        <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, overflow: 'hidden' }}>
+          <ListRow
+            title="Lịch sử cập nhật"
+            value={`${history.length} lần`}
+            icon={{ sf: 'clock.arrow.circlepath', md: 'history' }}
+            tint={colors.muted}
+            tileColor={colors.sunken}
+            onPress={() => setHistoryOpenFor(historyOpen ? null : orderId)}
+            chevron={false}
+            accessory={<Icon sf={historyOpen ? 'chevron.up' : 'chevron.down'} md={historyOpen ? 'expand_less' : 'expand_more'} size={14} color={colors.muted} />}
+          />
+          {historyOpen
+            ? history.map((h, i) => (
+                <View key={h.historyId ?? i} style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.separator }}>
+                  <Text style={[text.footnote, { width: 96, color: colors.muted }, tabular]}>{formatOrderDate(h.changedAt)}</Text>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={[text.subhead, { color: colors.ink }]}>{statusLabel(h.toStatus).label}</Text>
+                    {h.note ? <Text style={[text.footnote, { color: colors.muted }]}>{h.note}</Text> : null}
+                  </View>
+                </View>
+              ))
+            : null}
         </View>
-      ) : null}
-      {canCancel ? (
-        <Pressable
-          onPress={() =>
-            Alert.alert('Huỷ đơn hàng?', 'Chỉ đơn quán chưa nhận mới huỷ được. Nếu đã thanh toán, hệ thống tạo yêu cầu hoàn tiền.', [
-              { text: 'Giữ đơn', style: 'cancel' },
-              { text: 'Huỷ đơn', style: 'destructive', onPress: () => cancel.mutate() },
-            ])
-          }
-          disabled={cancel.isPending}
-          accessibilityRole="button"
-          style={{ alignSelf: 'center', padding: 10 }}
-        >
-          <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.onDanger }}>{cancel.isPending ? 'Đang huỷ…' : 'Huỷ đơn'}</Text>
-        </Pressable>
       ) : null}
     </Screen>
   );

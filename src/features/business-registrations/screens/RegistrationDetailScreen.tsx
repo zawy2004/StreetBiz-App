@@ -96,7 +96,7 @@ export function RegistrationDetailScreen() {
       foodSafetyCommitment: r.foodSafetyCommitmentAt != null,
       householdMembers: r.householdMembers.map(householdMemberToDraft),
     });
-    go('/vendor/home/registrations/new/type');
+    go('/register-business');
   };
 
   const confirmWithdraw = () =>

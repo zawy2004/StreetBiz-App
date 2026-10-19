@@ -24,7 +24,7 @@ export function RegistrationsListScreen() {
   const hasApproved = registrations.some((r) => r.registrationStatus === 'APPROVED');
   const startNew = () => {
     reset();
-    go('/vendor/home/registrations/new/type');
+    go('/register-business');
   };
 
   return (

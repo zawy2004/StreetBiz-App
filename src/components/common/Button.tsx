@@ -5,7 +5,7 @@ import { colors, fonts, shadow } from '@/theme';
 import { Icon } from './Icon';
 import { PressableScale } from './PressableScale';
 
-type Variant = 'primary' | 'secondary' | 'sign';
+type Variant = 'primary' | 'secondary' | 'sign' | 'danger';
 
 type Props = {
   label: string;
@@ -24,6 +24,8 @@ const look: Record<Variant, { bg: string; fg: string; border?: string }> = {
   primary: { bg: colors.cta, fg: colors.white },
   secondary: { bg: colors.card, fg: colors.ink, border: colors.line },
   sign: { bg: colors.sign, fg: colors.white },
+  /** The confirming button of a destructive decision (refuse, revoke), never a screen's everyday action. */
+  danger: { bg: colors.danger, fg: colors.white },
 };
 
 /** A capsule button: one primary per screen, a light haptic when it commits. */
@@ -52,7 +54,9 @@ export function Button({
       accessibilityHint={accessibilityHint}
       style={[
         {
-          height: size,
+          // Grows with large text (200%) instead of cutting a wrapped label in half.
+          minHeight: size,
+          paddingVertical: 8,
           borderRadius: size / 2,
           backgroundColor: v.bg,
           borderWidth: v.border ? 1 : 0,
@@ -66,13 +70,13 @@ export function Button({
         style,
       ]}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
         {loading ? (
           <ActivityIndicator color={v.fg} />
         ) : icon ? (
           <Icon sf={icon.sf} md={icon.md} size={size === 56 ? 20 : 18} color={v.fg} />
         ) : null}
-        <Text style={{ fontFamily: fonts.bold, fontSize: size === 56 ? 17 : 15.5, color: v.fg }}>
+        <Text style={{ flexShrink: 1, textAlign: 'center', fontFamily: fonts.bold, fontSize: size === 56 ? 17 : 15.5, color: v.fg }}>
           {label}
         </Text>
       </View>

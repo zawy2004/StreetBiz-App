@@ -160,7 +160,7 @@ export function SlotProposalScreen() {
           icon={{ sf: 'mappin.slash', md: 'location_off' }}
           title="Cần có hồ sơ đăng ký kinh doanh"
           body="Nộp hồ sơ đăng ký trước khi đề xuất ô mới."
-          action={{ label: 'Đăng ký kinh doanh', onPress: () => router.push('/vendor/home/registrations/new/type' as Href) }}
+          action={{ label: 'Đăng ký kinh doanh', onPress: () => router.push('/register-business' as Href) }}
         />
       </Screen>
     );

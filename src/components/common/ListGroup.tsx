@@ -13,10 +13,13 @@ type IconSpec = { sf: string; md: string };
 export function ListGroup({
   title,
   footer,
+  inset = 60,
   children,
 }: {
   title?: string;
   footer?: string;
+  /** Where the hairline between rows starts: 60 clears a row icon, 16 for rows without one. */
+  inset?: number;
   children: ReactNode;
 }) {
   const rows = Children.toArray(children).filter(isValidElement);
@@ -49,7 +52,7 @@ export function ListGroup({
               <View
                 style={{
                   position: 'absolute',
-                  left: 60,
+                  left: inset,
                   right: 0,
                   bottom: 0,
                   height: 1,

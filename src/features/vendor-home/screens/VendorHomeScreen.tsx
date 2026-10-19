@@ -276,7 +276,7 @@ export function VendorHomeScreen() {
                 <Text style={[text.callout, { color: colors.ink }]}>{s}</Text>
               </View>
             ))}
-            <Button label="Đăng ký ngay" onPress={() => go('/vendor/home/registrations/new/type')} />
+            <Button label="Đăng ký ngay" onPress={() => go('/register-business')} />
             <Pressable onPress={() => go('/vendor/home/onboarding')} hitSlop={8} accessibilityRole="link" style={{ alignSelf: 'center' }}>
               <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>Xem các bước bắt đầu</Text>
             </Pressable>

@@ -61,7 +61,7 @@ function buildSteps(registrations: ApiRegistration[]): Step[] {
       state: hasFiled || approved ? 'done' : 'current',
       cta:
         !active || rejected
-          ? { label: 'Bắt đầu hồ sơ', to: '/vendor/home/registrations/new/type' }
+          ? { label: 'Bắt đầu hồ sơ', to: '/register-business' }
           : needInfo && regPath
             ? { label: 'Bổ sung hồ sơ', to: regPath }
             : undefined,

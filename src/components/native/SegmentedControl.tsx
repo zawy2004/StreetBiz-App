@@ -16,7 +16,8 @@ export function SegmentedControl<T extends string>({
   onChange,
   disabled,
 }: {
-  value: T;
+  /** `null` (or a value not in the list) shows nothing selected yet: a choice the person must make. */
+  value: T | null;
   options: SegmentOption<T>[];
   onChange: (key: T) => void;
   disabled?: boolean;
@@ -25,7 +26,7 @@ export function SegmentedControl<T extends string>({
   return (
     <NativeSegmentedControl
       values={labels}
-      selectedIndex={Math.max(0, options.findIndex((o) => o.key === value))}
+      selectedIndex={options.findIndex((o) => o.key === value)}
       enabled={!disabled}
       tintColor={colors.brandTint}
       appearance="light"

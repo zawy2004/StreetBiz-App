@@ -104,7 +104,10 @@ export function DateField({
         />
       ) : null}
       {error ? (
-        <Text style={[text.footnote, { color: colors.onDanger }]}>{error}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+          <Icon sf="exclamationmark.circle.fill" md="error" size={14} color={colors.danger} style={{ marginTop: 2 }} />
+          <Text style={[text.footnote, { flex: 1, color: colors.onDanger }]}>{error}</Text>
+        </View>
       ) : hint ? (
         <Text style={[text.footnote, { color: colors.muted }]}>{hint}</Text>
       ) : null}

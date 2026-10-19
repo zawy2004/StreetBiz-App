@@ -1,10 +1,13 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode, type Ref } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
   View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -24,6 +27,8 @@ type Props = {
   contentStyle?: StyleProp<ViewStyle>;
   /** Extra room at the bottom (for example under a floating bar). */
   bottomInset?: number;
+  /** To scroll to a part of the screen (for example the section a status line points at). */
+  scrollRef?: Ref<ScrollView>;
 };
 
 /**
@@ -40,13 +45,28 @@ export function Screen({
   padded = true,
   contentStyle,
   bottomInset = 0,
+  scrollRef,
 }: Props) {
+  const { width, height } = useWindowDimensions();
+  const [cap, setCap] = useState<{ windowKey: string; height: number } | null>(null);
+  const windowKey = `${width}x${height}`;
+  // Android native-stack workaround: back on a screen after the keyboard or a system dialog came
+  // and went elsewhere, the screen was sometimes laid out as tall as if it had no header (+108 dp),
+  // pushing the pinned footer and the last rows below the bottom edge (seen on the emulator, B1).
+  // Remember the height measured with the keyboard down for this window size; never grow past it.
+  const onLayout = (e: LayoutChangeEvent) => {
+    if (process.env.EXPO_OS !== 'android' || Keyboard.isVisible()) return;
+    if (!cap || cap.windowKey !== windowKey) setCap({ windowKey, height: e.nativeEvent.layout.height });
+  };
+  const maxHeight = cap?.windowKey === windowKey ? cap.height : undefined;
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
+      onLayout={onLayout}
+      style={{ flex: 1, maxHeight, backgroundColor: colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
+        ref={scrollRef}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -79,7 +99,7 @@ export function Screen({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(247,248,250,0.97)',
+            backgroundColor: colors.bg,
             borderTopWidth: 1,
             borderTopColor: colors.separator,
           }}

@@ -707,6 +707,8 @@ export function statusLabel(kind: CaseKind, status: string): string {
 
 export const evidenceLabels: Record<string, string> = {
   IDENTITY_DOCUMENT: 'CCCD gắn chip',
+  IDENTITY_DOCUMENT_BACK: 'CCCD mặt sau',
+  PORTRAIT_SELFIE: 'Ảnh chân dung',
   BUSINESS_LICENSE: 'Giấy phép kinh doanh',
   ADDRESS_PROOF: 'Giấy tờ địa chỉ',
   OTHER: 'Giấy tờ khác',

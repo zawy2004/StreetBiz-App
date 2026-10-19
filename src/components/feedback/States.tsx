@@ -1,13 +1,18 @@
+import { router } from 'expo-router';
 import { View } from 'react-native';
 
-import { errorMessage } from '@/core/api';
+import { ApiError, errorMessage } from '@/core/api';
 import { radius } from '@/theme';
 import { Skeleton } from './Skeleton';
 import { StateView } from './StateView';
 
-/** "Không tải được…" with the server's own words and a retry, for any failed read. */
+/**
+ * A failed read, said for what it is: offline (retry), gone or not allowed (no retry, since
+ * trying again cannot help; back instead), or a server fault (retry). The server's own words
+ * are the body.
+ */
 export function ErrorState({
-  title = 'Không tải được dữ liệu',
+  title,
   error,
   onRetry,
 }: {
@@ -15,13 +20,23 @@ export function ErrorState({
   error: unknown;
   onRetry?: () => void;
 }) {
+  const status = error instanceof ApiError ? error.status : undefined;
+  const gone = status === 404 || status === 403;
+  const offline = status === 0 || (error instanceof ApiError && error.code === 'network_error');
+  const back = router.canGoBack() ? { label: 'Quay lại', onPress: () => router.back() } : undefined;
   return (
     <StateView
-      tone="danger"
-      icon={{ sf: 'wifi.exclamationmark', md: 'wifi_off' }}
-      title={title}
+      tone={gone ? 'neutral' : 'danger'}
+      icon={
+        offline
+          ? { sf: 'wifi.exclamationmark', md: 'wifi_off' }
+          : gone
+            ? { sf: status === 403 ? 'lock' : 'doc.text.magnifyingglass', md: status === 403 ? 'lock' : 'search_off' }
+            : { sf: 'exclamationmark.triangle', md: 'error' }
+      }
+      title={title ?? (offline ? 'Không có kết nối mạng' : status === 404 ? 'Không tìm thấy' : status === 403 ? 'Không có quyền xem' : 'Không tải được dữ liệu')}
       body={errorMessage(error)}
-      action={onRetry ? { label: 'Thử lại', onPress: onRetry } : undefined}
+      action={gone ? back : onRetry ? { label: 'Thử lại', onPress: onRetry } : undefined}
     />
   );
 }

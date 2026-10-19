@@ -19,9 +19,9 @@ export type ReviewItem = {
   editPath: string;
 };
 
-const TYPE = '/vendor/home/registrations/new/type';
-const DETAILS = '/vendor/home/registrations/new/details';
-const OWNER = '/vendor/home/registrations/new/owner';
+const TYPE = '/register-business';
+const DETAILS = '/register-business/details';
+const OWNER = '/register-business/owner';
 
 /**
  * "Kiểm tra lại trước khi nộp": every answer of steps 1–3, shown the way the

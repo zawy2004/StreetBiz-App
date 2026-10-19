@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { useEffect } from 'react';
-import { StatusBar, View } from 'react-native';
+import { Platform, StatusBar, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -65,11 +65,15 @@ export default function RootLayout() {
 
                 <Stack.Protected guard={role === 'VENDOR'}>
                   <Stack.Screen name="vendor" />
+                  {/* Đăng ký hộ kinh doanh: a five-step task, a modal above the tabs with its own stack. */}
+                  <Stack.Screen name="register-business" options={{ presentation: 'modal', animation: Platform.OS === 'android' ? 'slide_from_bottom' : 'default' }} />
                   <Stack.Screen name="permit-qr" options={{ presentation: 'fullScreenModal' }} />
                 </Stack.Protected>
 
                 <Stack.Protected guard={role === 'WARD_AUTHORITY'}>
                   <Stack.Screen name="ward" />
+                  {/* An officer's decision: a modal above the tabs, with its own Cancel. */}
+                  <Stack.Screen name="decision/registration/[id]" options={{ headerShown: true, presentation: 'modal', animation: Platform.OS === 'android' ? 'slide_from_bottom' : 'default' }} />
                 </Stack.Protected>
 
                 <Stack.Protected guard={role === 'PLATFORM_ADMIN'}>
