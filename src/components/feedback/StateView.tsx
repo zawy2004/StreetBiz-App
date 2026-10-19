@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
@@ -11,6 +12,8 @@ type Props = {
   title: string;
   body: string;
   action?: { label: string; onPress: () => void };
+  /** A motif illustration in place of the icon disc (`EmptyArt`). */
+  art?: ReactNode;
 };
 
 const tones = {
@@ -20,12 +23,14 @@ const tones = {
 };
 
 /** Empty and error states: say what happened and offer the next step. */
-export function StateView({ icon, tone = 'brand', title, body, action }: Props) {
+export function StateView({ icon, tone = 'brand', title, body, action, art }: Props) {
   const t = tones[tone];
   return (
     <View style={{ alignItems: 'center', paddingVertical: 36, paddingHorizontal: 28, gap: 6 }}>
+      {art ? <View style={{ marginBottom: 12 }}>{art}</View> : null}
       <View
         style={{
+          display: art ? 'none' : 'flex',
           width: 64,
           height: 64,
           borderRadius: 32,

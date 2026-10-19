@@ -79,6 +79,7 @@ export function ListRow({
   tint = colors.primary,
   tileColor = colors.brandTint,
   onPress,
+  onLongPress,
   destructive,
   accessory,
   chevron = !!onPress,
@@ -91,6 +92,8 @@ export function ListRow({
   tint?: string;
   tileColor?: string;
   onPress?: () => void;
+  /** Long press, e.g. to open the row's `ActionMenu`. */
+  onLongPress?: () => void;
   destructive?: boolean;
   accessory?: ReactNode;
   chevron?: boolean;
@@ -147,6 +150,7 @@ export function ListRow({
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={[title, subtitle, value].filter(Boolean).join(', ')}
