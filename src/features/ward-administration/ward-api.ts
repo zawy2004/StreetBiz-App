@@ -483,7 +483,8 @@ export const complianceApi = {
       `/ward/enrollments?${new URLSearchParams({ ...(status ? { status } : {}), page: String(page) })}`,
     ),
   getEnrollment: (id: string) => apiGet<WardEnrollmentDetail>(`/ward/enrollments/${id}`),
-  decideEnrollment: (id: string, decision: string, reason: string, expectedStatus: string) =>
+  /** The action word the API validates (WardComplianceUseCases), not the resulting status. */
+  decideEnrollment: (id: string, decision: 'APPROVE' | 'REJECT' | 'MORE_INFO', reason: string, expectedStatus: string) =>
     apiPost<WardEnrollmentDetail>(`/ward/enrollments/${id}/decision`, {
       decision,
       reason,

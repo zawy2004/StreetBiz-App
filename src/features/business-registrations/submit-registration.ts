@@ -2,13 +2,14 @@ import { EVIDENCE_TYPE, vendorRegistrationApi, type ApiRegistration, type Regist
 import { parseVndAmount, useNewRegistrationStore } from './new-registration-store';
 
 /**
- * REG-01/02/04 submission against StreetBiz-BE, in three resumable steps:
+ * REG-01/02/04 submission against StreetBiz-BE, in four resumable steps:
  *
  * 1. upload every picked file (nothing is created if a file is rejected);
  * 2. create the registration — or update it when editing (REG-04);
- * 3. attach each uploaded file as evidence.
+ * 3. attach each uploaded file as evidence;
+ * 4. file it with the ward if it is still a draft (POST {id}/submit).
  *
- * Progress is written back to the wizard store as it happens, so if step 2 or 3
+ * Progress is written back to the wizard store as it happens, so if step 2, 3 or 4
  * fails, pressing submit again skips what already succeeded. Without that a
  * retry would create a second application and hit BR-09.
  */
@@ -82,6 +83,12 @@ export async function submitRegistrationDraft(): Promise<ApiRegistration> {
       biometricConsent: item.evidenceType === EVIDENCE_TYPE.identityDocument && draft.biometricConsent,
     });
     store().patchEvidence(item.evidenceType, { attached: true });
+  }
+
+  // 4. A new registration (or an edited draft) is still a DRAFT here: file it, so it reaches
+  //    the ward. Updating a filed registration re-submits it by itself, so that one is left alone.
+  if (registration.registrationStatus === 'DRAFT') {
+    registration = await vendorRegistrationApi.file(registration.registrationId);
   }
 
   return registration;

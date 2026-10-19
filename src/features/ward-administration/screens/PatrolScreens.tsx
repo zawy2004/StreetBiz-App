@@ -264,7 +264,21 @@ export function RecordViolationScreen() {
   const params = useLocalSearchParams<{ contractId?: string; slotId?: string; vendorId?: string }>();
   const fixedVendor = params.vendorId ? Number(params.vendorId) : undefined;
   const picker = useFilePicker();
-  const vendors = useQuery({ queryKey: ['ward', 'violation-vendors'], queryFn: () => complianceApi.listEnrollments('APPROVED'), enabled: !fixedVendor });
+  const vendors = useQuery({
+    queryKey: ['ward', 'violation-vendors'],
+    queryFn: () => complianceApi.listEnrollments('APPROVED'),
+    // A violation is recorded against the household, and one household may hold several
+    // approved registrations: list each household once, with all its business names.
+    select: (items) => {
+      const byVendor = new Map<number, (typeof items)[number]>();
+      for (const i of items) {
+        const seen = byVendor.get(i.vendorId);
+        byVendor.set(i.vendorId, seen ? { ...seen, displayName: `${seen.displayName} · ${i.displayName}` } : i);
+      }
+      return [...byVendor.values()];
+    },
+    enabled: !fixedVendor,
+  });
   const schedules = useQuery({ queryKey: ['ward', 'penalty-schedules', 'today'], queryFn: () => complianceApi.listPenaltySchedules() });
   const [vendorId, setVendorId] = useState<number | undefined>(fixedVendor);
   const [vendorSheet, setVendorSheet] = useState(false);

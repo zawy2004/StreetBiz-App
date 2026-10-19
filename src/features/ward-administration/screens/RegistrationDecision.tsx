@@ -172,8 +172,8 @@ export function RegistrationDecisionScreen() {
         showToast('Đã ghi nhận đối chiếu CCCD. Có thể duyệt hồ sơ.');
         setFinished('identity');
       } else {
-        const decision = kind === 'MORE_INFO' ? 'MORE_INFORMATION_REQUIRED' : kind;
-        await complianceApi.decideEnrollment(id!, decision, note || APPROVE_DEFAULT, d.status);
+        // The API takes the action word (APPROVE / REJECT / MORE_INFO), not the status it leads to.
+        await complianceApi.decideEnrollment(id!, kind, note || APPROVE_DEFAULT, d.status);
         // Show the outcome at once; the inbox and this record refresh behind it.
         void cache.invalidateQueries({ queryKey: ['ward'] });
         setFinished('decision');

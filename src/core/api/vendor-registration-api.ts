@@ -176,6 +176,15 @@ export const vendorRegistrationApi = {
     return response.data;
   },
 
+  /** REG-01: files a complete draft with the ward (DRAFT -> SUBMITTED). Creating or updating a
+   * draft never files it; until this is called the ward does not see the registration. */
+  file: async (registrationId: number) => {
+    const response = await apiPost<{ message: string; data: ApiRegistration }>(
+      `/vendor/registrations/${registrationId}/submit`,
+    );
+    return response.data;
+  },
+
   /** REG-03 */
   list: () => apiGet<ApiRegistration[]>('/vendor/registrations'),
 

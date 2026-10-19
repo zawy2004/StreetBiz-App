@@ -9,6 +9,7 @@ export default function MoreStack() {
   return (
     <Stack screenOptions={headerOptions}>
       <Stack.Screen name="index" options={{ title: '' }} />
+      <Stack.Screen name="account" options={{ title: 'Tài khoản' }} />
     </Stack>
   );
 }
