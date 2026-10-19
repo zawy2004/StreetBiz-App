@@ -23,6 +23,7 @@ import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { StatusPill } from '@/components/status/StatusPill';
 import { errorMessage } from '@/core/api';
+import { env } from '@/core/config/env';
 import type { PickedFile } from '@/core/api/upload';
 import { statusLabel } from '@/core/constants/status-labels';
 import { Checkbox } from '@/features/authentication/components/auth-parts';
@@ -30,6 +31,7 @@ import { detectPosition } from '@/features/buyer-discovery/geolocation';
 import { useOnline } from '@/features/orders/components/order-display';
 import { colors, fonts, radius, tabular, text } from '@/theme';
 import { formatVietnamDate, formatVietnamDateTime, formatVnd } from '@/utils/format';
+import { GeofenceDrift } from '../components/GeofenceDrift';
 import { AiSuggestionCard } from '../components/ReviewParts';
 import { daysUntil, parseFineBracket, vnDateOf } from '../violation-utils';
 import { complianceApi, violationTypeLabels, wardApi, type InspectPermitResult, type WardViolationDetail } from '../ward-api';
@@ -140,6 +142,7 @@ export function PermitScanScreen() {
           <Icon sf="chevron.right" md="chevron_right" size={14} color={colors.muted} />
         </Pressable>
         <Button label="Lập biên bản không quét mã" variant="secondary" icon={{ sf: 'square.and.pencil', md: 'edit_document' }} onPress={() => go('/ward/patrol/violations/new')} />
+        {env.enableAiCompliance && !result ? <GeofenceDrift /> : null}
       </Screen>
       {picker.sheet}
     </View>
@@ -387,12 +390,20 @@ export function RecordViolationScreen() {
   );
 }
 
+type ViolationStage = 'OPEN' | 'DECIDED' | 'ALL';
+/** The `status` filter of GET /ward/violations for each tab: pending, any decided penalty, or everything. */
+const VIOLATION_STAGE_STATUSES: Record<ViolationStage, string | undefined> = {
+  OPEN: 'PENDING_SANCTION',
+  DECIDED: 'UNPAID,PAID,WAIVED,CANCELLED',
+  ALL: undefined,
+};
+
 /** W13 Biên bản đã lập: violations by stage. */
 export function ViolationsListScreen() {
-  // The server lists every violation (newest first) and ignores a status filter: filter here.
-  const [stage, setStage] = useState<'OPEN' | 'DECIDED' | 'ALL'>('OPEN');
-  const list = useQuery({ queryKey: ['ward', 'violations', 'ALL'], queryFn: () => complianceApi.listViolations() });
-  const rows = (list.data ?? []).filter((v) => stage === 'ALL' || (stage === 'OPEN' ? v.status === 'PENDING_SANCTION' : v.status !== 'PENDING_SANCTION'));
+  const [stage, setStage] = useState<ViolationStage>('OPEN');
+  // The server filters by stage before paging, so each tab is a complete, newest-first page.
+  const list = useQuery({ queryKey: ['ward', 'violations', stage], queryFn: () => complianceApi.listViolations(VIOLATION_STAGE_STATUSES[stage]) });
+  const rows = list.data ?? [];
   return (
     <Screen onRefresh={() => void list.refetch()} refreshing={list.isRefetching} gap={12}>
       <Stack.Screen options={{ title: 'Biên bản vi phạm' }} />
@@ -464,7 +475,9 @@ export function ViolationDetailScreen() {
       if (kind === 'explain') return complianceApi.recordExplanation(d.violationId, explanation.trim());
       if (kind === 'deliver') return complianceApi.deliverViolation(d.violationId, deliveredTo.trim(), false, null);
       if (kind === 'refuse') return complianceApi.deliverViolation(d.violationId, null, true, refusal.trim());
-      const rate = (rates.data ?? []).find((r) => r.scheduleId === (scheduleId ?? ownRate?.scheduleId));
+      // Same default as the form shows: the first in-force rate of this type with a legal basis.
+      const own = (rates.data ?? []).filter((r) => r.violationType === d.violationType && r.legalBasis);
+      const rate = own.find((r) => r.scheduleId === (scheduleId ?? own[0]?.scheduleId));
       const moved = fine ? Number(fine) : null;
       return moved != null && rate && moved !== rate.penaltyAmount
         ? complianceApi.sanctionViolation(d.violationId, rate.scheduleId, decisionNumber.trim(), notes.trim() || undefined, early, { amount: moved, reason: fineReason.trim() })
@@ -503,8 +516,10 @@ export function ViolationDetailScreen() {
   const s = statusLabel(d.status);
   const pending = d.status === 'PENDING_SANCTION';
   const ownRates = (rates.data ?? []).filter((r) => r.violationType === d.violationType && r.legalBasis);
-  const ownRate = ownRates.find((r) => r.scheduleId === d.aiSuggestion?.penaltyScheduleId) ?? ownRates[0];
-  const chosen = ownRates.find((r) => r.scheduleId === (scheduleId ?? ownRate?.scheduleId));
+  // The default is the first in-force rate of this type, never the AI's pick: the AI rate is applied
+  // only when the officer presses "Áp dụng khung này" on the [AI] card (BR-41).
+  const chosen = ownRates.find((r) => r.scheduleId === (scheduleId ?? ownRates[0]?.scheduleId));
+  const aiRate = ownRates.find((r) => r.scheduleId === d.aiSuggestion?.penaltyScheduleId);
   const bracket = parseFineBracket(chosen?.legalBasis);
   const authority = me.data?.sanctionAuthorityTitle;
   const explainDays = d.explanationDeadlineAt ? daysUntil(d.explanationDeadlineAt) : null;
@@ -599,6 +614,17 @@ export function ViolationDetailScreen() {
           {d.aiSuggestion.legalBasis ? <Text style={[text.caption, { color: colors.onMango }]}>Căn cứ (chép từ Khung mức phạt của phường): {d.aiSuggestion.legalBasis}</Text> : null}
           {d.aiSuggestion.suggestedPenaltyAmount != null ? <Text style={[text.caption, { color: colors.onMango }]}>Mức gợi ý: {formatVnd(d.aiSuggestion.suggestedPenaltyAmount)}</Text> : null}
           {d.aiSuggestion.bienPhapKhacPhuc ? <Text style={[text.caption, { color: colors.onMango }]}>Biện pháp khắc phục: {d.aiSuggestion.bienPhapKhacPhuc}</Text> : null}
+          {pending && authority && aiRate ? (
+            <Button
+              label={chosen?.scheduleId === aiRate.scheduleId ? 'Đang dùng khung này' : 'Áp dụng khung này'}
+              variant="secondary"
+              disabled={chosen?.scheduleId === aiRate.scheduleId}
+              onPress={() => {
+                setScheduleId(aiRate.scheduleId);
+                showToast('Đã áp dụng khung xử phạt vào quyết định');
+              }}
+            />
+          ) : null}
         </AiSuggestionCard>
       ) : null}
 

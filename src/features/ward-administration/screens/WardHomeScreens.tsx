@@ -61,7 +61,7 @@ export function WardDashboardScreen() {
             {todayVi()}
           </Text>
         </View>
-        <AssistantButton />
+        <AssistantButton pageKey="ward.dashboard" />
         <HeaderIconButton icon={{ sf: 'bell.fill', md: 'notifications' }} label="Thông báo" badge={unread} onPress={() => go('/notifications')} />
       </View>
       <ScrollView contentContainerStyle={{ padding: space.md, paddingTop: 4, paddingBottom: 40, gap: 16 }} refreshControl={<RefreshControl refreshing={dash.isRefetching} onRefresh={() => void dash.refetch()} tintColor={colors.cta} colors={[colors.cta]} />}>

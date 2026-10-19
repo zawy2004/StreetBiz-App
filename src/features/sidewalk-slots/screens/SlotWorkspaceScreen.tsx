@@ -79,7 +79,7 @@ export function SlotWorkspaceScreen({ initialMode = 'choose' }: { initialMode?: 
 function ChooseSlots() {
   const userId = useAuthStore((s) => s.user?.id);
   const insets = useSafeAreaInsets();
-  const { registration, holds } = useHolds();
+  const { registration, holds, release } = useHolds();
   const nowMs = useNow(holds.length ? 1000 : 15_000);
   const zoneId = useWorkspaceStore((s) => s.zoneId);
   const view = useWorkspaceStore((s) => s.view);
@@ -140,7 +140,7 @@ function ChooseSlots() {
   const header = (
     <View style={{ gap: 14, paddingBottom: 12 }}>
       {!registration ? <EligibilityMissing /> : null}
-      <HoldBasket holds={holds} slots={[...slots, ...(nearby.data ?? [])]} nowMs={nowMs} />
+      <HoldBasket holds={holds} slots={[...slots, ...(nearby.data ?? [])]} nowMs={nowMs} releasing={release.isPending ? release.variables : undefined} onRelease={(slotId) => release.mutate(slotId)} />
       {zoneOptions.length > 1 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
           {zoneOptions.map((z) => (
@@ -277,8 +277,23 @@ function ChooseSlots() {
   );
 }
 
-/** The slots the vendor is holding right now, each with its countdown: one tap back to apply. */
-function HoldBasket({ holds, slots, nowMs }: { holds: { slotId: number; expiresAt: string }[]; slots: SidewalkSlot[]; nowMs: number }) {
+/**
+ * The slots the vendor is holding right now, each with its countdown: one tap back to apply, or
+ * "Nhả" to give the slot back at once (the web's hold basket) instead of waiting for it to lapse.
+ */
+function HoldBasket({
+  holds,
+  slots,
+  nowMs,
+  releasing,
+  onRelease,
+}: {
+  holds: { slotId: number; expiresAt: string }[];
+  slots: SidewalkSlot[];
+  nowMs: number;
+  releasing?: number;
+  onRelease: (slotId: number) => void;
+}) {
   const live = holds.filter((h) => Date.parse(h.expiresAt) > nowMs);
   if (live.length === 0) return null;
   return (
@@ -299,6 +314,16 @@ function HoldBasket({ holds, slots, nowMs }: { holds: { slotId: number; expiresA
             <Text style={{ fontFamily: fonts.code, fontSize: 17, color: colors.ink }}>Ô {slot?.slotCode ?? `#${h.slotId}`}</Text>
             <Text style={[text.caption, { flex: 1, color: colors.muted }]} numberOfLines={1}>{slot?.zoneName ?? ''}</Text>
             <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.primary, fontVariant: ['tabular-nums'] }}>{formatCountdown(secondsUntil(h.expiresAt, nowMs))}</Text>
+            <Pressable
+              onPress={() => onRelease(h.slotId)}
+              disabled={releasing != null}
+              accessibilityRole="button"
+              accessibilityLabel={`Nhả ô ${slot?.slotCode ?? h.slotId}`}
+              hitSlop={8}
+              style={({ pressed }) => ({ paddingHorizontal: 10, height: 30, borderRadius: 15, justifyContent: 'center', backgroundColor: pressed ? colors.sunken : colors.kerbPaint, opacity: releasing != null && releasing !== h.slotId ? 0.5 : 1 })}
+            >
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.ink }}>{releasing === h.slotId ? 'Đang nhả…' : 'Nhả'}</Text>
+            </Pressable>
             <Icon sf="chevron.right" md="chevron_right" size={14} color={colors.muted} />
           </Pressable>
         );

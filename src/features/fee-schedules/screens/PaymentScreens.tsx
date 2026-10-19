@@ -29,13 +29,19 @@ import { usePayFeeCheckout, usePayPenaltyCheckout, usePenalties } from '../useFi
 
 /**
  * The checkout both payment screens share. One idempotency key per attempt (BR-37), reused if
- * the same tap is retried; a real MoMo page opens outside the app and the backend checks it on
- * return; with only the development sandbox, the backend confirms here. Only the server's
- * authenticated callback marks anything paid (BR-32).
+ * the same tap is retried after a lost response; a real MoMo page opens outside the app and the
+ * backend checks it on return; with only the development sandbox, the backend confirms here.
+ * Only the server's authenticated callback marks anything paid (BR-32).
+ *
+ * A new attempt gets a new key: after the wallet reports the payment FAILED (the screen stays
+ * mounted, unlike the web's full-page redirect, so the old key would replay the failed
+ * transaction), and when the vendor switches wallet (the server refuses a key reused for
+ * another provider).
  */
-function useCheckoutFlow(run: (key: string) => Promise<FinanceCheckoutDto>, onPaid: () => Promise<void>) {
+function useCheckoutFlow(run: (key: string) => Promise<FinanceCheckoutDto>, onPaid: () => Promise<void>, provider: PaymentProvider) {
   const queryClient = useQueryClient();
   const key = useRef<string | null>(null);
+  const keyProvider = useRef<PaymentProvider>(provider);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const refreshAll = async () => {
@@ -46,12 +52,18 @@ function useCheckoutFlow(run: (key: string) => Promise<FinanceCheckoutDto>, onPa
     await refreshAll();
     showToast('Ví đã xác nhận thanh toán');
     await onPaid();
+  }, () => {
+    key.current = null;
   });
 
   const pay = async () => {
     if (busy) return;
     setBusy(true);
     setError(undefined);
+    if (keyProvider.current !== provider) {
+      key.current = null;
+      keyProvider.current = provider;
+    }
     key.current ??= uuid();
     try {
       const result = await run(key.current);
@@ -93,6 +105,7 @@ export function FeePaymentScreen() {
     async () => {
       await detail.refetch();
     },
+    provider,
   );
 
   if (detail.isPending) {
@@ -229,6 +242,7 @@ export function PenaltyPaymentScreen() {
     async () => {
       router.back();
     },
+    provider,
   );
   const penalty = penalties.find((p) => p.penaltyId === penaltyId);
 

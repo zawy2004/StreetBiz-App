@@ -8,6 +8,7 @@ import { Card, KeyValueList, Segments } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Chip } from '@/components/common/Chip';
 import { Icon } from '@/components/common/Icon';
+import { Sheet } from '@/components/common/Sheet';
 import { SlotPlate } from '@/components/common/SlotPlate';
 import { Banner } from '@/components/feedback/Banner';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
@@ -48,6 +49,17 @@ export function SlotBoardScreen() {
   const count = (b: Bucket) => slots.filter((s) => inBucket(s, b)).length;
   const markers = useMemo<MapMarker[]>(() => shown.map((s) => ({ id: String(s.slotId), latitude: s.latitude, longitude: s.longitude, label: s.slotCode, fill: toneOf(s.status).swatch, ink: toneOf(s.status).onSwatch })), [shown]);
   const open = (slotId: number) => router.push(`/ward/slots/${slotId}` as Href);
+  // "Chọn nhiều" (web BulkStatusPanel): suspend or reopen a whole stretch at once.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const toggle = (slotId: number) => setPicked((p) => (p.includes(slotId) ? p.filter((x) => x !== slotId) : [...p, slotId]));
+  const stopSelecting = () => {
+    setSelecting(false);
+    setPicked([]);
+    setBulkOpen(false);
+  };
+  const pickedSlots = slots.filter((s) => picked.includes(s.slotId));
 
   const header = (
     <View style={{ gap: 12, paddingBottom: 8 }}>
@@ -63,8 +75,17 @@ export function SlotBoardScreen() {
           );
         })}
       </View>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Chip label="Rải ô hàng loạt" icon={{ sf: 'square.grid.3x1.below.line.grid.1x2', md: 'view_week' }} onPress={() => router.push('/ward/slots/batch' as Href)} />
+        <Chip label="Chướng ngại vật" icon={{ sf: 'exclamationmark.triangle', md: 'warning' }} onPress={() => router.push('/ward/slots/features' as Href)} />
+      </View>
       <TextField label="Tìm ô hoặc tuyến" value={query} onChangeText={setQuery} placeholder="VD: NVL-12" autoCapitalize="characters" />
       <Segments<'LIST' | 'MAP'> value={view} onChange={setView} options={[{ key: 'LIST', label: 'Danh sách' }, { key: 'MAP', label: 'Bản đồ' }]} />
+      {view === 'LIST' && slots.length > 1 ? (
+        <Pressable onPress={() => (selecting ? stopSelecting() : setSelecting(true))} accessibilityRole="button" hitSlop={6} style={{ alignSelf: 'flex-end', minHeight: 32, justifyContent: 'center' }}>
+          <Text style={[text.subhead, { color: colors.sign }]}>{selecting ? 'Xong' : 'Chọn nhiều ô'}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 
@@ -83,26 +104,116 @@ export function SlotBoardScreen() {
           contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 110 }}
           ListHeaderComponent={header}
           refreshControl={<RefreshControl refreshing={grid.isRefetching} onRefresh={() => void grid.refetch()} tintColor={colors.cta} colors={[colors.cta]} />}
-          renderItem={({ item }) => <SlotRow slot={item} onPress={() => open(item.slotId)} />}
+          renderItem={({ item }) => <SlotRow slot={item} selected={selecting ? picked.includes(item.slotId) : undefined} onPress={() => (selecting ? toggle(item.slotId) : open(item.slotId))} />}
           ListEmptyComponent={
             grid.isPending ? <ListSkeleton rows={5} height={68} /> : grid.isError ? <ErrorState error={grid.error} onRetry={() => void grid.refetch()} /> : <StateView icon={{ sf: 'square.grid.3x3', md: 'grid_view' }} tone="neutral" title={slots.length ? 'Không có ô khớp' : 'Chưa có ô vỉa hè nào'} body={slots.length ? 'Đổi bộ lọc hoặc từ khoá.' : 'Thêm ô đầu tiên trên bản đồ.'} />
           }
         />
       )}
+      {selecting ? (
+        <View style={{ position: 'absolute', left: 16, right: 16, bottom: 16, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, paddingLeft: 16, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.raised }}>
+          <Text style={[text.subhead, { flex: 1, color: colors.ink }]}>{`Đã chọn ${picked.length} ô`}</Text>
+          <Button label="Đổi trạng thái" variant="sign" disabled={picked.length === 0} onPress={() => setBulkOpen(true)} />
+        </View>
+      ) : (
       <View pointerEvents="box-none" style={{ position: 'absolute', right: 16, bottom: 16 }}>
         <Pressable onPress={() => router.push('/ward/slots/new' as Href)} accessibilityRole="button" accessibilityLabel="Thêm ô mới" style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, height: 52, paddingHorizontal: 20, borderRadius: 26, backgroundColor: pressed ? colors.ctaPressed : colors.cta, boxShadow: shadow.raised })}>
           <Icon sf="plus" md="add" size={18} color={colors.white} weight="bold" />
           <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.white }}>Thêm ô</Text>
         </Pressable>
       </View>
+      )}
+      <BulkStatusSheet
+        visible={bulkOpen}
+        slots={pickedSlots}
+        onClose={() => setBulkOpen(false)}
+        onDone={() => {
+          stopSelecting();
+          void grid.refetch();
+        }}
+      />
     </View>
   );
 }
 
-function SlotRow({ slot, onPress }: { slot: WardSlot; onPress: () => void }) {
-  const t = toneOf(slot.status);
+/**
+ * Suspend or reopen several slots at once, e.g. a whole kerb stretch closed for roadworks. Runs the
+ * ordinary one-slot change per slot, so each keeps its own version check, audit entry and the
+ * backend's rules (no open application, no contract); slots that cannot change are skipped.
+ */
+function BulkStatusSheet({ visible, slots, onClose, onDone }: { visible: boolean; slots: WardSlot[]; onClose: () => void; onDone: () => void }) {
+  const [reason, setReason] = useState('');
+  const [failures, setFailures] = useState<{ slotCode: string; message: string }[]>([]);
+  const suspendable = slots.filter((s) => s.status === 'AVAILABLE');
+  const reopenable = slots.filter((s) => s.status === 'SUSPENDED');
+  const skipped = slots.length - suspendable.length - reopenable.length;
+  const run = useMutation({
+    mutationFn: async (target: 'SUSPENDED' | 'AVAILABLE') => {
+      const batch = target === 'SUSPENDED' ? suspendable : reopenable;
+      const failed: { slotCode: string; message: string }[] = [];
+      for (const slot of batch) {
+        try {
+          await wardConfigApi.setSlotStatus(slot, target, reason.trim());
+        } catch (e) {
+          failed.push({ slotCode: slot.slotCode, message: errorMessage(e) });
+        }
+      }
+      return { done: batch.length - failed.length, failed };
+    },
+    onSuccess: ({ done, failed }) => {
+      setFailures(failed);
+      showToast(failed.length ? `Đã đổi ${done} ô, ${failed.length} ô không đổi được.` : `Đã đổi trạng thái ${done} ô.`, failed.length ? 'error' : 'success');
+      if (failed.length === 0) {
+        setReason('');
+        onDone();
+      }
+    },
+  });
+  const tally = (value: number, label: string, wash: string, ink: string) => (
+    <View style={{ flex: 1, padding: 10, gap: 2, borderRadius: 12, backgroundColor: wash }}>
+      <Text style={[{ fontFamily: fonts.code, fontSize: 24, color: ink }, tabular]}>{value}</Text>
+      <Text style={[text.caption, { color: ink }]}>{label}</Text>
+    </View>
+  );
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Ô ${slot.slotCode}, ${statusWord[slot.status]}`} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? '#FBFBFC' : colors.card })}>
+    <Sheet visible={visible} onClose={onClose} title={`Đổi trạng thái ${slots.length} ô`}>
+      <View style={{ gap: 12 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {tally(suspendable.length, 'có thể tạm ngưng', colors.leafTint, colors.onLeaf)}
+          {tally(reopenable.length, 'có thể mở lại', colors.sunken, colors.ink)}
+          {tally(skipped, 'sẽ bỏ qua', colors.mangoTint, colors.onMango)}
+        </View>
+        {skipped > 0 ? <Text style={[text.footnote, { color: colors.muted }]}>{`${skipped} ô đang có đơn hoặc hợp đồng sẽ được bỏ qua: xử lý đơn ở Hộp duyệt, hoặc đình chỉ giấy phép ở Tuần tra.`}</Text> : null}
+        <TextField label="Lý do (áp dụng cho tất cả ô đã chọn)" value={reason} onChangeText={(v) => setReason(v.slice(0, 500))} multiline placeholder="VD: Thi công vỉa hè đoạn Hoàng Diệu đến 30/10" />
+        <Button label={`Tạm ngưng ${suspendable.length} ô`} variant="secondary" disabled={suspendable.length === 0 || !reason.trim() || run.isPending} loading={run.isPending && run.variables === 'SUSPENDED'} onPress={() => run.mutate('SUSPENDED')} />
+        <Button label={`Mở lại ${reopenable.length} ô`} variant="secondary" disabled={reopenable.length === 0 || !reason.trim() || run.isPending} loading={run.isPending && run.variables === 'AVAILABLE'} onPress={() => run.mutate('AVAILABLE')} />
+        {failures.length ? (
+          <Banner tone="danger" title="Không đổi được">
+            {failures.map((f) => `• ${f.slotCode}: ${f.message}`).join('\n')}
+          </Banner>
+        ) : null}
+      </View>
+    </Sheet>
+  );
+}
+
+/** `selected` is set only while choosing several slots: the row then toggles instead of opening. */
+function SlotRow({ slot, onPress, selected }: { slot: WardSlot; onPress: () => void; selected?: boolean }) {
+  const t = toneOf(slot.status);
+  const choosing = selected !== undefined;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole={choosing ? 'checkbox' : 'button'}
+      accessibilityState={choosing ? { checked: selected } : undefined}
+      accessibilityLabel={`Ô ${slot.slotCode}, ${statusWord[slot.status]}`}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? '#FBFBFC' : colors.card, borderWidth: selected ? 2 : 0, borderColor: colors.sign })}
+    >
+      {choosing ? (
+        <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: selected ? colors.sign : colors.line, backgroundColor: selected ? colors.sign : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+          {selected ? <Icon sf="checkmark" md="check" size={13} color={colors.white} weight="bold" /> : null}
+        </View>
+      ) : null}
       <View style={{ width: 10, alignSelf: 'stretch', borderRadius: 5, backgroundColor: t.swatch }} />
       <View style={{ flex: 1, gap: 3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -230,6 +341,7 @@ export function SlotEditScreen() {
   const grid = useGrid();
   const slot = grid.data?.slots.find((s) => s.slotId === Number(slotId));
   const history = useQuery({ queryKey: ['ward', userId, 'slot-history', slotId], queryFn: () => wardConfigApi.slotHistory(Number(slotId)), enabled: Boolean(slot) });
+  const zones = useQuery({ queryKey: ['ward', userId, 'zones'], queryFn: wardConfigApi.listZones });
   const [form, setForm] = useState<Form | null>(null);
   const [check, setCheck] = useState<PlacementCheck | null>(null);
   const [warnReason, setWarnReason] = useState('');
@@ -288,9 +400,21 @@ export function SlotEditScreen() {
   const blocked = check?.issues.some((i) => i.severity === 'BLOCK') ?? false;
   const warns = check?.issues.some((i) => i.severity === 'WARN') ?? false;
   const t = toneOf(slot.status);
+  // A vendor-proposed slot is decided in the proposal review, never edited here (web SlotPanel).
+  const readOnly = slot.source === 'VENDOR_PROPOSED';
+  // Moving, resizing, renaming or re-zoning a slot must pass the server's placement check first.
+  const geometryChanged =
+    f.latitude !== slot.latitude || f.longitude !== slot.longitude || f.zoneId !== slot.zoneId || num(f.width) !== slot.widthMeters || num(f.length) !== slot.lengthMeters || f.slotCode.trim() !== slot.slotCode;
+  const needsCheck = geometryChanged && !check;
 
   return (
-    <Screen footer={form ? <Button label="Lưu thay đổi" size={56} loading={save.isPending} disabled={blocked || (warns && !warnReason.trim()) || !f.slotCode.trim()} onPress={() => save.mutate()} /> : undefined}>
+    <Screen
+      footer={
+        form && !readOnly ? (
+          <Button label={needsCheck ? 'Kiểm tra vị trí trước khi lưu' : 'Lưu thay đổi'} size={56} loading={save.isPending} disabled={needsCheck || blocked || (warns && !warnReason.trim()) || !f.slotCode.trim()} onPress={() => save.mutate()} />
+        ) : undefined
+      }
+    >
       <Stack.Screen options={{ title: `Ô ${slot.slotCode}` }} />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <SlotPlate code={slot.slotCode} size="lg" />
@@ -301,10 +425,37 @@ export function SlotEditScreen() {
           </View>
         </View>
       </View>
-      <SlotForm form={f} setForm={setForm} canMove={slot.canEditGeometry} ignoreSlotId={slot.slotId} check={check} setCheck={setCheck} />
-      {warns ? <TextField label="Lý do vẫn đặt ô ở đây" value={warnReason} onChangeText={setWarnReason} multiline /> : null}
+      {readOnly ? (
+        <Banner tone="neutral">Ô do hộ kinh doanh đề xuất, được xử lý ở luồng duyệt đề xuất và không sửa tại đây.</Banner>
+      ) : (
+        <>
+          {!slot.canEditGeometry ? <Banner tone="neutral">Ô không ở trạng thái Trống nên chỉ sửa được tiện ích, ngành hàng và ảnh.</Banner> : null}
+          {slot.canEditGeometry && zones.data && zones.data.length > 1 ? (
+            <>
+              <Text style={[text.subhead, { color: colors.ink }]}>Tuyến</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
+                {zones.data.map((z) => (
+                  <Chip
+                    key={z.zoneId}
+                    label={z.zoneName}
+                    selected={z.zoneId === f.zoneId}
+                    onPress={() => {
+                      setForm({ ...f, zoneId: z.zoneId });
+                      setCheck(null);
+                    }}
+                    accessibilityRole="radio"
+                  />
+                ))}
+              </ScrollView>
+            </>
+          ) : null}
+          <SlotForm form={f} setForm={setForm} canMove={slot.canEditGeometry} ignoreSlotId={slot.slotId} check={check} setCheck={setCheck} />
+          {warns ? <TextField label="Lý do vẫn đặt ô ở đây" value={warnReason} onChangeText={setWarnReason} multiline /> : null}
+          {needsCheck ? <Text style={[text.caption, { color: colors.muted }]}>Vị trí, kích thước, mã hoặc tuyến đã đổi: bấm “Kiểm tra vị trí” trước khi lưu.</Text> : null}
+        </>
+      )}
 
-      {slot.status === 'AVAILABLE' || slot.status === 'SUSPENDED' ? (
+      {!readOnly && (slot.status === 'AVAILABLE' || slot.status === 'SUSPENDED') ? (
         <Card style={{ gap: 10 }}>
           <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>{slot.status === 'SUSPENDED' ? 'Mở lại ô' : 'Tạm ngưng ô'}</Text>
           <TextField label="Lý do" value={statusReason} onChangeText={setStatusReason} multiline placeholder="Bắt buộc" />
@@ -385,7 +536,10 @@ export function NewSlotScreen() {
       <SlotForm form={{ ...form, zoneId: activeZone ?? 0 }} setForm={setForm} canMove check={check} setCheck={setCheck} />
       {warns ? <TextField label="Lý do vẫn đặt ô ở đây" value={warnReason} onChangeText={setWarnReason} multiline /> : null}
       {!check ? <Text style={[text.caption, { color: colors.muted }]}>Bấm “Kiểm tra vị trí” trước khi tạo ô.</Text> : null}
-      <Banner tone="neutral">Vẽ hàng loạt ô và vật cản trên tuyến (cột điện, trụ cứu hoả…) làm trên bản web, nơi có màn hình lớn.</Banner>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Button label="Rải hàng loạt" variant="secondary" icon={{ sf: 'square.grid.3x1.below.line.grid.1x2', md: 'view_week' }} onPress={() => router.push('/ward/slots/batch' as Href)} style={{ flex: 1 }} />
+        <Button label="Chướng ngại vật" variant="secondary" icon={{ sf: 'exclamationmark.triangle', md: 'warning' }} onPress={() => router.push('/ward/slots/features' as Href)} style={{ flex: 1 }} />
+      </View>
     </Screen>
   );
 }

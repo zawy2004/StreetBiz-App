@@ -54,14 +54,11 @@ export function CheckoutScreen() {
   const cart = useCart();
   const place = useCheckoutOrder();
   const [provider, setProvider] = useState<Provider>('MOMO');
-  const [attemptKey, setAttemptKey] = useState<string | null>(null);
+  // One key per cart and wallet (a different cart is a different purchase), kept in a ref with a synchronous
+  // guard so two quick taps before a re-render still share it (the web's idempotencyKey ref).
+  const attempt = useRef<{ cartId: number; provider: Provider; key: string } | null>(null);
+  const submitting = useRef(false);
   const range = usePickupRange(cart.data?.items.length && !cart.data.pendingOrderId ? cart.data.storefrontId : undefined);
-  const [lastCart, setLastCart] = useState<number | undefined>(undefined);
-  if (cart.data?.cartId !== lastCart) {
-    // A different cart is a different purchase: it gets its own key.
-    setLastCart(cart.data?.cartId);
-    setAttemptKey(null);
-  }
 
   if (user?.role_code !== 'CUSTOMER') {
     return (
@@ -109,13 +106,17 @@ export function CheckoutScreen() {
   const reason = blockReason(data.storefrontStatus, data.items.map((i) => i.availabilityStatus));
   const count = data.items.reduce((n, i) => n + i.quantity, 0);
   const pay = () => {
-    if (place.isPending || reason || !range.canOrder) return;
+    if (submitting.current || place.isPending || reason || !range.canOrder) return;
     // The same key for a retried tap on the same cart, so the server never charges twice (BR-37).
-    const idempotencyKey = attemptKey ?? uuid();
-    setAttemptKey(idempotencyKey);
+    // A switched wallet is a new attempt too: the server refuses a key reused for another provider.
+    if (attempt.current?.cartId !== data.cartId || attempt.current.provider !== provider) attempt.current = { cartId: data.cartId, provider, key: uuid() };
+    submitting.current = true;
     place.mutate(
-      { cartId: data.cartId, provider, idempotencyKey, location: range.location },
+      { cartId: data.cartId, provider, idempotencyKey: attempt.current.key, location: range.location },
       {
+        onSettled: () => {
+          submitting.current = false;
+        },
         onSuccess: async (checkout) => {
           await Promise.all([queryClient.invalidateQueries({ queryKey: CART_KEY }), queryClient.invalidateQueries({ queryKey: ['orders', 'customer', 'list'] })]);
           router.replace(`/customer/orders/${checkout.orderId}/payment` as Href);

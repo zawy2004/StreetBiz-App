@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
@@ -19,11 +19,12 @@ import { complianceApi } from '../ward-api';
 export function AiSuggestionCard({ title, aiLogId, children }: { title: string; aiLogId?: number | null; children: ReactNode }) {
   const [decision, setDecision] = useState<{ accepted: boolean; at: string } | null>(null);
   const [busy, setBusy] = useState<'yes' | 'no' | null>(null);
+  const [note, setNote] = useState('');
   const send = async (accepted: boolean) => {
     if (!aiLogId) return;
     setBusy(accepted ? 'yes' : 'no');
     try {
-      const r = await complianceApi.aiFeedback(aiLogId, accepted);
+      const r = await complianceApi.aiFeedback(aiLogId, accepted, note.trim() || undefined);
       setDecision({ accepted: r.accepted, at: r.reviewedAt });
       showToast(accepted ? 'Đã ghi nhận chấp nhận gợi ý AI' : 'Đã ghi nhận không chấp nhận gợi ý AI');
     } catch (e) {
@@ -44,11 +45,25 @@ export function AiSuggestionCard({ title, aiLogId, children }: { title: string; 
         decision ? (
           <Text style={[text.caption, { color: colors.onMango, fontFamily: fonts.semibold }]}>
             {decision.accepted ? 'Đã chấp nhận' : 'Không chấp nhận'} gợi ý lúc {formatVietnamDateTime(decision.at)}
+            {' · '}
+            <Text onPress={() => setDecision(null)} accessibilityRole="button" style={{ color: colors.sign, textDecorationLine: 'underline' }}>
+              Đổi ý
+            </Text>
           </Text>
         ) : (
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button label="Không chấp nhận" variant="secondary" loading={busy === 'no'} disabled={busy != null} onPress={() => void send(false)} style={{ flex: 1 }} />
-            <Button label="Chấp nhận gợi ý" variant="secondary" loading={busy === 'yes'} disabled={busy != null} onPress={() => void send(true)} style={{ flex: 1 }} />
+          <View style={{ gap: 8 }}>
+            <TextInput
+              value={note}
+              onChangeText={(v) => setNote(v.slice(0, 500))}
+              placeholder="Ghi chú (không bắt buộc)"
+              placeholderTextColor={colors.muted}
+              accessibilityLabel="Ghi chú về gợi ý AI"
+              style={{ minHeight: 40, paddingHorizontal: 12, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: 1, borderColor: '#FFE7A3', fontFamily: fonts.regular, fontSize: 15, color: colors.ink }}
+            />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button label="Không chấp nhận" variant="secondary" loading={busy === 'no'} disabled={busy != null} onPress={() => void send(false)} style={{ flex: 1 }} />
+              <Button label="Chấp nhận gợi ý" variant="secondary" loading={busy === 'yes'} disabled={busy != null} onPress={() => void send(true)} style={{ flex: 1 }} />
+            </View>
           </View>
         )
       ) : null}

@@ -21,10 +21,13 @@ import { StatusPill } from '@/components/status/StatusPill';
 import { commerceApi, errorMessage } from '@/core/api';
 import { statusLabel } from '@/core/constants/status-labels';
 import { directionsUrl } from '@/features/buyer-discovery/discovery-format';
+import { detectPosition } from '@/features/buyer-discovery/geolocation';
+import { useNow } from '@/features/sidewalk-slots/useNow';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, tabular, text } from '@/theme';
 import { formatVnd } from '@/utils/format';
 import { orderApi } from '../api/orderApi';
+import { haversineMeters, walkingMinutes } from '../pickup/pickup-range';
 import { dayHeading, orderItemsSummary, providerName, refundPresentation, useOnline, vietnamDayKey } from '../components/order-display';
 import { formatOrderDate, formatOrderTime } from '../components/order-format';
 import { useAnnounceArrival, useOrderTracking } from '../hooks/useOrderTracking';
@@ -230,6 +233,8 @@ export function CustomerOrderDetailScreen() {
   useReadyNotice(order.data?.orderStatus);
   const refresh = useRefreshAfterOrderMutation('customer', Number(orderId));
   const announce = useAnnounceArrival(order.data?.orderId);
+  const [locatingEta, setLocatingEta] = useState(false);
+  const arrivalNow = useNow(15_000);
   const cancel = useMutation({
     mutationFn: () => orderApi.cancel(order.data!.orderId),
     onSuccess: async (next) => {
@@ -269,6 +274,10 @@ export function CustomerOrderDetailScreen() {
   const progress = trackingProgress(steps);
   const t = tracking.data;
   const point = t?.pickupPoint;
+  // At most 3 notices an order (the server refuses more), one every 2 minutes, none once the stall has seen it.
+  const sentAt = announce.data?.notifiedAt ?? t?.arrivalNotifiedAt ?? null;
+  const canAnnounce =
+    (!sentAt || arrivalNow - Date.parse(sentAt) >= 2 * 60_000) && (t?.arrivalNoticeCount ?? 0) < 3 && !t?.arrivalAcknowledgedAt;
   const est = t?.readyEstimate;
 
   return (
@@ -330,12 +339,27 @@ export function CustomerOrderDetailScreen() {
           {point ? <Button label="Chỉ đường" variant="secondary" icon={{ sf: 'arrow.triangle.turn.up.right.diamond.fill', md: 'directions' }} onPress={() => void Linking.openURL(directionsUrl(point.latitude, point.longitude))} style={{ flex: 1 }} /> : null}
           {collectable ? (
             <Button
-              label={t?.arrivalAcknowledgedAt ? 'Quán đã thấy' : t?.arrivalNotifiedAt ? 'Báo lại' : 'Tôi đang đến'}
+              label={t?.arrivalAcknowledgedAt ? 'Quán đã thấy' : sentAt ? 'Báo lại' : 'Tôi đang đến'}
               variant="sign"
               icon={{ sf: 'figure.walk', md: 'directions_walk' }}
-              loading={announce.isPending}
-              disabled={(t?.arrivalNoticeCount ?? 0) >= 3 || !!t?.arrivalAcknowledgedAt}
-              onPress={() => announce.mutate(undefined, { onSuccess: () => showToast('Đã báo quán bạn đang đến'), onError: (e) => showToast(errorMessage(e), 'error') })}
+              loading={announce.isPending || locatingEta}
+              disabled={!canAnnounce || announce.isPending || locatingEta}
+              onPress={async () => {
+                // With the buyer's position, the stall gets a walking ETA (as on the web); without it, none.
+                setLocatingEta(true);
+                let etaMinutes: number | undefined;
+                try {
+                  if (point) etaMinutes = walkingMinutes(haversineMeters(point, await detectPosition()));
+                } catch {
+                  etaMinutes = undefined;
+                } finally {
+                  setLocatingEta(false);
+                }
+                announce.mutate(etaMinutes, {
+                  onSuccess: (notice) => showToast(notice.alreadySent ? 'Quán đã nhận được thông báo của bạn.' : 'Đã báo quán bạn đang đến.'),
+                  onError: (e) => showToast(errorMessage(e), 'error'),
+                });
+              }}
               style={{ flex: 1 }}
             />
           ) : null}

@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
 import { Card, KeyValueList, Segments } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
@@ -16,10 +16,12 @@ import { Screen } from '@/components/layout/Screen';
 import { LeafletMap } from '@/components/map/LeafletMap';
 import { StatusPill } from '@/components/status/StatusPill';
 import { errorMessage } from '@/core/api';
+import { env } from '@/core/config/env';
 import { DEFAULT_CENTER } from '@/features/sidewalk-slots/map-constants';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, tabular, text } from '@/theme';
 import { formatVietnamDateTime, formatVnd } from '@/utils/format';
+import { ProposalAssessment } from '../components/ProposalAssessment';
 import { Blockers } from '../components/ReviewParts';
 import { actionLabels, caseLabels, evidenceLabels, statusLabel, wardApi, type CaseKind, type GeoPoint, type WardCase } from '../ward-api';
 
@@ -148,6 +150,7 @@ export function WardCaseScreen() {
         {d.summary ? <Text style={[text.callout, { color: colors.ink }]}>{d.summary}</Text> : null}
       </Card>
       {kind === 'proposals' ? <LocationCheck record={d} onSaved={(next) => cache.setQueryData(key, next)} /> : null}
+      {kind === 'proposals' && env.enableAiCompliance ? <ProposalAssessment record={d} /> : null}
       <Blockers items={d.blockers} />
       <Card>
         <KeyValueList
@@ -180,8 +183,14 @@ export function WardCaseScreen() {
               label={actionLabels[action] ?? action}
               variant={action === 'APPROVE' ? 'primary' : 'secondary'}
               loading={decide.isPending && decide.variables?.action === action}
-              disabled={!reason.trim() || decide.isPending}
-              onPress={() => decide.mutate({ data: d, action })}
+              disabled={!reason.trim() || decide.isPending || record.isRefetching}
+              // Confirmed first, like the web's ConfirmDialog: the decision is the officer's and final.
+              onPress={() =>
+                Alert.alert(actionLabels[action] ?? action, reason.trim(), [
+                  { text: 'Quay lại', style: 'cancel' },
+                  { text: 'Xác nhận', style: action === 'APPROVE' ? 'default' : 'destructive', onPress: () => decide.mutate({ data: d, action }) },
+                ])
+              }
             />
           ))}
         </Card>

@@ -76,14 +76,19 @@ export function useAddToCart() {
   );
 }
 
-/** − n + on a cart line; 0 removes it. Results replace the cached cart. */
+/**
+ * − n + on a cart line; 0 removes it. Results replace the cached cart. The server overwrites the
+ * line's note on every update, so the note the buyer typed is sent back with the new quantity
+ * (as the web's cart does); otherwise each tap would erase it.
+ */
 export function useSetCartQuantity() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ menuItemId, quantity }: { menuItemId: number; quantity: number }) =>
-      quantity <= 0
-        ? commerceApi.removeCartItem(menuItemId)
-        : commerceApi.updateCartItem(menuItemId, Math.min(99, quantity)),
+    mutationFn: ({ menuItemId, quantity }: { menuItemId: number; quantity: number }) => {
+      if (quantity <= 0) return commerceApi.removeCartItem(menuItemId);
+      const note = queryClient.getQueryData<CommerceCart | null>(CART_KEY)?.items.find((i) => i.menuItemId === menuItemId)?.note ?? null;
+      return commerceApi.updateCartItem(menuItemId, Math.min(99, quantity), note);
+    },
     onSuccess: (cart) => queryClient.setQueryData(CART_KEY, cart ?? null),
     onError: (err) => showToast(errorMessage(err), 'error'),
   });

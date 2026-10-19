@@ -118,6 +118,12 @@ export function VendorOrdersScreen() {
   const counts = useVendorOrderCounts(STAGE_STATUSES);
   const arrivals = useVendorArrivals();
   const transition = useTransition();
+  // "Đã thấy" straight from the ticket, as on the web's board: the buyer learns the stall saw them.
+  const ack = useMutation({
+    mutationFn: (orderId: number) => orderApi.acknowledgeArrival(orderId),
+    onSuccess: () => void cache.invalidateQueries({ queryKey: ['orders', 'vendor', 'arrivals'] }),
+    onError: (e) => showToast(errorMessage(e), 'error'),
+  });
   const totalPages = orders.data?.totalPages ?? 0;
   // Accepting the last order on the last page empties it: step back to the new last page.
   if (totalPages > 0 && page > totalPages) setPage(totalPages);
@@ -184,6 +190,8 @@ export function VendorOrdersScreen() {
             order={item}
             now={now}
             arrival={arrivals.get(item.orderId)}
+            acking={ack.isPending && ack.variables === item.orderId}
+            onAcknowledge={() => ack.mutate(item.orderId)}
             busy={busyId === item.orderId}
             disabled={transition.isPending}
             onAct={(kind) => transition.mutate({ kind, order: item })}
@@ -229,7 +237,25 @@ export function VendorOrdersScreen() {
 }
 
 /** One ticket: who, when, how long it has waited, the dishes with notes, and the one next step. */
-function Ticket({ order, now, arrival, busy, disabled, onAct }: { order: Order; now: number; arrival?: OrderArrival; busy: boolean; disabled: boolean; onAct: (k: Kind) => void }) {
+function Ticket({
+  order,
+  now,
+  arrival,
+  acking,
+  onAcknowledge,
+  busy,
+  disabled,
+  onAct,
+}: {
+  order: Order;
+  now: number;
+  arrival?: OrderArrival;
+  acking: boolean;
+  onAcknowledge: () => void;
+  busy: boolean;
+  disabled: boolean;
+  onAct: (k: Kind) => void;
+}) {
   const waited = minutesSince(enteredStageAt(order), now);
   const urgency = order.orderStatus === 'PLACED' ? waitTone(waited) : 'calm';
   const shown = order.items.slice(0, ticketItemsShown(order.items.length));
@@ -262,6 +288,9 @@ function Ticket({ order, now, arrival, busy, disabled, onAct }: { order: Order; 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, backgroundColor: colors.signTint }}>
             <Icon sf="figure.walk" md="directions_walk" size={16} color={colors.sign} />
             <Text style={[text.footnote, { flex: 1, color: colors.sign }]} numberOfLines={2}>{arrival.message}</Text>
+            <Pressable onPress={onAcknowledge} disabled={acking} accessibilityRole="button" accessibilityLabel="Báo khách: quán đã thấy" hitSlop={6} style={({ pressed }) => ({ paddingHorizontal: 12, height: 32, borderRadius: 16, justifyContent: 'center', backgroundColor: pressed ? colors.signTint : colors.white, borderWidth: 1, borderColor: colors.sign })}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.sign }}>{acking ? 'Đang báo…' : 'Đã thấy'}</Text>
+            </Pressable>
           </View>
         ) : null}
         <View style={{ gap: 6 }}>

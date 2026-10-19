@@ -5,11 +5,14 @@ import { Pressable } from 'react-native';
 import { Icon } from '@/components/common/Icon';
 import { colors } from '@/theme';
 
-/** Opens Trợ lý StreetBiz [AI] from a home header: the mango "advice" colour, never the brand CTA. */
-export function AssistantButton() {
+/**
+ * Opens Trợ lý StreetBiz [AI] from a home header: the mango "advice" colour, never the brand CTA.
+ * `pageKey` names the page it was opened from (the web's page context, e.g. "ward.dashboard").
+ */
+export function AssistantButton({ pageKey }: { pageKey?: string }) {
   return (
     <Pressable
-      onPress={() => router.push('/assistant')}
+      onPress={() => router.push(pageKey ? { pathname: '/assistant', params: { pageKey } } : '/assistant')}
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel="Trợ lý StreetBiz [AI]"

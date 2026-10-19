@@ -265,11 +265,11 @@ export function ReportedContentReviewScreen() {
       </Card>
       {r.status === 'PENDING' ? (
         <View style={{ gap: 10 }}>
-          <Button label="Ẩn nội dung" icon={{ sf: 'eye.slash.fill', md: 'visibility_off' }} loading={decide.isPending && decide.variables === 'hide'} disabled={decide.isPending} onPress={() => ask('hide', 'Ẩn nội dung này?', 'Nội dung không còn hiển thị công khai và các báo cáo trùng sẽ được đóng.')} style={{ backgroundColor: colors.danger }} />
+          <Button label="Ẩn nội dung" icon={{ sf: 'eye.slash.fill', md: 'visibility_off' }} loading={decide.isPending && decide.variables === 'hide'} disabled={decide.isPending || !r.contentExists} onPress={() => ask('hide', 'Ẩn nội dung này?', 'Nội dung không còn hiển thị công khai và các báo cáo trùng sẽ được đóng.')} style={{ backgroundColor: colors.danger }} />
           <Button label="Bỏ qua báo cáo" variant="secondary" loading={decide.isPending && decide.variables === 'dismiss'} disabled={decide.isPending} onPress={() => ask('dismiss', 'Bỏ qua báo cáo?', 'Báo cáo được đóng mà không thay đổi nội dung.')} />
         </View>
       ) : r.status === 'HIDDEN' ? (
-        <Button label="Khôi phục nội dung" variant="secondary" icon={{ sf: 'arrow.uturn.backward', md: 'undo' }} loading={decide.isPending} onPress={() => ask('restore', 'Khôi phục nội dung?', 'Người bán lấy lại quyền với nội dung này. Gian hàng vẫn tạm dừng và món ở trạng thái hết hàng cho tới khi người bán mở lại.')} />
+        <Button label="Khôi phục nội dung" variant="secondary" icon={{ sf: 'arrow.uturn.backward', md: 'undo' }} loading={decide.isPending} disabled={decide.isPending || !r.contentExists} onPress={() => ask('restore', 'Khôi phục nội dung?', 'Người bán lấy lại quyền với nội dung này. Gian hàng vẫn tạm dừng và món ở trạng thái hết hàng cho tới khi người bán mở lại.')} />
       ) : null}
     </Screen>
   );
@@ -309,9 +309,14 @@ export function ComplaintReviewScreen() {
   }
   const c = complaint.data;
   const editable = COMPLAINT_OPEN.includes(c.status);
-  const refundable = Math.max(0, (c.paymentAmount ?? 0) - c.refundedAmount);
+  // Only a refund request can carry a refund, and never more than both what was asked and what was
+  // paid, less what is already refunded (the server refuses anything else).
+  const isRefundRequest = c.complaintType === 'REFUND_REQUEST';
+  const requestedRemaining = Math.max(0, (c.requestedRefundAmount ?? 0) - c.refundedAmount);
+  const paidRemaining = Math.max(0, (c.paymentAmount ?? 0) - c.refundedAmount);
+  const refundable = isRefundRequest ? Math.min(requestedRemaining, paidRemaining) : 0;
   const refundNumber = refund ? Number(refund) : 0;
-  const refundError = refund && (refundNumber <= 0 || refundNumber > refundable) ? `Hoàn từ 1 đến ${formatVnd(refundable)}.` : undefined;
+  const refundError = refund && (!Number.isSafeInteger(refundNumber) || refundNumber <= 0 || refundNumber > refundable) ? `Hoàn từ 1 đến ${formatVnd(refundable)}.` : undefined;
   return (
     <Screen>
       <Stack.Screen options={{ title: `Đơn #${c.orderCode}` }} />
@@ -337,7 +342,7 @@ export function ComplaintReviewScreen() {
       {editable ? (
         <Card style={{ gap: 10 }}>
           <SectionHeader title="Quyết định" />
-          <TextField label="Ghi chú xử lý" value={notes} onChangeText={setNotes} multiline placeholder="Bắt buộc" />
+          <TextField label="Ghi chú xử lý" value={notes} onChangeText={setNotes} multiline maxLength={1000} placeholder="Bắt buộc" hint={`${notes.length}/1000`} />
           {refundable > 0 ? <TextField label="Duyệt hoàn tiền" optional value={refund} onChangeText={(v) => setRefund(v.replace(/\D/g, ''))} keyboardType="number-pad" hint={`Tối đa ${formatVnd(refundable)}. Để trống nếu không hoàn.`} error={refundError} /> : null}
           <Text style={[text.caption, { color: colors.muted }]}>{refundNumber ? `Giải quyết: duyệt hoàn ${formatVnd(refundNumber)}.` : 'Giải quyết: không kèm hoàn tiền.'} Từ chối: không hoàn tiền.</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>

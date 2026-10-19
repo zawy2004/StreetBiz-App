@@ -22,11 +22,13 @@ export type FinanceReturnState =
   | { phase: 'pending'; transactionId: number }
   | { phase: 'failed'; message: string };
 
-export function useFinancePaymentReturn(onSuccess: () => void) {
+export function useFinancePaymentReturn(onSuccess: () => void, onFailed?: () => void) {
   const [state, setState] = useState<FinanceReturnState>({ phase: 'idle' });
   const onSuccessRef = useRef(onSuccess);
+  const onFailedRef = useRef(onFailed);
   useEffect(() => {
     onSuccessRef.current = onSuccess;
+    onFailedRef.current = onFailed;
   });
 
   const check = useCallback(async (transactionId: number) => {
@@ -39,6 +41,7 @@ export function useFinancePaymentReturn(onSuccess: () => void) {
         onSuccessRef.current();
       } else if (result.status === 'FAILED') {
         usePendingPayment.getState().set(null);
+        onFailedRef.current?.();
         setState({ phase: 'failed', message: 'MoMo báo giao dịch không thành công. Bạn có thể thanh toán lại.' });
       } else {
         setState({ phase: 'pending', transactionId });

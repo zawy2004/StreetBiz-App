@@ -15,6 +15,7 @@ import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { StatusPill } from '@/components/status/StatusPill';
 import { errorMessage } from '@/core/api';
+import { env } from '@/core/config/env';
 import { colors, fonts, radius, tabular, text } from '@/theme';
 import { formatVietnamDateTime, formatVnd } from '@/utils/format';
 import { AiSuggestionCard } from '../components/ReviewParts';
@@ -244,7 +245,9 @@ export function ZoneEditScreen() {
   const timesOk = validTime(d.from) && validTime(d.to) && (!d.from === !d.to);
   const priceOk = monthly ? Number(d.pricePerMonth) > 0 : Number(d.pricePerDay) > 0;
   const docOk = !newDoc || (d.regulationNumber.trim() && d.regulationIssuedOn && d.regulationIssuer.trim());
-  const valid = d.zoneName.trim() && d.zoneCode.trim() && priceOk && timesOk && docOk && d.fees.every((f) => f.componentName.trim() && Number(f.unitAmount) >= 0);
+  // Every update needs a reason (the server refuses one without), a new zone does not.
+  const reasonOk = isNew || reason.trim().length > 0;
+  const valid = d.zoneName.trim() && d.zoneCode.trim() && priceOk && timesOk && docOk && reasonOk && d.fees.every((f) => f.componentName.trim() && Number(f.unitAmount) >= 0);
   const needImpact = !isNew && !impact;
   const sg = suggestion.data;
 
@@ -280,7 +283,7 @@ export function ZoneEditScreen() {
           </View>
         </View>
       ) : null}
-      {!isNew && zone ? (
+      {!isNew && zone && env.enableAiCompliance ? (
         sg ? (
           <AiSuggestionCard title={sg.direction === 'INSUFFICIENT_DATA' ? 'Chưa đủ dữ liệu để gợi ý giá' : `Gợi ý ${formatVnd(sg.suggestedPricePerDay)}/ngày`} aiLogId={sg.isAiGenerated ? sg.aiLogId : null}>
             <Text style={[text.footnote, { color: colors.ink }]}>{sg.explanation}</Text>
@@ -324,7 +327,7 @@ export function ZoneEditScreen() {
           <TextField label="Cơ quan ban hành" value={d.regulationIssuer} onChangeText={(v) => set({ regulationIssuer: v })} placeholder="VD: UBND phường Hải Châu" />
         </>
       ) : null}
-      {!isNew ? <TextField label="Lý do thay đổi" optional value={reason} onChangeText={setReason} multiline /> : null}
+      {!isNew ? <TextField label="Lý do thay đổi" value={reason} onChangeText={(v) => setReason(v.slice(0, 500))} multiline placeholder="Bắt buộc khi sửa tuyến" hint={`${reason.length}/500`} /> : null}
 
       {impact ? (
         <Banner tone={impact.pendingApplications.length || impact.openRenewals.length || impact.activeContractsAffectedByHours ? 'warning' : 'success'} title="Ảnh hưởng nếu lưu">

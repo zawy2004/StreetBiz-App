@@ -12,6 +12,7 @@ import type {
   AssistantEvent,
   AssistantLocation,
   AssistantMessage,
+  AssistantPageContext,
   AssistantRole,
   Capabilities,
   ResponseStyle,
@@ -28,7 +29,7 @@ function chatbotHubUrl(apiBaseUrl = env.apiBaseUrl): string {
  * gap while a reply is generating, so a dropped socket never leaves an answer half-written.
  * Nothing here changes business state: the assistant only reads and explains (BR-41).
  */
-export function useAssistant(role: AssistantRole, accountKey: string) {
+export function useAssistant(role: AssistantRole, accountKey: string, pageContext?: AssistantPageContext) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [conversations, setConversations] = useState<AssistantConversation[]>([]);
   const [conversationId, setConversationId] = useState<string>();
@@ -201,7 +202,15 @@ export function useAssistant(role: AssistantRole, accountKey: string) {
     if (id) await refresh(id).catch((e) => setError(errorMessage(e)));
   };
 
-  const send = async (content: string, options: { responseStyle?: ResponseStyle; location?: AssistantLocation; replay?: boolean } = {}) => {
+  /**
+   * `retryOf` asks the server for a fresh answer to an earlier question (a new request id);
+   * `replay` re-sends the very last request with its own id, for a response lost in transit
+   * (the server then returns what it already stored instead of answering twice).
+   */
+  const send = async (
+    content: string,
+    options: { responseStyle?: ResponseStyle; location?: AssistantLocation; retryOf?: string; replay?: boolean } = {},
+  ) => {
     if (busy || posting.current || !content.trim()) return;
     posting.current = true;
     setError('');
@@ -213,6 +222,8 @@ export function useAssistant(role: AssistantRole, accountKey: string) {
         : {
             clientRequestId: uuid(),
             content: content.trim(),
+            pageContext,
+            retryOfMessageId: options.retryOf,
             responseStyle: options.responseStyle,
             ...(options.location ? { location: options.location } : {}),
           };
@@ -334,9 +345,19 @@ export function useAssistant(role: AssistantRole, accountKey: string) {
     loadOlder,
     loadConversations,
     feedback,
-    retry: () => {
+    /** The error banner's "Thử lại yêu cầu": the same request again (see `send`). */
+    retryRequest: () => {
       const last = lastRequest.current;
       if (last) void send(last.content, { replay: true });
+    },
+    /** "Hỏi lại" / "Tạo lại câu trả lời": a new answer to the question before `answer`. */
+    regenerate: (answer: AssistantMessage, responseStyle?: ResponseStyle) => {
+      const index = messagesRef.current.findIndex((m) => m.id === answer.id);
+      const question = messagesRef.current
+        .slice(0, index < 0 ? undefined : index)
+        .reverse()
+        .find((m) => m.sender === 'USER');
+      if (question) void send(question.content, { retryOf: answer.id, responseStyle: answer.responseStyle ?? responseStyle });
     },
   };
 }

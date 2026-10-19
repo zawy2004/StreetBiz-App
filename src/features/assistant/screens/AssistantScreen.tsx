@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, Stack, type Href } from 'expo-router';
+import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -48,7 +48,10 @@ const SOURCE_KIND: Record<AssistantSource['kind'], { label: string; sf: string; 
 export function AssistantScreen() {
   const user = useAuthStore((s) => s.user);
   const role: AssistantRole = (user?.role_code as AssistantRole | undefined) ?? 'GUEST';
-  const chat = useAssistant(role, String(user?.id ?? 'guest'));
+  // Opened from a screen that names what it shows (the ward dashboard): the server preloads it.
+  const params = useLocalSearchParams<{ pageKey?: string; entityId?: string }>();
+  const pageContext = params.pageKey ? { pageKey: params.pageKey, ...(params.entityId ? { entityId: params.entityId } : {}) } : undefined;
+  const chat = useAssistant(role, String(user?.id ?? 'guest'), pageContext);
   const headerHeight = useHeaderHeight();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [style, setStyle] = useState<ResponseStyle>('concise');
@@ -140,7 +143,7 @@ export function AssistantScreen() {
               busy={chat.busy}
               onOpen={open}
               onAsk={ask}
-              onRetry={chat.retry}
+              onRetry={() => chat.regenerate(item, style)}
               onFeedback={(helpful) => chat.feedback(item, helpful)}
               canRate={role !== 'GUEST'}
             />
@@ -170,6 +173,7 @@ export function AssistantScreen() {
         onLocation={setLocation}
         onSend={ask}
         onStop={() => void chat.stop()}
+        onRetryRequest={chat.retryRequest}
       />
       <Sheet visible={historyOpen} onClose={() => setHistoryOpen(false)} title="Các cuộc trò chuyện" subtitle={caps ? `Lưu ${caps.retentionDays} ngày, chỉ bạn xem được.` : undefined}>
         <View style={{ gap: 8 }}>
@@ -380,10 +384,10 @@ function AnswerCard({
             <Text style={[text.footnote, { color: colors.onDanger }]}>
               {message.error?.message ?? (message.status === 'CANCELLED' ? 'Đã dừng câu trả lời.' : 'Trợ lý chưa trả lời được câu này.')}
             </Text>
-            {latest && message.status !== 'CANCELLED' && (message.error?.retryable ?? true) ? (
+            {message.error?.retryable !== false ? (
               <Pressable onPress={onRetry} disabled={busy} accessibilityRole="button" style={({ pressed }) => ({ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 14, borderRadius: 19, backgroundColor: pressed ? colors.sunken : colors.card, borderWidth: 1, borderColor: colors.line })}>
                 <Icon sf="arrow.clockwise" md="refresh" size={15} color={colors.ink} />
-                <Text style={[text.subhead, { color: colors.ink }]}>Thử lại</Text>
+                <Text style={[text.subhead, { color: colors.ink }]}>Hỏi lại</Text>
               </Pressable>
             ) : null}
           </View>
@@ -463,6 +467,9 @@ function AnswerCard({
             <Text style={[text.caption, { flex: 1, color: colors.muted }]}>{rated === undefined ? 'Câu trả lời có ích không?' : 'Cảm ơn góp ý của bạn'}</Text>
             <RateButton icon={{ sf: rated === true ? 'hand.thumbsup.fill' : 'hand.thumbsup', md: 'thumb_up' }} label="Có ích" on={rated === true} disabled={rating || rated !== undefined} onPress={() => void rate(true)} />
             <RateButton icon={{ sf: rated === false ? 'hand.thumbsdown.fill' : 'hand.thumbsdown', md: 'thumb_down' }} label="Chưa đúng" on={rated === false} disabled={rating || rated !== undefined} onPress={() => void rate(false)} />
+            {message.channel !== 'VOICE' ? (
+              <RateButton icon={{ sf: 'arrow.clockwise', md: 'refresh' }} label="Tạo lại câu trả lời" on={false} disabled={busy} onPress={onRetry} />
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -537,6 +544,7 @@ function Composer({
   onLocation,
   onSend,
   onStop,
+  onRetryRequest,
 }: {
   role: AssistantRole;
   busy: boolean;
@@ -548,6 +556,7 @@ function Composer({
   onLocation: (l: AssistantLocation | undefined) => void;
   onSend: (q: string) => void;
   onStop: () => void;
+  onRetryRequest: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState('');
@@ -628,6 +637,11 @@ function Composer({
         <View accessibilityRole="alert" style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
           <Icon sf="exclamationmark.circle.fill" md="error" size={16} color={colors.onDanger} />
           <Text style={[text.footnote, { flex: 1, color: colors.onDanger }]}>{error}</Text>
+          {!busy ? (
+            <Pressable onPress={onRetryRequest} accessibilityRole="button" hitSlop={8}>
+              <Text style={[text.subhead, { color: colors.primary }]}>Thử lại yêu cầu</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </View>

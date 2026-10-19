@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Children, isValidElement, type ReactNode } from 'react';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
@@ -74,7 +74,9 @@ export function Banner({
             {title}
           </Text>
         ) : null}
-        {typeof children === 'string' ? (
+        {/* Plain words, even mixed with values ("Giỏ có {n} món"), go inside one Text: a bare string in a
+            View crashes on native. Only children that are elements are laid out as they are. */}
+        {Children.count(children) > 0 && !Children.toArray(children).some(isValidElement) ? (
           <Text style={[text.subhead, { fontFamily: fonts.regular, color: t.ink }]}>{children}</Text>
         ) : (
           children

@@ -24,8 +24,8 @@ const ANONYMOUS_PATHS = [
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 
 /**
- * Whole-path match. The web matches by prefix, so `/auth/login-history` counts as
- * `/auth/login` and goes out without its bearer token (baseline AC05); the app does not.
+ * Whole-path match, query string ignored. A prefix match would treat `/auth/login-history`
+ * as `/auth/login` and send it without its bearer token.
  */
 function isAnonymous(url: string | undefined): boolean {
   if (!url) return false;

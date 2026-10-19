@@ -115,7 +115,10 @@ export function WardFinanceDetailScreen() {
           ]}
         />
       </Card>
-      {target ? <ActionForm detail={d} target={target} onDone={() => setTarget(null)} /> : null}
+      {target ? (
+        // Keyed by the target so switching row or action starts a fresh form.
+        <ActionForm key={target.kind === 'fee' ? `fee-${target.item.feeItemId}-${target.action}` : target.kind === 'penalty' ? `penalty-${target.item.penaltyId}-${target.action}` : target.kind} detail={d} target={target} onDone={() => setTarget(null)} />
+      ) : null}
 
       <Text style={{ fontFamily: fonts.heavy, fontSize: 17, color: colors.ink }}>Kỳ phí ({d.items.length})</Text>
       {d.items.map((it) => {
@@ -189,8 +192,10 @@ function ActionForm({ detail: d, target, onDone }: { detail: WardFinanceContract
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [reason, setReason] = useState('');
-  const [amount, setAmount] = useState(target.kind === 'deposit' ? String(d.depositPaid) : '');
-  const [dueDate, setDueDate] = useState('');
+  // An adjustment starts from the instalment's current amount and due date, as on the web.
+  const adjusting = target.kind === 'fee' && target.action === 'adjust' ? target.item : null;
+  const [amount, setAmount] = useState(target.kind === 'deposit' ? String(d.depositPaid) : adjusting ? String(adjusting.amount) : '');
+  const [dueDate, setDueDate] = useState(adjusting ? adjusting.dueDate.slice(0, 10) : '');
   const run = useMutation({
     mutationFn: async () => {
       if (target.kind === 'fee' && target.action === 'pay') return wardFinanceApi.recordOfflinePayment({ target: 'FEE', targetId: target.item.feeItemId, method, reference: reference.trim(), note: note.trim() || null });

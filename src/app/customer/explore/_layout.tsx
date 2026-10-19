@@ -10,7 +10,7 @@ export default function ExploreStack() {
     <Stack screenOptions={headerOptions}>
       {/* Khám phá draws its own pinned bar (pickup area + cart), like every food marketplace */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="map" options={{ title: 'Bản đồ quán' }} />
+      <Stack.Screen name="map" options={{ title: 'Bản đồ' }} />
     </Stack>
   );
 }

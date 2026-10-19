@@ -1,10 +1,9 @@
 /**
  * The "(khung 2.000.000 - 3.000.000đ)" a legal basis ends with, as numbers; null when absent.
- * Mirrors LegalBasisText.TryParseBracket on the server, which alone enforces it. (The web copy of
- * this regex lost its backslashes and never matches; this is the intended pattern.)
+ * Same pattern as LegalBasisText.TryParseBracket on the server, which alone enforces it.
  */
 export function parseFineBracket(legalBasis: string | null | undefined): { min: number; max: number } | null {
-  const match = /khung\s+([\d.]+)\s*-\s*([\d.]+)\s*đ/.exec(legalBasis ?? '');
+  const match = /\(khung\s+([\d.]+)\s*-\s*([\d.]+)\s*đ\)/.exec(legalBasis ?? '');
   if (!match) return null;
   const toNumber = (t: string) => Number(t.replace(/\./g, ''));
   return { min: toNumber(match[1] ?? ''), max: toNumber(match[2] ?? '') };

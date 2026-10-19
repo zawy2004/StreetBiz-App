@@ -26,7 +26,8 @@ export const env = {
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || devApiBaseUrl(),
   /** Mock data only on request; the app talks to StreetBiz-BE by default. */
   useMockApi: bool(process.env.EXPO_PUBLIC_USE_MOCK_API),
-  enableAiCompliance: bool(process.env.EXPO_PUBLIC_ENABLE_AI_COMPLIANCE),
+  /** Advisory [AI] panels (price hint, proposal assessment, geofence drift): on, as in the web's .env. */
+  enableAiCompliance: bool(process.env.EXPO_PUBLIC_ENABLE_AI_COMPLIANCE, true),
   enableChatbot: bool(process.env.EXPO_PUBLIC_ENABLE_CHATBOT, true),
   /** Ordering is live on the backend and the web, so it is on in the app too. */
   enablePhase2: bool(process.env.EXPO_PUBLIC_ENABLE_PHASE_2, true),

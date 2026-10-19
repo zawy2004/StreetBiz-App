@@ -119,7 +119,7 @@ export function RegistrationReviewScreen() {
     if ((kind === 'REJECT' || kind === 'MORE_INFO') && !reason.trim()) return showToast('Nhập lý do quyết định.', 'error');
     if (kind === 'APPROVE' && !d.identityVerified) return showToast('Phải xác nhận đã đối chiếu CCCD thủ công trước khi duyệt.', 'error');
     const decision = kind === 'MORE_INFO' ? 'MORE_INFORMATION_REQUIRED' : kind;
-    void run(kind, () => complianceApi.decideEnrollment(id!, decision, reason.trim() || 'Hồ sơ đủ điều kiện', d.status), kind === 'APPROVE' ? 'Đã duyệt hồ sơ đăng ký' : kind === 'MORE_INFO' ? 'Đã yêu cầu bổ sung giấy tờ' : 'Đã từ chối hồ sơ');
+    void run(kind, () => complianceApi.decideEnrollment(id!, decision, reason.trim() || 'Hồ sơ đủ điều kiện thực địa trật tự đô thị', d.status), kind === 'APPROVE' ? 'Đã duyệt hồ sơ đăng ký' : kind === 'MORE_INFO' ? 'Đã yêu cầu bổ sung giấy tờ' : 'Đã từ chối hồ sơ');
   };
 
   return (
@@ -275,7 +275,7 @@ export function RentalApplicationReviewScreen() {
   const decide = (kind: 'APPROVE' | 'REJECT') => {
     if (kind === 'REJECT' && !reason.trim()) return showToast('Nhập lý do từ chối.', 'error');
     if (kind === 'APPROVE' && !d.canApprove) return showToast(d.blockers[0] ?? 'Chưa đủ điều kiện cấp phép.', 'error');
-    void run(kind, () => complianceApi.decideRentalApplication(id!, kind, reason.trim() || 'Đủ điều kiện cấp phép sử dụng tạm thời vỉa hè', d.status), kind === 'APPROVE' ? 'Đã duyệt: hợp đồng, giấy phép QR và lịch thu phí đã được tạo' : 'Đã từ chối cấp phép');
+    void run(kind, () => complianceApi.decideRentalApplication(id!, kind, reason.trim() || 'Đủ điều kiện cấp Giấy phép sử dụng tạm thời lòng đường, vỉa hè', d.status), kind === 'APPROVE' ? 'Đã duyệt: hợp đồng, giấy phép QR và lịch thu phí đã được tạo' : 'Đã từ chối cấp phép');
   };
   return (
     <Screen>
@@ -333,7 +333,7 @@ export function RenewalReviewScreen() {
   const decide = (kind: 'APPROVE' | 'REJECT') => {
     if (kind === 'REJECT' && !reason.trim()) return showToast('Nhập lý do từ chối gia hạn.', 'error');
     if (kind === 'APPROVE' && !d.canApprove) return showToast(d.blockers[0] ?? 'Chưa đủ điều kiện gia hạn.', 'error');
-    void run(kind, () => complianceApi.decideRenewal(id!, kind, reason.trim() || 'Đủ điều kiện gia hạn hợp đồng sử dụng tạm thời vỉa hè', d.status), kind === 'APPROVE' ? 'Đã duyệt gia hạn: hợp đồng và giấy phép đã cập nhật thời hạn mới' : 'Đã từ chối gia hạn');
+    void run(kind, () => complianceApi.decideRenewal(id!, kind, reason.trim() || 'Đủ điều kiện gia hạn hợp đồng sử dụng tạm thời hè phố', d.status), kind === 'APPROVE' ? 'Đã duyệt gia hạn: hợp đồng và giấy phép đã cập nhật thời hạn mới' : 'Đã từ chối gia hạn');
   };
   return (
     <Screen>
