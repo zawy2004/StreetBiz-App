@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,18 +19,20 @@ import { showToast } from '@/components/feedback/Toast';
 import { useFilePicker } from '@/components/forms/FileSourceSheet';
 import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
-import { LeafletMap, type MapMarker } from '@/components/map/LeafletMap';
+import { LeafletMap, type LeafletMapHandle, type MapLayer, type MapMarker } from '@/components/map/LeafletMap';
+import { MapAddressSearch, MapGpsButton, MapLayerSwitch, MapLegend, type LegendItem } from '@/components/map/MapTools';
 import { StatusHeader } from '@/components/native/StatusHeader';
 import { Toggle } from '@/components/native/Toggle';
 import { errorMessage } from '@/core/api';
 import { apiAssetUrl } from '@/core/api/asset-url';
 import { SLOT_STATE } from '@/features/sidewalk-slots/slot-tones';
 import { DEFAULT_CENTER } from '@/features/sidewalk-slots/map-constants';
+import { detectPosition, LOCATE_MESSAGES, LocateError } from '@/features/buyer-discovery/geolocation';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { Signboard, useLightStatusBar } from '@/ui';
 import { formatVietnamDateTime } from '@/utils/format';
-import { businessCategoryLabels, wardConfigApi, type PlacementCheck, type WardSlot } from '../ward-config-api';
+import { businessCategoryLabels, slotStatusLabels, wardConfigApi, type PlacementCheck, type WardSlot } from '../ward-config-api';
 
 type Bucket = 'all' | 'AVAILABLE' | 'BUSY' | 'ACTIVE' | 'SUSPENDED';
 const toneOf = (s: WardSlot['status']) => (s === 'AVAILABLE' ? SLOT_STATE.AVAILABLE : s === 'PENDING_APPLICATION' ? SLOT_STATE.PENDING : s === 'SUSPENDED' ? SLOT_STATE.SUSPENDED : SLOT_STATE.ACTIVE);
@@ -43,6 +45,10 @@ const BUCKETS = [
   { key: 'SUSPENDED', label: 'Tạm ngưng', tone: SLOT_STATE.SUSPENDED },
 ] as const;
 const metres = (n: number) => String(n).replace('.', ',');
+/** Street-feature diamonds, the web's colours: red where business is barred, mango otherwise. */
+const FEATURE_BLOCK_COLOR = '#B42318';
+const FEATURE_OTHER_COLOR = '#C98A04';
+const LEGEND_ORDER: WardSlot['status'][] = ['AVAILABLE', 'PENDING_APPLICATION', 'ACTIVE', 'SUSPENDED'];
 
 function useGrid() {
   const userId = useAuthStore((s) => s.user?.id);
@@ -78,7 +84,38 @@ export function SlotBoardScreen() {
   const needle = query.trim().toLowerCase();
   const shown = slots.filter((s) => inBucket(s, bucket) && (!needle || s.slotCode.toLowerCase().includes(needle) || s.zoneName.toLowerCase().includes(needle)));
   const count = (b: Bucket) => slots.filter((s) => inBucket(s, b)).length;
-  const markers = useMemo<MapMarker[]>(() => shown.map((s) => ({ id: String(s.slotId), latitude: s.latitude, longitude: s.longitude, label: s.slotCode, fill: toneOf(s.status).swatch, ink: toneOf(s.status).onSwatch })), [shown]);
+  const features = useMemo(() => grid.data?.features ?? [], [grid.data]);
+  // Slots as coded pins, street features (obstacles) as diamonds, as on the web's grid map.
+  const markers = useMemo<MapMarker[]>(
+    () => [
+      ...shown.map((s) => ({ id: String(s.slotId), latitude: s.latitude, longitude: s.longitude, label: s.slotCode, fill: toneOf(s.status).swatch, ink: toneOf(s.status).onSwatch })),
+      ...features.map((f) => ({ id: `f${f.featureId}`, latitude: f.latitude, longitude: f.longitude, fill: f.blocksBusiness ? FEATURE_BLOCK_COLOR : FEATURE_OTHER_COLOR, ink: colors.white, shape: 'diamond' as const })),
+    ],
+    [shown, features],
+  );
+  const legend = useMemo<LegendItem[]>(
+    () => [
+      ...LEGEND_ORDER.map((st) => ({ key: st, label: slotStatusLabels[st], count: shown.filter((s) => s.status === st).length, color: toneOf(st).swatch, shape: 'dot' as const })),
+      { key: 'features', label: 'Chướng ngại vật', count: features.length, color: features.some((f) => f.blocksBusiness) ? FEATURE_BLOCK_COLOR : FEATURE_OTHER_COLOR, shape: 'diamond' as const },
+    ],
+    [shown, features],
+  );
+  const map = useRef<LeafletMapHandle>(null);
+  const [layer, setLayer] = useState<MapLayer>('street');
+  const [me, setMe] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const locate = async () => {
+    setLocating(true);
+    try {
+      const fix = await detectPosition();
+      setMe(fix);
+      map.current?.flyTo(fix.latitude, fix.longitude, 18);
+    } catch (e) {
+      showToast(e instanceof LocateError ? LOCATE_MESSAGES[e.reason] : LOCATE_MESSAGES.FAILED, 'error');
+    } finally {
+      setLocating(false);
+    }
+  };
   const open = (slotId: number) => router.push(`/ward/slots/${slotId}` as Href);
   // "Chọn nhiều" (web BulkStatusPanel): suspend or reopen a whole stretch at once.
   const [selecting, setSelecting] = useState(false);
@@ -171,8 +208,42 @@ export function SlotBoardScreen() {
       <Stack.Screen options={{ title: 'Lưới ô vỉa hè', headerShown: false }} />
       {view === 'MAP' && !grid.isPending ? (
         <View style={{ flex: 1 }}>
-          {header}
-          <LeafletMap center={DEFAULT_CENTER} zoom={16} markers={markers} onMarkerPress={(id) => open(Number(id))} style={{ flex: 1 }} />
+          {/* The map gets the screen: a slim orange band with the view switch replaces the signboard */}
+          <View style={{ paddingTop: insets.top + 8, paddingBottom: 12, paddingHorizontal: 16, gap: 10, backgroundColor: colors.brand }}>
+            <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={[sign.price, { fontSize: 22, lineHeight: 28, color: colors.white }]}>
+              LƯỚI Ô VỈA HÈ
+            </Text>
+            <Segments<'LIST' | 'MAP'> value={view} onChange={setView} options={[{ key: 'LIST', label: 'Dải phố' }, { key: 'MAP', label: 'Bản đồ' }]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <LeafletMap
+              ref={map}
+              center={DEFAULT_CENTER}
+              zoom={16}
+              markers={markers}
+              layer={layer}
+              me={me}
+              onMarkerPress={(id) => (id.startsWith('f') ? router.push('/ward/slots/features' as Href) : open(Number(id)))}
+              style={{ flex: 1 }}
+            />
+            {/* Over the map, as on the web: address search and the layer switch, the legend, GPS */}
+            <View pointerEvents="box-none" style={{ position: 'absolute', left: 12, right: 12, top: 12, gap: 8 }}>
+              <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <MapAddressSearch onPick={(m) => map.current?.flyTo(m.latitude, m.longitude, 18)} />
+                </View>
+                <MapLayerSwitch value={layer} onChange={setLayer} />
+              </View>
+              <View pointerEvents="box-none" style={{ alignSelf: 'flex-start', maxWidth: '100%' }}>
+                <MapLegend items={legend} />
+              </View>
+            </View>
+            {selecting ? null : (
+              <View pointerEvents="box-none" style={{ position: 'absolute', left: 12, bottom: 16 }}>
+                <MapGpsButton locating={locating} onPress={() => void locate()} />
+              </View>
+            )}
+          </View>
         </View>
       ) : (
         <FlatList

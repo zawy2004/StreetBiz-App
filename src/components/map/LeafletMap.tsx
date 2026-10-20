@@ -16,7 +16,12 @@ export type MapMarker = {
   /** Dashed edge, for "held" (colour is never the only signal). */
   dashed?: boolean;
   selected?: boolean;
+  /** `diamond`: a street feature (obstacle) rather than a slot. */
+  shape?: 'pin' | 'diamond';
 };
+
+/** The base map: Esri's street map, or its satellite imagery with the place/road names over it (as on the web). */
+export type MapLayer = 'street' | 'satellite';
 
 export type MapBounds = { minLat: number; maxLat: number; minLng: number; maxLng: number };
 
@@ -41,6 +46,8 @@ type Props = {
   autoFit?: boolean;
   /** A picture of a place inside a scrolling page: no pan or zoom, touches pass to the page. */
   interactive?: boolean;
+  /** Street map (default) or satellite imagery. */
+  layer?: MapLayer;
 };
 
 const HTML = `<!doctype html><html><head>
@@ -52,17 +59,20 @@ html,body,#m{margin:0;height:100%;background:#EEF3EF;-webkit-tap-highlight-color
 .pin{display:flex;align-items:center;justify-content:center;font:700 11px/1 -apple-system,Roboto,sans-serif;
  border-radius:10px;padding:5px 7px;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 6px rgba(17,28,43,.35);transform:translate(-50%,-50%)}
 .pin.dash{border-style:dashed}
+.dia{width:14px;height:14px;border:2px solid #fff;border-radius:3px;box-shadow:0 2px 6px rgba(17,28,43,.35);transform:translate(-50%,-50%) rotate(45deg)}
 .pin.sel{outline:3px solid #EE5500;outline-offset:1px;transform:translate(-50%,-50%) scale(1.15);z-index:999}
 .me{width:16px;height:16px;border-radius:50%;background:#0A5FA8;border:3px solid #fff;box-shadow:0 0 0 6px rgba(10,95,168,.22);transform:translate(-50%,-50%)}
 .leaflet-control-attribution{font-size:9px}
 </style></head><body><div id="m"></div><script>
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 var map=L.map('m',{zoomControl:false,attributionControl:true}).setView([16.0607,108.2155],16);
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:19,attribution:'Esri'}).addTo(map);
+var E='https://server.arcgisonline.com/ArcGIS/rest/services/',T='/MapServer/tile/{z}/{y}/{x}',O={maxZoom:20,maxNativeZoom:19,attribution:'Tiles &copy; Esri'};
+var street=L.tileLayer(E+'World_Street_Map'+T,O).addTo(map),sat=L.layerGroup([L.tileLayer(E+'World_Imagery'+T,O),L.tileLayer(E+'Reference/World_Boundaries_and_Places'+T,O)]);
+window.__layer=function(k){var on=k==='satellite';if(on){map.removeLayer(street);sat.addTo(map)}else{map.removeLayer(sat);street.addTo(map)}};
 var layer=L.layerGroup().addTo(map),meLayer=L.layerGroup().addTo(map),ms=[];
 function esc(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 window.__setMarkers=function(list,fit){layer.clearLayers();ms=list;
- list.forEach(function(p){var h='<div class="pin'+(p.dashed?' dash':'')+(p.selected?' sel':'')+'" style="background:'+p.fill+';color:'+p.ink+'">'+(p.label?esc(p.label):'&nbsp;')+'</div>';
+ list.forEach(function(p){var h=p.shape==='diamond'?'<div class="dia" style="background:'+p.fill+'"></div>':'<div class="pin'+(p.dashed?' dash':'')+(p.selected?' sel':'')+'" style="background:'+p.fill+';color:'+p.ink+'">'+(p.label?esc(p.label):'&nbsp;')+'</div>';
   var mk=L.marker([p.latitude,p.longitude],{icon:L.divIcon({className:'',html:h,iconSize:null}),zIndexOffset:p.selected?1000:0}).addTo(layer);
   mk.on('click',function(e){L.DomEvent.stopPropagation(e);post({t:'marker',id:p.id})});});
  if(fit&&list.length){map.fitBounds(L.latLngBounds(list.map(function(p){return[p.latitude,p.longitude]})).pad(0.25),{maxZoom:18});}};
@@ -77,12 +87,13 @@ post({t:'ready'});
 </script></body></html>`;
 
 /**
- * The map of StreetBiz (slots, stalls, positions): Leaflet with Esri street tiles in a WebView,
- * the web's keyless fallback, so no map key is needed. Pins are drawn from React state; taps,
+ * The map of StreetBiz (slots, stalls, positions): Leaflet with Esri street tiles (or Esri
+ * imagery with names, `layer="satellite"`) in a WebView. These are the same keyless Esri layers
+ * the web shows when it has no Goong maptiles key, so no map key is needed. Pins are drawn from React state; taps,
  * map moves and the view are reported back. Needs the internet for tiles.
  */
 export const LeafletMap = forwardRef<LeafletMapHandle, Props>(function LeafletMap(
-  { center, zoom = 16, markers, onMarkerPress, onBoundsChange, onMapPress, me, style, autoFit, interactive = true },
+  { center, zoom = 16, markers, onMarkerPress, onBoundsChange, onMapPress, me, style, autoFit, interactive = true, layer = 'street' },
   ref,
 ) {
   const web = useRef<WebView>(null);
@@ -105,6 +116,10 @@ export const LeafletMap = forwardRef<LeafletMapHandle, Props>(function LeafletMa
   useEffect(() => {
     if (ready && !interactive) web.current?.injectJavaScript('window.__static();true;');
   }, [ready, interactive]);
+
+  useEffect(() => {
+    if (ready) web.current?.injectJavaScript(`window.__layer('${layer}');true;`);
+  }, [ready, layer]);
 
   useEffect(() => {
     if (!ready) return;
