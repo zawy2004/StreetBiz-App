@@ -10,7 +10,7 @@ import { showToast } from '@/components/feedback/Toast';
 import { ApiError, authApi, errorMessage, OTP_PURPOSE } from '@/core/api';
 import { isPasswordValid, passwordError } from '@/core/auth/password-policy';
 import { formatPhone, phoneError, toLocalPhone } from '@/core/utils/phone';
-import { AuthTitle, PasswordChecklist, TextLink } from '../components/auth-parts';
+import { AuthTitle, PasswordChecklist, PhonePlate, TextLink } from '../components/auth-parts';
 import { usePendingAuthStore } from '../pending-auth-store';
 
 /**
@@ -52,6 +52,7 @@ export function ResetPasswordRequestScreen() {
       <AuthTitle
         title="Quên mật khẩu"
         subtitle="Nhập số điện thoại của tài khoản. Nếu số này đã đăng ký, bạn sẽ nhận mã để đặt mật khẩu mới."
+        icon={{ sf: 'key.fill', md: 'key' }}
       />
       {error ? <Banner tone="danger">{error}</Banner> : null}
       <PhoneField
@@ -112,7 +113,8 @@ export function ResetPasswordScreen() {
 
   return (
     <Screen footer={<Button label="Đặt mật khẩu mới" size={56} loading={busy} onPress={submit} />}>
-      <AuthTitle title="Đặt mật khẩu mới" subtitle={`Cho tài khoản ${formatPhone(reset.phoneNumber)}.`} />
+      <AuthTitle title="Đặt mật khẩu mới" icon={{ sf: 'lock.rotation', md: 'lock_reset' }} />
+      <PhonePlate label="Cho tài khoản" phone={formatPhone(reset.phoneNumber)} />
       {error ? (
         <Banner
           tone="danger"

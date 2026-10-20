@@ -1,14 +1,11 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { HeaderIconButton } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
-import { KerbStrip } from '@/components/common/KerbStrip';
 import { PressableScale } from '@/components/common/PressableScale';
 import { Skeleton } from '@/components/feedback/Skeleton';
 import { StatusPill } from '@/components/status/StatusPill';
@@ -23,12 +20,22 @@ import { formatCountdown, hkdCode, secondsUntil } from '@/features/sidewalk-slot
 import { useHolds } from '@/features/sidewalk-slots/useHolds';
 import { useNow } from '@/features/sidewalk-slots/useNow';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, space, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
+import { daypart, Pass, Plate, RoundButton, Signboard, type Daypart, useLightStatusBar } from '@/ui';
 import { contractProgress, formatVietnamDate, formatVnd, formatVietnamTime } from '@/utils/format';
 import { buildTodos, type Todo } from '../todos';
 
 const go = (href: string) => router.push(href as Href);
 const VISIBLE = 4;
+
+/** The street's own words for a good day's trade, by the clock in Đà Nẵng ("bán đắt" = selling well). */
+const SELLING_WORD: Record<Daypart, string> = {
+  morning: 'mở hàng thôi!',
+  noon: 'trưa bán đắt!',
+  afternoon: 'chiều bán đắt!',
+  evening: 'tối bán đắt!',
+  night: 'nghỉ sớm nhé!',
+};
 
 const TODO_LOOK: Record<Todo['kind'], { icon: { sf: string; md: string }; wash: string; ink: string }> = {
   registration: { icon: { sf: 'doc.text.fill', md: 'description' }, wash: colors.signTint, ink: colors.sign },
@@ -53,16 +60,17 @@ function TodoTicket({ todo }: { todo: Todo }) {
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-        padding: 14,
+        gap: 14,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
         backgroundColor: pressed ? colors.pressed : colors.card,
       })}
     >
-      <View style={{ width: 40, height: 40, borderRadius: 12, borderCurve: 'continuous', backgroundColor: look.wash, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon sf={look.icon.sf} md={look.icon.md} size={19} color={look.ink} />
+      <View style={{ width: 44, height: 44, borderRadius: 14, borderCurve: 'continuous', backgroundColor: look.wash, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon sf={look.icon.sf} md={look.icon.md} size={21} color={look.ink} />
       </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text numberOfLines={2} style={[text.headline, { color: colors.ink }]}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text numberOfLines={2} style={{ fontFamily: fonts.bold, fontSize: 15.5, lineHeight: 21, color: colors.ink }}>
           {todo.title}
         </Text>
         {sub ? <Text style={[text.footnote, tabular, { color: colors.muted }]}>{sub}</Text> : null}
@@ -71,8 +79,8 @@ function TodoTicket({ todo }: { todo: Todo }) {
             {todo.note}
           </Text>
         ) : null}
+        {todo.overdue ? <StatusPill label="Quá hạn" tone="danger" style={{ marginTop: 3 }} /> : null}
       </View>
-      {todo.overdue ? <StatusPill label="Quá hạn" tone="danger" /> : null}
       <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
     </Pressable>
   );
@@ -108,7 +116,12 @@ function useCurrentPermit() {
   };
 }
 
-function PermitMini({ row }: { row: NonNullable<ReturnType<typeof useCurrentPermit>['row']> }) {
+/**
+ * The permit as the pass the vendor hands the officer (v5 `Pass`): the slot code large in sign
+ * lettering, the street, a QR tile; under the tear line, whether it holds today and "Mở mã".
+ * Validity is always the server's answer from this fetch (BR-39): the time it was checked shows.
+ */
+function PermitPass({ row }: { row: NonNullable<ReturnType<typeof useCurrentPermit>['row']> }) {
   const { contract, permit, at } = row;
   const valid = permit!.effectiveStatus === 'VALID';
   const { label, tone } = statusLabel(permit!.effectiveStatus);
@@ -117,36 +130,40 @@ function PermitMini({ row }: { row: NonNullable<ReturnType<typeof useCurrentPerm
     <PressableScale
       onPress={() => go(`/vendor/slots/contracts/${contract.contractId}/permit`)}
       accessibilityLabel={`Giấy phép số ô ${contract.slotCode}: ${label}, còn ${days} ngày. Mở để đưa cán bộ quét`}
-      style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.card, boxShadow: '0 12px 28px -18px rgba(238, 85, 0, 0.6)' }}
     >
-      <LinearGradient
-        colors={valid ? [colors.cta, colors.brand, colors.brandLight] : ['#5F6B7A', '#7B8794']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}
-      >
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.white }}>Giấy phép vỉa hè</Text>
-          <Text style={{ fontFamily: fonts.code, fontSize: 38, lineHeight: 44, color: colors.white, letterSpacing: 0.5 }}>
-            {contract.slotCode}
-          </Text>
-          <Text numberOfLines={1} style={{ fontFamily: fonts.medium, fontSize: 13, color: 'rgba(255,255,255,0.95)' }}>
-            {contract.zoneName}
-          </Text>
-        </View>
-        <View style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon sf="qrcode" md="qr_code_2" size={38} color={colors.ink} />
-        </View>
-      </LinearGradient>
-      <KerbStrip height={5} segment={20} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 }}>
-        <StatusPill label={label} tone={tone} />
-        <Text style={[text.footnote, tabular, { flex: 1, color: colors.muted }]}>
-          {valid ? `Còn ${days} ngày` : 'Không có hiệu lực'}
-          {at ? `, kiểm tra lúc ${formatVietnamTime(at).slice(0, 5)}` : ''}
-        </Text>
-        <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>Mở mã</Text>
-      </View>
+      <Pass
+        accent={valid ? colors.brand : colors.muted}
+        head={
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.muted }}>Giấy phép vỉa hè</Text>
+              <Text maxFontSizeMultiplier={1.3} style={[sign.figure, { color: valid ? colors.ink : colors.muted }]}>
+                {contract.slotCode}
+              </Text>
+              <Text numberOfLines={1} style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
+                {contract.zoneName}
+              </Text>
+            </View>
+            <View style={{ width: 76, height: 76, borderRadius: 18, borderCurve: 'continuous', backgroundColor: valid ? colors.brandTint : colors.sunken, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon sf="qrcode" md="qr_code_2" size={46} color={colors.ink} />
+            </View>
+          </View>
+        }
+        stub={
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <StatusPill label={label} tone={tone} />
+              <Text style={[text.footnote, tabular, { color: colors.muted }]}>
+                {valid ? `Còn ${days} ngày` : 'Không có hiệu lực'}
+                {at ? `, kiểm tra lúc ${formatVietnamTime(at).slice(0, 5)}` : ''}
+              </Text>
+            </View>
+            <View style={{ minHeight: 44, paddingHorizontal: 18, borderRadius: 22, backgroundColor: colors.cta, alignItems: 'center', justifyContent: 'center', boxShadow: shadow.glow }}>
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 15, color: colors.white }}>Mở mã</Text>
+            </View>
+          </View>
+        }
+      />
     </PressableScale>
   );
 }
@@ -159,12 +176,14 @@ const SHORTCUTS: { label: string; note: string; href: string; icon: { sf: string
 ];
 
 /**
- * V01 Trang chủ người bán: "the board at the counter at dawn". What waits today and how much
- * to pay, the permit as a pass to show in one tap, a slot hold counting down, the way to the
- * four jobs of the day. Pull down to check everything again.
+ * V01 Trang chủ người bán, v5 "Biển hiệu phố" (screens/v5/vendor-home.md): the stall's own
+ * orange signboard greets the vendor by the time of day and paints today's two figures (jobs,
+ * money owed); the permit pass lies across the sign's edge, one tap from the officer's scan;
+ * then a slot hold counting down, today's list, the four jobs of the day. Pull to refresh.
  */
 export function VendorHomeScreen() {
   const insets = useSafeAreaInsets();
+  useLightStatusBar();
   const user = useAuthStore((s) => s.user);
   const regs = useRegistrations();
   const fees = useFeeItems();
@@ -197,139 +216,166 @@ export function VendorHomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={{ paddingTop: insets.top + 8, paddingBottom: 10, paddingHorizontal: space.md, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={{ fontFamily: fonts.heavy, fontSize: 22, lineHeight: 28, color: colors.ink }} numberOfLines={1}>
-            Chào {firstName || 'bạn'}
-          </Text>
-          {hkd ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={{ fontFamily: fonts.code, fontSize: 14, color: colors.muted }}>{hkdCode(hkd.registrationId)}</Text>
-              {latest ? <StatusPill label={statusLabel(latest.registrationStatus).label} tone={statusLabel(latest.registrationStatus).tone} /> : null}
-            </View>
-          ) : (
-            <Text style={[text.footnote, { color: colors.muted }]}>Hộ kinh doanh</Text>
-          )}
-        </View>
-        <AssistantButton />
-        <HeaderIconButton icon={{ sf: 'bubble.left.and.bubble.right.fill', md: 'chat' }} label="Tin nhắn" badge={chatUnread} onPress={() => go('/vendor/home/chat')} />
-        <HeaderIconButton icon={{ sf: 'bell.fill', md: 'notifications' }} label="Thông báo" badge={unread} onPress={() => go('/notifications')} />
-      </View>
-
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: space.md, paddingTop: 4, paddingBottom: 40, gap: 18 }}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={colors.cta} colors={[colors.cta]} />}
+        contentContainerStyle={{ paddingBottom: 40, gap: 26 }}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={colors.cta} colors={[colors.cta]} progressViewOffset={insets.top} />}
       >
-        {/* Today's board */}
-        {loadingBoard && todos.length === 0 ? (
-          <Skeleton height={150} radius={radius.card} />
-        ) : todos.length === 0 ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.leafTint }}>
-            <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: colors.leaf, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon sf="checkmark" md="check" size={22} color={colors.white} weight="bold" />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={[text.headline, { color: colors.onLeaf }]}>Không có việc cần xử lý</Text>
-              <Text style={[text.footnote, { color: colors.onLeaf }]}>Phí, biên bản và yêu cầu bổ sung hồ sơ sẽ hiện ở đây.</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.card, boxShadow: '0 12px 30px -20px rgba(17, 28, 43, 0.4)' }}>
-            <LinearGradient colors={[colors.cta, colors.brand]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ padding: 18, gap: 4 }}>
-              <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.white }}>Việc hôm nay</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                <Text style={[{ fontFamily: fonts.heavy, fontSize: 44, lineHeight: 50, color: colors.white }, tabular]}>{todos.length}</Text>
-                <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.white }}>việc cần làm</Text>
+        {/* The stall's signboard: who, today's count and what is owed; the permit pass on its edge */}
+        <Signboard
+          top={
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {hkd ? <Plate code={hkdCode(hkd.registrationId)} /> : null}
+                {latest ? <StatusPill label={statusLabel(latest.registrationStatus).label} tone={statusLabel(latest.registrationStatus).tone} /> : null}
               </View>
-              {toPay > 0 ? (
-                <Text style={[{ fontFamily: fonts.semibold, fontSize: 15, color: colors.white }, tabular]}>Cần trả {formatVnd(toPay)}</Text>
-              ) : null}
-            </LinearGradient>
-            {(expanded ? todos : todos.slice(0, VISIBLE)).map((t, i) => (
-              <View key={t.key} style={{ borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.separator }}>
-                <TodoTicket todo={t} />
-              </View>
-            ))}
-            {todos.length > VISIBLE ? (
-              <Pressable onPress={() => setExpanded((v) => !v)} accessibilityRole="button" style={({ pressed }) => ({ padding: 14, alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.separator, backgroundColor: pressed ? colors.pressed : colors.card })}>
-                <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.primary }}>
-                  {expanded ? 'Thu gọn' : `Xem thêm ${todos.length - VISIBLE} việc`}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-        )}
-
-        {/* No registration yet: the way in */}
-        {!regs.isLoading && regs.registrations.length === 0 ? (
-          <View style={{ padding: 18, gap: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card }}>
-            <View style={{ gap: 4 }}>
-              <Text style={[text.title3, { color: colors.ink }]}>Chưa có hồ sơ đăng ký</Text>
-              <Text style={[text.callout, { color: colors.muted }]}>Đăng ký kinh doanh để bắt đầu thuê ô vỉa hè hợp pháp.</Text>
+              <AssistantButton tone="onSign" />
+              <RoundButton icon={{ sf: 'bubble.left.and.bubble.right.fill', md: 'chat' }} label="Tin nhắn" badge={chatUnread || undefined} onPress={() => go('/vendor/home/chat')} />
+              <RoundButton icon={{ sf: 'bell.fill', md: 'notifications' }} label="Thông báo" badge={unread || undefined} onPress={() => go('/notifications')} />
             </View>
-            {['Nộp hồ sơ hộ kinh doanh', 'Phường duyệt, cấp mã HKD', 'Thuê ô, nhận giấy phép QR'].map((s, i) => (
-              <View key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: i === 0 ? colors.cta : colors.sunken, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: i === 0 ? colors.white : colors.muted }}>{i + 1}</Text>
-                </View>
-                <Text style={[text.callout, { color: colors.ink }]}>{s}</Text>
-              </View>
-            ))}
-            <Button label="Đăng ký ngay" onPress={() => go('/register-business')} />
-            <Pressable onPress={() => go('/vendor/home/onboarding')} hitSlop={8} accessibilityRole="link" style={{ alignSelf: 'center' }}>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>Xem các bước bắt đầu</Text>
-            </Pressable>
+          }
+          line1={`Chào ${firstName || 'bạn'},`}
+          line2={SELLING_WORD[daypart()]}
+          overlap={
+            permit.row ? (
+              <PermitPass row={permit.row} />
+            ) : permit.loading ? (
+              <Skeleton height={190} radius={radius.pass} />
+            ) : undefined
+          }
+        >
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
+            {/* While the board loads, the figures say so instead of a false "0". */}
+            <SignFigure
+              value={loadingBoard && todos.length === 0 ? '…' : String(todos.length)}
+              label={loadingBoard && todos.length === 0 ? 'đang tải việc' : todos.length ? 'việc cần làm' : 'không có việc'}
+            />
+            <SignFigure value={loadingBoard && todos.length === 0 ? '…' : formatVnd(toPay)} label="cần trả" />
           </View>
-        ) : null}
+        </Signboard>
 
-        {/* Permit pass */}
-        {permit.row ? <PermitMini row={permit.row} /> : permit.loading ? <Skeleton height={170} radius={radius.card} /> : null}
-
-        {/* Slot hold counting down */}
-        {liveHolds.length > 0 ? (
-          <Pressable
-            onPress={() => go('/vendor/slots')}
-            accessibilityRole="button"
-            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? '#FFEFC2' : colors.mangoTint })}
-          >
-            <Icon sf="timer" md="timer" size={22} color={colors.onMango} />
-            <Text style={[text.headline, tabular, { flex: 1, color: colors.onMango }]}>
-              Đang giữ chỗ {liveHolds.length} ô, còn {formatCountdown(soonest)}
-            </Text>
-            <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.onMango }}>Nộp đơn ›</Text>
-          </Pressable>
-        ) : null}
-
-        {/* Shortcuts */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-          {SHORTCUTS.map((s) => (
-            <PressableScale
-              key={s.href}
-              onPress={() => go(s.href)}
-              accessibilityLabel={`${s.label}. ${s.note}`}
-              style={{ width: '47.5%', flexGrow: 1, padding: 16, gap: 10, minHeight: 124, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: s.warm ? colors.cta : colors.card }}
+        <View style={{ paddingHorizontal: 20, gap: 26 }}>
+          {/* Slot hold counting down */}
+          {liveHolds.length > 0 ? (
+            <Pressable
+              onPress={() => go('/vendor/slots')}
+              accessibilityRole="button"
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.sticker : colors.mangoTint, borderWidth: 1.5, borderColor: colors.sticker })}
             >
-              <View style={{ width: 40, height: 40, borderRadius: 12, borderCurve: 'continuous', backgroundColor: s.warm ? 'rgba(255,255,255,0.22)' : colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon sf={s.icon.sf} md={s.icon.md} size={20} color={s.warm ? colors.white : colors.primary} />
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.sticker, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon sf="timer" md="timer" size={22} color={colors.plate} />
               </View>
-              <View style={{ gap: 2 }}>
-                <Text style={{ fontFamily: fonts.bold, fontSize: 15.5, lineHeight: 20, color: s.warm ? colors.white : colors.ink }}>{s.label}</Text>
-                <Text style={{ fontFamily: fonts.regular, fontSize: 12.5, lineHeight: 16, color: s.warm ? 'rgba(255,255,255,0.92)' : colors.muted }}>{s.note}</Text>
+              <View style={{ flex: 1, gap: 1 }}>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 15.5, color: colors.onMango }}>Đang giữ chỗ {liveHolds.length} ô</Text>
+                <Text style={[{ fontFamily: fonts.semibold, fontSize: 13.5, color: colors.onMango }, tabular]}>Còn {formatCountdown(soonest)} để nộp đơn</Text>
               </View>
-            </PressableScale>
-          ))}
-        </View>
+              <Icon sf="chevron.right" md="chevron_right" size={14} color={colors.onMango} />
+            </Pressable>
+          ) : null}
 
-        <Pressable onPress={() => go('/vendor/home/onboarding')} accessibilityRole="button" style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.sunken : colors.card })}>
-          <Icon sf="map.fill" md="map" size={20} color={colors.sign} />
-          <View style={{ flex: 1 }}>
-            <Text style={[text.headline, { color: colors.ink }]}>Hướng dẫn 6 bước lên phố</Text>
-            <Text style={[text.footnote, { color: colors.muted }]}>Từ tạo tài khoản tới mở gian hàng</Text>
+          {/* Today's list */}
+          {loadingBoard && todos.length === 0 ? (
+            <Skeleton height={220} radius={radius.card} />
+          ) : todos.length === 0 ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.leafTint }}>
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.leaf, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.white }}>
+                <Icon sf="checkmark" md="check" size={22} color={colors.white} weight="bold" />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 17, color: colors.onLeaf }}>Không có việc cần xử lý</Text>
+                <Text style={[text.footnote, { color: colors.onLeaf }]}>Phí, biên bản và yêu cầu bổ sung hồ sơ sẽ hiện ở đây.</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={{ gap: 14 }}>
+              <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 21, lineHeight: 27, color: colors.ink }}>Việc cần làm</Text>
+              <View style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.card, boxShadow: shadow.card }}>
+                {(expanded ? todos : todos.slice(0, VISIBLE)).map((t, i) => (
+                  <View key={t.key} style={{ borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.separator, marginLeft: i === 0 ? 0 : 0 }}>
+                    <TodoTicket todo={t} />
+                  </View>
+                ))}
+                {todos.length > VISIBLE ? (
+                  <Pressable onPress={() => setExpanded((v) => !v)} accessibilityRole="button" style={({ pressed }) => ({ minHeight: 52, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, borderTopWidth: 1, borderTopColor: colors.separator, backgroundColor: pressed ? colors.brandTint : colors.kerbPaint })}>
+                    <Text style={[{ fontFamily: fonts.heavy, fontSize: 15, color: colors.primary }, tabular]}>
+                      {expanded ? 'Thu gọn' : `Xem thêm ${todos.length - VISIBLE} việc`}
+                    </Text>
+                    <Icon sf={expanded ? 'chevron.up' : 'chevron.down'} md={expanded ? 'expand_less' : 'expand_more'} size={14} color={colors.primary} />
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          )}
+
+          {/* No registration yet: the way in */}
+          {!regs.isLoading && regs.registrations.length === 0 ? (
+            <View style={{ padding: 20, gap: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
+              <View style={{ gap: 4 }}>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 19, color: colors.ink }}>Chưa có hồ sơ đăng ký</Text>
+                <Text style={[text.callout, { color: colors.muted }]}>Đăng ký kinh doanh để bắt đầu thuê ô vỉa hè hợp pháp.</Text>
+              </View>
+              {['Nộp hồ sơ hộ kinh doanh', 'Phường duyệt, cấp mã HKD', 'Thuê ô, nhận giấy phép QR'].map((s, i) => (
+                <View key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: i === 0 ? colors.cta : colors.sunken, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontFamily: fonts.heavy, fontSize: 13.5, color: i === 0 ? colors.white : colors.muted }}>{i + 1}</Text>
+                  </View>
+                  <Text style={[text.callout, { color: colors.ink }]}>{s}</Text>
+                </View>
+              ))}
+              <Button label="Đăng ký ngay" onPress={() => go('/register-business')} />
+              <Pressable onPress={() => go('/vendor/home/onboarding')} hitSlop={8} accessibilityRole="link" style={{ alignSelf: 'center', minHeight: 32, justifyContent: 'center' }}>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 14.5, color: colors.primary }}>Xem các bước bắt đầu</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {/* The four jobs of the day */}
+          <View style={{ gap: 14 }}>
+            <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 21, lineHeight: 27, color: colors.ink }}>Lối tắt</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+              {SHORTCUTS.map((s) => (
+                <PressableScale
+                  key={s.href}
+                  onPress={() => go(s.href)}
+                  accessibilityLabel={`${s.label}. ${s.note}`}
+                  style={{ width: '47.5%', flexGrow: 1, padding: 16, gap: 12, minHeight: 132, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: s.warm ? colors.cta : colors.card, boxShadow: s.warm ? shadow.glow : shadow.card }}
+                >
+                  <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: s.warm ? 'rgba(255,255,255,0.24)' : colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon sf={s.icon.sf} md={s.icon.md} size={22} color={s.warm ? colors.white : colors.primary} />
+                  </View>
+                  <View style={{ gap: 2 }}>
+                    <Text style={{ fontFamily: fonts.heavy, fontSize: 16, lineHeight: 21, color: s.warm ? colors.white : colors.ink }}>{s.label}</Text>
+                    <Text style={{ fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 17, color: s.warm ? colors.white : colors.muted }}>{s.note}</Text>
+                  </View>
+                </PressableScale>
+              ))}
+            </View>
           </View>
-          <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
-        </Pressable>
+
+          <Pressable onPress={() => go('/vendor/home/onboarding')} accessibilityRole="button" style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.signTint : colors.card, boxShadow: shadow.card })}>
+            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.signTint, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon sf="map.fill" md="map" size={20} color={colors.sign} />
+            </View>
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 15.5, color: colors.ink }}>Hướng dẫn 6 bước lên phố</Text>
+              <Text style={[text.footnote, { color: colors.muted }]}>Từ tạo tài khoản tới mở gian hàng</Text>
+            </View>
+            <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
+          </Pressable>
+        </View>
       </ScrollView>
+    </View>
+  );
+}
+
+/** A figure painted on the signboard: white Archivo number, its words under it. */
+function SignFigure({ value, label }: { value: string; label: string }) {
+  return (
+    <View accessible accessibilityLabel={`${value} ${label}`} style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.photo, borderCurve: 'continuous', backgroundColor: 'rgba(255,255,255,0.18)', gap: 2 }}>
+      <Text maxFontSizeMultiplier={1.3} adjustsFontSizeToFit numberOfLines={1} style={[sign.title, { color: colors.white }, tabular]}>
+        {value}
+      </Text>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.white }}>{label}</Text>
     </View>
   );
 }

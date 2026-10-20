@@ -31,13 +31,14 @@ export function StatusHeader({
     <View
       accessible={!action}
       accessibilityRole={action ? undefined : 'summary'}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: t.wash }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: t.wash }}
     >
-      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon sf={icon?.sf ?? t.sf} md={icon?.md ?? t.md} size={21} color={t.ink} />
+      {/* v5: the verdict as a solid seal in the tone's ink, the way a stamp reads from arm's length. */}
+      <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: t.ink, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.white }}>
+        <Icon sf={icon?.sf ?? t.sf} md={icon?.md ?? t.md} size={22} color={colors.white} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[text.headline, { color: t.ink }]}>{title}</Text>
+        <Text style={{ fontFamily: fonts.heavy, fontSize: 17, lineHeight: 23, color: t.ink }}>{title}</Text>
         {detail ? <Text style={[text.footnote, { color: t.ink }]}>{detail}</Text> : null}
         {action ? (
           <Pressable onPress={action.onPress} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start', marginTop: 4, minHeight: 28, justifyContent: 'center' }}>

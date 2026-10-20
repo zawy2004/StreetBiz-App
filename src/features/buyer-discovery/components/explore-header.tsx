@@ -2,90 +2,57 @@ import type { ReactNode } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
-import { colors, fonts, space, tabular } from '@/theme';
+import { RoundButton } from '@/ui';
+import { colors, fonts, shadow, space } from '@/theme';
 
-/** Where the buyer is browsing — the first thing every food app shows, and the way to change it. */
-export function LocationButton({ wardName, onPress }: { wardName: string; onPress: () => void }) {
+/**
+ * Where the buyer is browsing — the first thing every food app shows, and the way to change it.
+ * v5: white words on the orange signboard (or ink on the compact bar's white).
+ */
+export function LocationButton({
+  wardName,
+  onPress,
+  onSign = true,
+}: {
+  wardName: string;
+  onPress: () => void;
+  onSign?: boolean;
+}) {
+  const ink = onSign ? colors.white : colors.ink;
   return (
     <Pressable
       onPress={onPress}
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={`Khu vực ${wardName}, đổi khu vực`}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, flexShrink: 1 }}
     >
-      <View
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 17,
-          backgroundColor: colors.brandTint,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Icon sf="location.fill" md="location_on" size={17} color={colors.cta} />
-      </View>
-      <View>
-        <Text
-          style={{ fontFamily: fonts.medium, fontSize: 12, lineHeight: 15, color: colors.muted }}
-        >
+      <Icon sf="location.fill" md="near_me" size={18} color={onSign ? colors.white : colors.cta} />
+      <View style={{ flexShrink: 1 }}>
+        <Text style={{ fontFamily: fonts.semibold, fontSize: 12, lineHeight: 15, color: onSign ? 'rgba(255,255,255,0.86)' : colors.muted }}>
           Lấy món tại
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 17, lineHeight: 22, color: colors.ink }}>
+          <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: fonts.heavy, fontSize: 16.5, lineHeight: 21, color: ink }}>
             {wardName}
           </Text>
-          <Icon sf="chevron.down" md="expand_more" size={13} color={colors.ink} weight="bold" />
+          <Icon sf="chevron.down" md="expand_more" size={14} color={ink} weight="bold" />
         </View>
       </View>
     </Pressable>
   );
 }
 
-/** Cart in the header, with the dish count on an orange badge. */
-export function CartButton({ count, onPress }: { count: number; onPress: () => void }) {
+/** Cart in the header, with the dish count on a badge (v5 round button). */
+export function CartButton({ count, onPress, onSign = true }: { count: number; onPress: () => void; onSign?: boolean }) {
   return (
-    <Pressable
+    <RoundButton
+      icon={{ sf: 'bag.fill', md: 'shopping_bag' }}
+      label={count ? 'Giỏ hàng, số món' : 'Giỏ hàng trống'}
+      badge={count || undefined}
+      tone={onSign ? 'onSign' : 'plain'}
       onPress={onPress}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={count ? `Giỏ hàng, ${count} món` : 'Giỏ hàng trống'}
-      style={({ pressed }) => ({
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        backgroundColor: pressed ? colors.sunken : colors.card,
-        borderWidth: 1,
-        borderColor: colors.line,
-        alignItems: 'center',
-        justifyContent: 'center',
-      })}
-    >
-      <Icon sf="bag.fill" md="shopping_bag" size={19} color={colors.ink} />
-      {count > 0 ? (
-        <View
-          style={{
-            position: 'absolute',
-            top: -3,
-            right: -3,
-            minWidth: 20,
-            height: 20,
-            borderRadius: 10,
-            paddingHorizontal: 5,
-            backgroundColor: colors.cta,
-            borderWidth: 2,
-            borderColor: colors.bg,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={[{ fontFamily: fonts.bold, fontSize: 11, color: colors.white }, tabular]}>
-            {count > 99 ? '99+' : count}
-          </Text>
-        </View>
-      ) : null}
-    </Pressable>
+    />
   );
 }
 
@@ -106,41 +73,42 @@ export function SearchField({
   onSubmit: () => void;
 }) {
   return (
+    // v5: a white capsule laid across the signboard's lower edge; orange rim while typing.
     <View
       style={{
-        marginHorizontal: space.md,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: colors.card,
-        borderWidth: 1.5,
-        borderColor: focused ? colors.cta : colors.line,
+        minHeight: 56,
+        borderRadius: 28,
+        backgroundColor: colors.white,
+        borderWidth: 2,
+        borderColor: focused ? colors.cta : colors.white,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingLeft: 16,
-        paddingRight: 6,
+        paddingLeft: 18,
+        paddingRight: 8,
         gap: 10,
-        boxShadow: '0 4px 14px -8px rgba(17, 28, 43, 0.18)',
+        boxShadow: shadow.raised,
       }}
     >
-      <Icon sf="magnifyingglass" md="search" size={19} color={colors.cta} weight="semibold" />
+      <Icon sf="magnifyingglass" md="search" size={20} color={colors.primary} weight="semibold" />
       <TextInput
         value={value}
         onChangeText={onChange}
         onFocus={onFocus}
         onBlur={onBlur}
         onSubmitEditing={onSubmit}
-        placeholder="Thèm gì? Tìm món, quán, tên đường"
+        placeholder="Bún chả, bánh mì, tên đường…"
         placeholderTextColor={colors.muted}
         returnKeyType="search"
         autoCorrect={false}
+        maxFontSizeMultiplier={1.4}
         selectionColor={colors.cta}
         cursorColor={colors.cta}
         accessibilityLabel="Tìm món, quán hoặc tên đường"
         style={{
           flex: 1,
-          height: '100%',
-          fontFamily: fonts.medium,
-          fontSize: 15.5,
+          minHeight: 52,
+          fontFamily: fonts.semibold,
+          fontSize: 16,
           color: colors.ink,
           paddingVertical: 0,
         }}
@@ -179,16 +147,16 @@ function SuggestChip({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        height: 36,
-        paddingHorizontal: 13,
-        borderRadius: 18,
+        minHeight: 40,
+        paddingHorizontal: 14,
+        borderRadius: 20,
         backgroundColor: pressed ? colors.brandTint : colors.card,
-        borderWidth: 1,
+        borderWidth: 1.5,
         borderColor: colors.line,
       })}
     >
       <Icon sf={icon.sf} md={icon.md} size={13} color={colors.muted} />
-      <Text numberOfLines={1} style={{ fontFamily: fonts.medium, fontSize: 14, color: colors.ink }}>
+      <Text numberOfLines={1} style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
         {label}
       </Text>
     </Pressable>
@@ -221,7 +189,7 @@ export function SearchSuggestions({
         <View
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
         >
-          <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.ink }}>{title}</Text>
+          <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>{title}</Text>
           {action}
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>

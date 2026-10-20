@@ -3,13 +3,13 @@ import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 
-import { Card, KeyValueList, SectionHeader } from '@/components/common/Blocks';
+import { KeyValueList, SectionHeader } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
 import { Sheet } from '@/components/common/Sheet';
 import { SheetOption } from '@/components/common/SheetOption';
-import { SlotPlate } from '@/components/common/SlotPlate';
 import { Banner } from '@/components/feedback/Banner';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
@@ -20,9 +20,10 @@ import { statusLabel } from '@/core/constants/status-labels';
 import { useRegistrations } from '@/features/business-registrations/useRegistrations';
 import { TRANSFER_STEP_LABELS, transferSteps } from '@/features/sidewalk-slots/my-slots-view';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
+import { Pass, Plate } from '@/ui';
 import { formatVietnamDate } from '@/utils/format';
-import { TransferSteps } from '../components/ContractParts';
+import { PassPlate, TransferSteps } from '../components/ContractParts';
 import { countOutgoingByStage, daysSince } from '../transfer-view';
 
 const go = (href: string) => router.push(href as Href);
@@ -58,7 +59,11 @@ const askDecline = (onYes: () => void) =>
     { text: 'Từ chối', style: 'destructive', onPress: onYes },
   ]);
 
-/** V23 Chuyển nhượng ô (SIDE-12/13): requests waiting on you first, then the ones you sent. */
+/**
+ * V23 Chuyển nhượng ô (SIDE-12/13), v5: requests waiting on you first, as mango-edged tickets
+ * with the slot's plate and both answers; then the ones you sent, counted by stage in sign
+ * figures, each with its three steps.
+ */
 export function TransfersListScreen() {
   const userId = useAuthStore((s) => s.user?.id);
   const { incoming, outgoing } = useTransfers();
@@ -78,6 +83,7 @@ export function TransfersListScreen() {
 
   return (
     <Screen
+      gap={14}
       onRefresh={() => void Promise.all([incoming.refetch(), outgoing.refetch()])}
       refreshing={incoming.isRefetching || outgoing.isRefetching}
       footer={<Button label="Tạo yêu cầu chuyển nhượng" size={56} icon={{ sf: 'arrow.left.arrow.right', md: 'swap_horiz' }} onPress={start} />}
@@ -85,31 +91,34 @@ export function TransfersListScreen() {
       <Stack.Screen options={{ title: 'Chuyển nhượng ô' }} />
       <SectionHeader title="Gửi đến bạn" note="Hộ khác muốn chuyển ô cho bạn" />
       {incoming.isPending ? (
-        <ListSkeleton rows={1} height={150} />
+        <ListSkeleton rows={1} height={170} />
       ) : incoming.isError ? (
         <ErrorState error={incoming.error} onRetry={() => void incoming.refetch()} />
       ) : waiting.length === 0 ? (
-        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, minHeight: 64, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.sunken }}>
           <Icon sf="tray" md="inbox" size={20} color={colors.muted} />
-          <Text style={[text.footnote, { flex: 1, color: colors.muted }]}>Không có yêu cầu nào chờ bạn.</Text>
-        </Card>
+          <Text style={[text.footnote, { flex: 1, color: colors.muted, fontFamily: fonts.medium }]}>Không có yêu cầu nào chờ bạn.</Text>
+        </View>
       ) : (
         waiting.map((t) => (
-          <View key={t.transferId} style={{ padding: 16, gap: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: 2, borderColor: colors.mango }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.mangoTint, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon sf="bell.fill" md="notifications" size={18} color={colors.onMango} />
+          <View key={t.transferId} style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: 2, borderColor: colors.sticker, boxShadow: shadow.card, overflow: 'hidden' }}>
+            <View style={{ padding: 16, gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.sticker, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon sf="bell.fill" md="notifications" size={19} color={colors.plate} />
+                </View>
+                <View style={{ flex: 1, gap: 5 }}>
+                  <Plate code={t.slotCode} />
+                  <Text style={[text.headline, { color: colors.ink }]} numberOfLines={2}>{t.zoneName}</Text>
+                </View>
+                <StatusPill label="Chờ bạn" tone="pending" />
               </View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <SlotPlate code={t.slotCode} />
-                <Text style={[text.subhead, { color: colors.ink }]} numberOfLines={1}>{t.zoneName}</Text>
-              </View>
-              <StatusPill label="Chờ bạn" tone="pending" />
+              <Text style={[text.footnote, { color: colors.muted }, tabular]}>
+                Thời hạn {formatVietnamDate(t.contractStartDate)} – {formatVietnamDate(t.contractEndDate)}, gửi {agoText(t.initiatedAt)}
+              </Text>
             </View>
-            <Text style={[text.caption, { color: colors.muted }, tabular]}>
-              Thời hạn {formatVietnamDate(t.contractStartDate)} – {formatVietnamDate(t.contractEndDate)} · gửi {agoText(t.initiatedAt)}
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ marginHorizontal: 16, borderTopWidth: 2, borderStyle: 'dashed', borderColor: colors.line }} />
+            <View style={{ flexDirection: 'row', gap: 10, padding: 12 }}>
               <Button label="Từ chối" variant="secondary" loading={decline.isPending && decline.variables === t.transferId} onPress={() => askDecline(() => decline.mutate(t.transferId))} style={{ flex: 1 }} />
               <Button label="Xem & nhận" onPress={() => go(`/vendor/slots/transfers/${t.transferId}/accept`)} style={{ flex: 1.4 }} />
             </View>
@@ -117,6 +126,7 @@ export function TransfersListScreen() {
         ))
       )}
 
+      <View style={{ height: 10 }} />
       <SectionHeader title="Bạn đã gửi" />
       {outgoing.data && outgoing.data.length > 0 ? (
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -126,15 +136,15 @@ export function TransfersListScreen() {
             { label: 'Đã duyệt', value: counts.approved, ink: colors.onLeaf, wash: colors.leafTint },
             { label: 'Từ chối', value: counts.rejected, ink: colors.onDanger, wash: colors.dangerTint },
           ].map((c) => (
-            <View key={c.label} style={{ flex: 1, alignItems: 'center', gap: 2, paddingVertical: 10, borderRadius: 14, backgroundColor: c.value ? c.wash : colors.sunken }}>
-              <Text style={[{ fontFamily: fonts.code, fontSize: 20, color: c.value ? c.ink : colors.muted }, tabular]}>{c.value}</Text>
-              <Text style={{ fontFamily: fonts.medium, fontSize: 10.5, color: c.value ? c.ink : colors.muted, textAlign: 'center' }}>{c.label}</Text>
+            <View key={c.label} accessible accessibilityLabel={`${c.label}: ${c.value}`} style={{ flex: 1, alignItems: 'center', gap: 2, paddingVertical: 12, paddingHorizontal: 4, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: c.value ? c.wash : colors.card }}>
+              <Text maxFontSizeMultiplier={1.3} style={[sign.title, { fontSize: 28, lineHeight: 34, color: c.value ? c.ink : colors.muted }, tabular]}>{c.value}</Text>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 11, lineHeight: 14, color: c.value ? c.ink : colors.muted, textAlign: 'center' }}>{c.label}</Text>
             </View>
           ))}
         </View>
       ) : null}
       {outgoing.isPending ? (
-        <ListSkeleton rows={2} height={130} />
+        <ListSkeleton rows={2} height={140} />
       ) : outgoing.isError ? (
         <ErrorState error={outgoing.error} onRetry={() => void outgoing.refetch()} />
       ) : sent.length === 0 ? (
@@ -148,7 +158,7 @@ export function TransfersListScreen() {
           <SheetOption
             key={c.contractId}
             title={`Ô ${c.slotCode}`}
-            subtitle={`${c.zoneName} · đến ${formatVietnamDate(c.endDate)}`}
+            subtitle={`${c.zoneName}, đến ${formatVietnamDate(c.endDate)}`}
             selected={false}
             last={i === active.length - 1}
             onPress={() => {
@@ -166,22 +176,25 @@ function OutgoingCard({ transfer }: { transfer: SlotTransferRequest }) {
   const steps = transferSteps(transfer.transferStatus);
   const { label, tone } = statusLabel(transfer.transferStatus);
   return (
-    <Card style={{ gap: 12 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <View style={{ flex: 1, gap: 4 }}>
-          <SlotPlate code={transfer.slotCode} />
-          <Text style={[text.subhead, { color: colors.ink }]} numberOfLines={1}>{transfer.zoneName}</Text>
+    <View style={{ padding: 16, gap: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ flex: 1, gap: 5 }}>
+          <Plate code={transfer.slotCode} />
+          <Text style={[text.headline, { color: colors.ink }]} numberOfLines={2}>{transfer.zoneName}</Text>
         </View>
         <StatusPill label={label} tone={tone} />
       </View>
       {steps ? <TransferSteps steps={steps} labels={TRANSFER_STEP_LABELS} /> : null}
       {transfer.transferStatus === 'REJECTED' ? <Banner tone="danger" title="Lý do từ chối">{transfer.reviewDecisionReason ?? 'Yêu cầu đã bị từ chối.'}</Banner> : null}
-      <Text style={[text.caption, { color: colors.muted }, tabular]}>Gửi {formatVietnamDate(transfer.initiatedAt)} · {agoText(transfer.initiatedAt)}</Text>
-    </Card>
+      <Text style={[text.caption, { color: colors.muted }, tabular]}>Gửi {formatVietnamDate(transfer.initiatedAt)}, {agoText(transfer.initiatedAt)}</Text>
+    </View>
   );
 }
 
-/** V24 Nhận chuyển nhượng: the slot and term offered, whether you qualify, then accept or decline. */
+/**
+ * V24 Nhận chuyển nhượng, v5: the slot offered as a pass (its plate large, the term, the steps
+ * under the tear), whether you qualify, then accept or decline in thumb reach.
+ */
 export function AcceptTransferScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const transferId = Number(id);
@@ -205,7 +218,8 @@ export function AcceptTransferScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Nhận chuyển nhượng' }} />
-        <ListSkeleton rows={1} height={220} />
+        <Skeleton height={320} radius={radius.pass} />
+        <ListSkeleton rows={1} height={110} />
       </Screen>
     );
   }
@@ -233,6 +247,7 @@ export function AcceptTransferScreen() {
 
   return (
     <Screen
+      gap={22}
       footer={
         pending ? (
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -243,43 +258,61 @@ export function AcceptTransferScreen() {
       }
     >
       <Stack.Screen options={{ title: 'Nhận chuyển nhượng' }} />
-      <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, padding: 16, gap: 14 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={{ flex: 1, gap: 6 }}>
-            <Text style={{ fontFamily: fonts.bold, fontSize: 12, letterSpacing: 0.6, color: colors.muted }}>Ô ĐƯỢC CHUYỂN CHO BẠN</Text>
-            <SlotPlate code={t.slotCode} size="lg" />
+      <Pass
+        accent={t.transferStatus === 'REJECTED' ? colors.danger : t.transferStatus === 'APPROVED' ? colors.leaf : colors.brand}
+        head={
+          <View style={{ gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.muted }}>Ô được chuyển cho bạn</Text>
+                <PassPlate code={t.slotCode} />
+              </View>
+              <StatusPill label={label} tone={tone} />
+            </View>
+            <KeyValueList
+              rows={[
+                { label: 'Tuyến phố', value: t.zoneName },
+                { label: 'Thời hạn hợp đồng', value: `${formatVietnamDate(t.contractStartDate)} – ${formatVietnamDate(t.contractEndDate)}` },
+                { label: 'Bên chuyển', value: 'Hộ kinh doanh khác' },
+                { label: 'Ngày gửi', value: formatVietnamDate(t.initiatedAt) },
+              ]}
+            />
           </View>
-          <StatusPill label={label} tone={tone} />
-        </View>
-        <KeyValueList
-          rows={[
-            { label: 'Tuyến phố', value: t.zoneName },
-            { label: 'Thời hạn hợp đồng', value: `${formatVietnamDate(t.contractStartDate)} – ${formatVietnamDate(t.contractEndDate)}` },
-            { label: 'Bên chuyển', value: 'Hộ kinh doanh khác' },
-            { label: 'Ngày gửi', value: formatVietnamDate(t.initiatedAt) },
-          ]}
-        />
-        {steps ? <TransferSteps steps={steps} labels={TRANSFER_STEP_LABELS} /> : null}
-        {t.transferStatus === 'REJECTED' && t.reviewDecisionReason ? <Banner tone="danger" title="Lý do từ chối">{t.reviewDecisionReason}</Banner> : null}
-      </View>
+        }
+        stub={
+          steps || (t.transferStatus === 'REJECTED' && t.reviewDecisionReason) ? (
+            <View style={{ gap: 12 }}>
+              {steps ? <TransferSteps steps={steps} labels={TRANSFER_STEP_LABELS} /> : null}
+              {t.transferStatus === 'REJECTED' && t.reviewDecisionReason ? <Banner tone="danger" title="Lý do từ chối">{t.reviewDecisionReason}</Banner> : null}
+            </View>
+          ) : undefined
+        }
+      />
 
-      <Card style={{ gap: 10 }}>
-        <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>Điều kiện nhận ô</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Icon sf={approved ? 'checkmark.circle.fill' : 'xmark.circle.fill'} md={approved ? 'check_circle' : 'cancel'} size={20} color={approved ? colors.leaf : colors.danger} />
-          <Text style={[text.footnote, { flex: 1, color: colors.ink }]}>Hồ sơ kinh doanh: {approved ? 'đã duyệt' : 'chưa có hồ sơ được duyệt'}</Text>
-        </View>
-        {t.acceptedAt ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Icon sf="checkmark.circle.fill" md="check_circle" size={20} color={colors.leaf} />
-            <Text style={[text.footnote, { flex: 1, color: colors.ink }]}>Bạn đã đồng ý ngày {formatVietnamDate(t.acceptedAt)}</Text>
+      <View style={{ gap: 12 }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 19, lineHeight: 25, color: colors.ink }}>Điều kiện nhận ô</Text>
+        <View style={{ padding: 16, gap: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: approved ? colors.leafTint : colors.dangerTint }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: approved ? colors.leaf : colors.danger, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon sf={approved ? 'checkmark' : 'xmark'} md={approved ? 'check' : 'close'} size={17} color={colors.white} weight="bold" />
+            </View>
+            <Text style={[text.callout, { flex: 1, color: approved ? colors.onLeaf : colors.onDanger, fontFamily: fonts.semibold }]}>Hồ sơ kinh doanh: {approved ? 'đã duyệt' : 'chưa có hồ sơ được duyệt'}</Text>
           </View>
-        ) : null}
-        {!approved ? (
-          <Button label="Xem hồ sơ đăng ký" variant="secondary" onPress={() => go('/vendor/home/registrations')} />
-        ) : null}
-      </Card>
-      <Banner tone="neutral">Sau khi bạn đồng ý, Phường duyệt thì ô và giấy phép mới chuyển sang bạn.</Banner>
+          {t.acceptedAt ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.leaf, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon sf="checkmark" md="check" size={17} color={colors.white} weight="bold" />
+              </View>
+              <Text style={[text.callout, { flex: 1, color: colors.onLeaf, fontFamily: fonts.semibold }]}>Bạn đã đồng ý ngày {formatVietnamDate(t.acceptedAt)}</Text>
+            </View>
+          ) : null}
+          {!approved ? <Button label="Xem hồ sơ đăng ký" variant="secondary" onPress={() => go('/vendor/home/registrations')} /> : null}
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+        <Icon sf="building.columns" md="account_balance" size={16} color={colors.muted} style={{ marginTop: 1 }} />
+        <Text style={[text.footnote, { flex: 1, color: colors.muted }]}>Sau khi bạn đồng ý, Phường duyệt thì ô và giấy phép mới chuyển sang bạn.</Text>
+      </View>
     </Screen>
   );
 }

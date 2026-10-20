@@ -49,7 +49,7 @@ export function ResultView({
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 14 }}>
         <Animated.View style={[{ width: 112, height: 112, borderRadius: 56, backgroundColor: t.wash, alignItems: 'center', justifyContent: 'center' }, mark]}>
-          <View style={{ width: 76, height: 76, borderRadius: 38, backgroundColor: t.ink, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: t.ink, alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: colors.white }}>
             <Icon sf={icon?.sf ?? 'checkmark'} md={icon?.md ?? 'check'} size={36} color={colors.white} weight="bold" />
           </View>
         </Animated.View>
@@ -58,7 +58,7 @@ export function ResultView({
         {children ? <View style={{ alignSelf: 'stretch', marginTop: 6 }}>{children}</View> : null}
       </View>
       <KerbStrip height={5} />
-      <View style={{ padding: 16, paddingBottom: Math.max(16, insets.bottom + 8), gap: 10, backgroundColor: colors.card }}>
+      <View style={{ padding: 20, paddingBottom: Math.max(16, insets.bottom + 8), gap: 10, backgroundColor: colors.canvas }}>
         <Button label={primary.label} size={56} onPress={primary.onPress} />
         {secondary ? <Button label={secondary.label} variant="secondary" onPress={secondary.onPress} /> : null}
       </View>

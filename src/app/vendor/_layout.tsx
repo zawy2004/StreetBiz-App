@@ -3,7 +3,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useCanChat } from '@/features/chat/hooks/useChat';
 import { useChatInboxFeed } from '@/features/chat/realtime/useChatRealtime';
 import { useVendorOrderAlerts } from '@/features/orders/alerts/useVendorOrderAlerts';
-import { colors } from '@/theme';
+import { tabBarLook } from '@/ui';
 
 /**
  * Hộ kinh doanh: Trang chủ, Ô thuê, Đơn hàng, Tài chính, Tài khoản. Tin nhắn và Cửa hàng mở từ Trang chủ (web có 6 tab).
@@ -15,7 +15,7 @@ export default function VendorTabs() {
   // Buyers' messages, live on every vendor screen (the unread count shows on Trang chủ).
   useChatInboxFeed(useCanChat());
   return (
-    <NativeTabs tintColor={colors.cta} minimizeBehavior="onScrollDown">
+    <NativeTabs {...tabBarLook} minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="home" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
         <NativeTabs.Trigger.Label>Trang chủ</NativeTabs.Trigger.Label>

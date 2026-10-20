@@ -5,21 +5,25 @@ import { Alert, FlatList, Pressable, RefreshControl, Text, View } from 'react-na
 
 import { Card, KeyValueList, Segments } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
+import { Icon } from '@/components/common/Icon';
+import { KerbStrip } from '@/components/common/KerbStrip';
 import { ProtectedFileTile } from '@/components/common/ProtectedFile';
 import { SlotPlate } from '@/components/common/SlotPlate';
-import { Banner } from '@/components/feedback/Banner';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
 import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { LeafletMap } from '@/components/map/LeafletMap';
+import { StatusHeader } from '@/components/native/StatusHeader';
 import { StatusPill } from '@/components/status/StatusPill';
 import { errorMessage } from '@/core/api';
 import { env } from '@/core/config/env';
 import { DEFAULT_CENTER } from '@/features/sidewalk-slots/map-constants';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, tabular, text } from '@/theme';
+import { Plate } from '@/ui';
 import { formatVietnamDateTime, formatVnd } from '@/utils/format';
 import { ProposalAssessment } from '../components/ProposalAssessment';
 import { Blockers } from '../components/ReviewParts';
@@ -48,22 +52,26 @@ export function WardCasesScreen() {
       <FlatList
         data={list.isPending ? [] : items}
         keyExtractor={(c) => `${c.kind}-${c.id}`}
-        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} tintColor={colors.cta} colors={[colors.cta]} />}
-        ListHeaderComponent={<Segments<CaseKind> value={kind} onChange={setKind} options={KINDS.map((k) => ({ key: k, label: caseLabels[k] }))} />}
+        ListHeaderComponent={
+          <View style={{ paddingBottom: 6 }}>
+            <Segments<CaseKind> value={kind} onChange={setKind} options={KINDS.map((k) => ({ key: k, label: caseLabels[k] }))} />
+          </View>
+        }
         onEndReached={() => list.hasNextPage && !list.isFetchingNextPage && void list.fetchNextPage()}
         onEndReachedThreshold={0.4}
         renderItem={({ item }) => <CaseRow item={item} />}
         ListEmptyComponent={
           list.isPending ? (
-            <ListSkeleton rows={4} height={92} />
+            <ListSkeleton rows={4} height={124} />
           ) : list.isError ? (
             <ErrorState error={list.error} onRetry={() => void list.refetch()} />
           ) : (
-            <StateView icon={{ sf: 'tray', md: 'inbox' }} tone="neutral" title={`Không có ${caseLabels[kind].toLowerCase()}`} body="Hồ sơ mới gửi tới phường sẽ hiện ở đây." />
+            <StateView icon={{ sf: 'tray', md: 'inbox' }} tone="neutral" title={`Không có ${caseLabels[kind].toLowerCase()}`} body="Hồ sơ mới gửi tới phường sẽ hiện ở đây. Kéo xuống để tải lại." action={{ label: 'Tải lại', onPress: () => void list.refetch() }} />
           )
         }
-        ListFooterComponent={list.isFetchingNextPage ? <ListSkeleton rows={1} height={80} /> : null}
+        ListFooterComponent={list.isFetchingNextPage ? <ListSkeleton rows={1} height={124} /> : null}
       />
     </View>
   );
@@ -72,17 +80,25 @@ export function WardCasesScreen() {
 function CaseRow({ item }: { item: WardCase }) {
   const awaiting = item.actions.length > 0;
   return (
-    <Pressable onPress={() => router.push(`/ward/inbox/cases/${item.kind}/${item.id}` as Href)} accessibilityRole="button" style={({ pressed }) => ({ padding: 14, gap: 8, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? '#FBFBFC' : colors.card, borderWidth: awaiting ? 1.5 : 0, borderColor: colors.mango })}>
+    <Pressable
+      onPress={() => router.push(`/ward/inbox/cases/${item.kind}/${item.id}` as Href)}
+      accessibilityRole="button"
+      accessibilityLabel={`Ô ${item.slotCode}, ${item.applicant}, ${statusLabel(item.kind, item.status)}${awaiting ? ', chờ bạn quyết định' : ''}`}
+      style={({ pressed }) => ({ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.kerbPaint : colors.card, boxShadow: shadow.card, borderLeftWidth: 5, borderLeftColor: awaiting ? colors.mango : colors.card })}
+    >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <SlotPlate code={item.slotCode} />
-        <Text style={[text.subhead, { flex: 1, color: colors.ink }]} numberOfLines={1}>{item.applicant}</Text>
+        <Plate code={item.slotCode} />
+        <View style={{ flex: 1 }} />
         <StatusPill label={statusLabel(item.kind, item.status)} tone={toneOf(item.status)} />
       </View>
-      <Text style={[text.footnote, { color: colors.ink }]} numberOfLines={2}>{item.summary || item.title}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ gap: 3 }}>
+        <Text style={{ fontFamily: fonts.bold, fontSize: 16, lineHeight: 22, color: colors.ink }} numberOfLines={2}>{item.applicant}</Text>
+        <Text style={[text.footnote, { color: colors.muted }]} numberOfLines={2}>{item.summary || item.title}</Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         {awaiting ? <StatusPill label="Chờ bạn quyết định" tone="pending" /> : null}
         {item.fastTrack ? <StatusPill label="Ưu tiên" tone="ok" /> : null}
-        <Text style={[text.caption, { color: colors.muted }]}>{formatVietnamDateTime(utc(item.createdAt))}</Text>
+        <Text style={[text.caption, tabular, { color: colors.muted }]}>{formatVietnamDateTime(utc(item.createdAt))}</Text>
       </View>
     </Pressable>
   );
@@ -120,9 +136,11 @@ export function WardCaseScreen() {
   }
   if (record.isPending) {
     return (
-      <Screen>
+      <Screen gap={20}>
         <Stack.Screen options={{ title }} />
-        <ListSkeleton rows={3} height={110} />
+        <Skeleton height={170} radius={radius.card} />
+        <Skeleton height={300} radius={radius.card} />
+        <Skeleton height={140} radius={radius.card} />
       </Screen>
     );
   }
@@ -138,21 +156,25 @@ export function WardCaseScreen() {
   const awaiting = d.actions.length > 0;
   const evidence = d.evidenceUrl && (d.evidenceUrl.startsWith('/') || /^https?:\/\//i.test(d.evidenceUrl)) ? d.evidenceUrl : null;
   return (
-    <Screen onRefresh={() => void record.refetch()} refreshing={record.isRefetching}>
+    <Screen onRefresh={() => void record.refetch()} refreshing={record.isRefetching} gap={20}>
       <Stack.Screen options={{ title }} />
-      <Card style={{ gap: 8 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <SlotPlate code={d.slotCode} />
-          <View style={{ flex: 1 }} />
-          <StatusPill label={statusLabel(kind, d.status)} tone={toneOf(d.status)} />
+      {/* The slot's street plate, large, over the painted kerb */}
+      <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card, overflow: 'hidden' }}>
+        <View style={{ padding: 18, gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <SlotPlate code={d.slotCode} size="lg" />
+            <View style={{ flex: 1 }} />
+            <StatusPill label={statusLabel(kind, d.status)} tone={toneOf(d.status)} />
+          </View>
+          <Text selectable style={[text.title2, { color: colors.ink }]}>{d.applicant}</Text>
+          {d.summary ? <Text style={[text.callout, { color: colors.ink }]}>{d.summary}</Text> : null}
         </View>
-        <Text style={[text.title3, { color: colors.ink, fontFamily: fonts.heavy }]}>{d.applicant}</Text>
-        {d.summary ? <Text style={[text.callout, { color: colors.ink }]}>{d.summary}</Text> : null}
-      </Card>
+        <KerbStrip height={8} segment={18} />
+      </View>
       {kind === 'proposals' ? <LocationCheck record={d} onSaved={(next) => cache.setQueryData(key, next)} /> : null}
       {kind === 'proposals' && env.enableAiCompliance ? <ProposalAssessment record={d} /> : null}
       <Blockers items={d.blockers} />
-      <Card>
+      <Card style={{ padding: 18 }}>
         <KeyValueList
           rows={[
             { label: 'Gửi lúc', value: formatVietnamDateTime(utc(d.createdAt)) },
@@ -165,7 +187,7 @@ export function WardCaseScreen() {
         />
       </Card>
       {evidence || (d.documents && d.documents.length > 0) ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           {evidence ? <ProtectedFileTile fileUrl={evidence} label="Ảnh minh chứng" /> : null}
           {d.documents?.map((doc) => (
             <ProtectedFileTile key={doc.fileUrl} fileUrl={doc.fileUrl} label={evidenceLabels[doc.evidenceType] ?? doc.evidenceType} />
@@ -173,29 +195,40 @@ export function WardCaseScreen() {
         </View>
       ) : null}
       {awaiting ? (
-        <Card style={{ gap: 10 }}>
-          <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>Quyết định của cán bộ</Text>
-          <TextField label="Lý do quyết định" value={reason} onChangeText={(v) => setReason(v.slice(0, 500))} multiline placeholder="Bắt buộc" hint={`${reason.length}/500 ký tự`} editable={!decide.isPending} />
-          <Text style={[text.caption, { color: colors.muted }]}>Thao tác máy chủ cho phép: {d.actions.map((a) => actionLabels[a] ?? a).join(', ')}</Text>
-          {d.actions.map((action) => (
-            <Button
-              key={action}
-              label={actionLabels[action] ?? action}
-              variant={action === 'APPROVE' ? 'primary' : 'secondary'}
-              loading={decide.isPending && decide.variables?.action === action}
-              disabled={!reason.trim() || decide.isPending || record.isRefetching}
-              // Confirmed first, like the web's ConfirmDialog: the decision is the officer's and final.
-              onPress={() =>
-                Alert.alert(actionLabels[action] ?? action, reason.trim(), [
-                  { text: 'Quay lại', style: 'cancel' },
-                  { text: 'Xác nhận', style: action === 'APPROVE' ? 'default' : 'destructive', onPress: () => decide.mutate({ data: d, action }) },
-                ])
-              }
-            />
-          ))}
-        </Card>
+        <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.raised }}>
+          <View style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden' }}>
+            <View style={{ height: 8, backgroundColor: colors.sign }} />
+            <View style={{ padding: 18, gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.signTint, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon sf="person.badge.shield.checkmark.fill" md="admin_panel_settings" size={22} color={colors.sign} />
+                </View>
+                <Text accessibilityRole="header" style={{ flex: 1, fontFamily: fonts.heavy, fontSize: 19, lineHeight: 25, color: colors.ink }}>Quyết định của cán bộ</Text>
+              </View>
+              <TextField label="Lý do quyết định" value={reason} onChangeText={(v) => setReason(v.slice(0, 500))} multiline placeholder="Bắt buộc" hint={`${reason.length}/500 ký tự`} editable={!decide.isPending} />
+              <Text style={[text.footnote, { color: colors.muted }]}>Thao tác máy chủ cho phép: {d.actions.map((a) => actionLabels[a] ?? a).join(', ')}</Text>
+              {d.actions.map((action) => (
+                <Button
+                  key={action}
+                  label={actionLabels[action] ?? action}
+                  variant={action === 'APPROVE' ? 'sign' : 'secondary'}
+                  size={action === 'APPROVE' ? 56 : 50}
+                  loading={decide.isPending && decide.variables?.action === action}
+                  disabled={!reason.trim() || decide.isPending || record.isRefetching}
+                  // Confirmed first, like the web's ConfirmDialog: the decision is the officer's and final.
+                  onPress={() =>
+                    Alert.alert(actionLabels[action] ?? action, reason.trim(), [
+                      { text: 'Quay lại', style: 'cancel' },
+                      { text: 'Xác nhận', style: action === 'APPROVE' ? 'default' : 'destructive', onPress: () => decide.mutate({ data: d, action }) },
+                    ])
+                  }
+                />
+              ))}
+            </View>
+          </View>
+        </View>
       ) : (
-        <Banner tone="neutral">Hồ sơ này không còn chờ quyết định của bạn.</Banner>
+        <StatusHeader tone="neutral" title="Hồ sơ này không còn chờ quyết định của bạn." />
       )}
     </Screen>
   );
@@ -227,8 +260,9 @@ function LocationCheck({ record, onSaved }: { record: WardCase; onSaved: (c: War
   return (
     <Card padded={false}>
       <LeafletMap center={point ? [point.latitude, point.longitude] : DEFAULT_CENTER} zoom={17} markers={markers} onMapPress={canSave ? (latitude, longitude) => setPoint({ latitude, longitude }) : undefined} style={{ height: 220 }} />
-      <View style={{ padding: 14, gap: 10 }}>
-        <Text style={[text.caption, { color: colors.muted }, tabular]}>{point ? `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}` : 'Chưa có tọa độ'}{canSave ? ' · chạm bản đồ để chỉnh' : ''}</Text>
+      <View style={{ padding: 16, gap: 12 }}>
+        <Text style={[text.headline, { color: colors.ink }]}>Vị trí đề xuất</Text>
+        <Text style={[text.caption, { color: colors.muted }, tabular]}>{point ? `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}` : 'Chưa có tọa độ'}{canSave ? ', chạm bản đồ để chỉnh' : ''}</Text>
         {canSave ? (
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
             <View style={{ flex: 1 }}>
@@ -238,14 +272,13 @@ function LocationCheck({ record, onSaved }: { record: WardCase; onSaved: (c: War
           </View>
         ) : null}
         {search.data?.map((r) => (
-          <Pressable key={`${r.point.latitude},${r.point.longitude}`} onPress={() => setPoint(r.point)} style={{ padding: 10, borderRadius: 12, backgroundColor: colors.sunken }}>
-            <Text style={[text.footnote, { color: colors.ink }]}>{r.label}</Text>
+          <Pressable key={`${r.point.latitude},${r.point.longitude}`} onPress={() => setPoint(r.point)} accessibilityRole="button" style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: pressed ? colors.brandTint : colors.sunken })}>
+            <Icon sf="mappin.circle.fill" md="location_on" size={18} color={colors.primary} />
+            <Text style={[text.footnote, { flex: 1, color: colors.ink }]}>{r.label}</Text>
           </Pressable>
         ))}
         {fresh ? (
-          <Banner tone={fresh.inside ? 'success' : 'danger'} icon={{ sf: fresh.inside ? 'checkmark.circle.fill' : 'xmark.circle.fill', md: fresh.inside ? 'check_circle' : 'cancel' }}>
-            {fresh.inside ? 'Điểm này nằm trong ranh giới phường.' : 'Điểm này nằm ngoài ranh giới phường.'}
-          </Banner>
+          <StatusHeader tone={fresh.inside ? 'ok' : 'danger'} icon={{ sf: fresh.inside ? 'checkmark.circle.fill' : 'xmark.circle.fill', md: fresh.inside ? 'check_circle' : 'cancel' }} title={fresh.inside ? 'Điểm này nằm trong ranh giới phường.' : 'Điểm này nằm ngoài ranh giới phường.'} />
         ) : null}
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button label="Kiểm tra ranh giới" variant="secondary" icon={{ sf: 'map', md: 'map' }} loading={verify.isPending} disabled={!point} onPress={() => point && verify.mutate(point)} style={{ flex: 1 }} />

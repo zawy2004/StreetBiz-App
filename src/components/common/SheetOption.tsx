@@ -37,11 +37,10 @@ export function SheetOption({ title, subtitle, selected, onPress, icon, last }: 
       {icon ? (
         <View
           style={{
-            width: 32,
-            height: 32,
-            borderRadius: 9,
-            borderCurve: 'continuous',
-            backgroundColor: selected ? colors.primary : colors.brandTint,
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: selected ? colors.cta : colors.brandTint,
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -58,7 +57,7 @@ export function SheetOption({ title, subtitle, selected, onPress, icon, last }: 
         <Text
           style={[
             text.body,
-            { color: colors.ink, fontFamily: selected ? fonts.semibold : fonts.regular },
+            { color: colors.ink, fontFamily: selected ? fonts.bold : fonts.medium },
           ]}
         >
           {title}
@@ -66,13 +65,15 @@ export function SheetOption({ title, subtitle, selected, onPress, icon, last }: 
         {subtitle ? <Text style={[text.footnote, { color: colors.muted }]}>{subtitle}</Text> : null}
       </View>
       {selected ? (
-        <Icon sf="checkmark" md="check" size={17} color={colors.primary} weight="bold" />
+        <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: colors.cta, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon sf="checkmark" md="check" size={14} color={colors.white} weight="bold" />
+        </View>
       ) : null}
       {!last ? (
         <View
           style={{
             position: 'absolute',
-            left: icon ? 60 : 16,
+            left: icon ? 64 : 16,
             right: 0,
             bottom: 0,
             height: 1,

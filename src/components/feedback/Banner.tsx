@@ -58,19 +58,21 @@ export function Banner({
       style={[
         {
           flexDirection: 'row',
-          gap: 10,
+          gap: 12,
           padding: 14,
-          borderRadius: radius.control + 2,
+          borderRadius: radius.photo,
           borderCurve: 'continuous',
           backgroundColor: t.wash,
         },
         style,
       ]}
     >
-      <Icon sf={glyph.sf} md={glyph.md} size={18} color={t.ink} style={{ marginTop: 1 }} />
-      <View style={{ flex: 1, gap: 3 }}>
+      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon sf={glyph.sf} md={glyph.md} size={18} color={t.ink} />
+      </View>
+      <View style={{ flex: 1, gap: 3, paddingTop: title ? 6 : 7 }}>
         {title ? (
-          <Text style={{ fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: t.ink }}>
+          <Text style={{ fontFamily: fonts.heavy, fontSize: 15.5, lineHeight: 21, color: t.ink }}>
             {title}
           </Text>
         ) : null}
@@ -86,11 +88,10 @@ export function Banner({
             onPress={action.onPress}
             hitSlop={8}
             accessibilityRole="button"
-            style={{ alignSelf: 'flex-start', marginTop: 4 }}
+            style={{ alignSelf: 'flex-start', marginTop: 6, minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, borderRadius: 16, backgroundColor: colors.white }}
           >
-            <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: t.ink }}>
-              {action.label} ›
-            </Text>
+            <Text style={{ fontFamily: fonts.heavy, fontSize: 14, color: t.ink }}>{action.label}</Text>
+            <Icon sf="chevron.right" md="chevron_right" size={13} color={t.ink} />
           </Pressable>
         ) : null}
       </View>

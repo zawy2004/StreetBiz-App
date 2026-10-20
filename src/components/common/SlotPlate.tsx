@@ -26,21 +26,23 @@ export function SlotPlate({ code, size = 'sm', style }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // v5: the same street plate as `Plate` in src/ui (ink, white rim, Archivo).
   sm: {
     alignSelf: 'flex-start',
     backgroundColor: colors.plate,
     borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.88)',
+    paddingHorizontal: 8,
+    minHeight: 26,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.white,
   },
   smText: {
     fontFamily: fonts.code,
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 18,
     color: colors.white,
-    letterSpacing: 0.4,
+    letterSpacing: 0.8,
   },
   lg: {
     alignSelf: 'flex-start',

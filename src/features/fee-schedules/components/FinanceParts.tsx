@@ -1,58 +1,54 @@
 import * as Haptics from 'expo-haptics';
+import { Children, Fragment, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
-import { SlotPlate } from '@/components/common/SlotPlate';
-import { Skeleton } from '@/components/feedback/Skeleton';
 import { StatusPill } from '@/components/status/StatusPill';
 import type { FeeItemDto, FinanceSummaryDto, InvoiceDto, PaymentProvider, PenaltyListDto, VendorContractFinanceDto } from '@/core/api';
 import { statusLabel } from '@/core/constants/status-labels';
-import { colors, fonts, radius, statusTones, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, statusTones, tabular, text } from '@/theme';
+import { Plate } from '@/ui';
 import { formatVietnamDate, formatVnd } from '@/utils/format';
-import { feeUrgency, invoiceKindLine } from '../finance-view';
+import { feeUrgency } from '../finance-view';
 import type { FinanceReturnState } from '../payment-return';
 import { formatDay, paidShare } from '../schedule-progress';
 
-/** "How much do I owe" first: the total, split fee / penalty, the next due date. Green when clear. */
+/**
+ * "How much do I owe", painted on the finance signboard (v5): the total in sign figures, the
+ * split fee / penalty as a two-colour bar, overdue and the next due date. White on the orange
+ * sign; the screen turns the sign leaf green when nothing is owed.
+ */
 export function DebtBoard({ summary, isLoading, isError }: { summary: FinanceSummaryDto | undefined; isLoading: boolean; isError: boolean }) {
   const loaded = !isLoading && !isError && !!summary;
   const clear = loaded && summary.totalDue === 0;
   const total = loaded ? Math.max(summary.feeDue + summary.penaltyDue, 1) : 1;
   return (
-    <View
-      style={{
-        padding: 20,
-        gap: 12,
-        borderRadius: radius.pass,
-        borderCurve: 'continuous',
-        backgroundColor: clear ? colors.leafTint : colors.brandTint,
-        overflow: 'hidden',
-      }}
-    >
-      <View style={{ position: 'absolute', right: -24, top: -24, width: 120, height: 120, borderRadius: 60, backgroundColor: clear ? 'rgba(11,127,67,0.08)' : 'rgba(255,106,31,0.12)' }} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Icon sf={clear ? 'checkmark.seal.fill' : 'banknote.fill'} md={clear ? 'verified' : 'payments'} size={18} color={clear ? colors.onLeaf : colors.primary} />
-        <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: clear ? colors.onLeaf : colors.primary }}>Tổng cần thanh toán</Text>
-      </View>
+    <View style={{ gap: 12, marginTop: 6 }}>
       {isLoading ? (
-        <Skeleton width={180} height={40} />
+        <View style={{ height: 50, width: 210, borderRadius: radius.sticker, backgroundColor: 'rgba(255,255,255,0.28)' }} accessibilityLabel="Đang tải tổng cần thanh toán" />
       ) : !loaded ? (
-        <Text style={[text.callout, { color: colors.ink }]}>Chưa tải được tổng số tiền cần thanh toán.</Text>
+        <Text style={{ fontFamily: fonts.semibold, fontSize: 15, lineHeight: 21, color: colors.white }}>Chưa tải được tổng số tiền cần thanh toán.</Text>
       ) : (
-        <Text accessibilityRole="header" style={[{ fontFamily: fonts.heavy, fontSize: 34, lineHeight: 40, color: clear ? colors.onLeaf : colors.ink }, tabular]} adjustsFontSizeToFit numberOfLines={1}>
+        <Text
+          accessibilityLabel={`Tổng cần thanh toán ${formatVnd(summary.totalDue)}`}
+          maxFontSizeMultiplier={1.3}
+          adjustsFontSizeToFit
+          numberOfLines={1}
+          style={[sign.figure, { color: colors.white }, tabular]}
+        >
           {formatVnd(summary.totalDue)}
         </Text>
       )}
-      {loaded && clear ? <Text style={[text.footnote, { color: colors.onLeaf }]}>Không còn khoản nào cần thanh toán.</Text> : null}
+      {loaded && clear ? <Text style={{ fontFamily: fonts.semibold, fontSize: 15, lineHeight: 21, color: colors.white }}>Không còn khoản nào cần thanh toán.</Text> : null}
       {loaded && !clear ? (
-        <View style={{ gap: 8 }}>
-          <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.white, gap: 2 }}>
-            {summary.feeDue > 0 ? <View style={{ width: `${(summary.feeDue / total) * 100}%`, backgroundColor: colors.brand }} /> : null}
-            {summary.penaltyDue > 0 ? <View style={{ flex: 1, backgroundColor: colors.danger }} /> : null}
+        <View style={{ gap: 10 }}>
+          <View style={{ flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.3)', gap: 2 }}>
+            {summary.feeDue > 0 ? <View style={{ width: `${(summary.feeDue / total) * 100}%`, backgroundColor: colors.white }} /> : null}
+            {summary.penaltyDue > 0 ? <View style={{ flex: 1, backgroundColor: colors.plate }} /> : null}
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 16, rowGap: 4 }}>
-            <Legend color={colors.brand} label="Phí thuê ô" value={formatVnd(summary.feeDue)} />
-            <Legend color={colors.danger} label="Tiền phạt" value={formatVnd(summary.penaltyDue)} />
+            <Legend color={colors.white} label="Phí thuê ô" value={formatVnd(summary.feeDue)} />
+            <Legend color={colors.plate} label="Tiền phạt" value={formatVnd(summary.penaltyDue)} />
           </View>
           {summary.overdueCount > 0 || summary.nextDueDate ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -69,15 +65,30 @@ export function DebtBoard({ summary, isLoading, isError }: { summary: FinanceSum
 function Legend({ color, label, value }: { color: string; label: string; value: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color }} />
-      <Text style={[text.footnote, { color: colors.ink }]}>
-        {label} <Text style={[{ fontFamily: fonts.bold }, tabular]}>{value}</Text>
+      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color, borderWidth: 1.5, borderColor: colors.white }} />
+      <Text style={{ fontFamily: fonts.medium, fontSize: 13.5, lineHeight: 19, color: colors.white }}>
+        {label} <Text style={[{ fontFamily: fonts.heavy }, tabular]}>{value}</Text>
       </Text>
     </View>
   );
 }
 
-/** A row on a white card: leading tile, two lines, an amount and a state on the right. */
+/** One white block holding a list of money rows with hairlines between them (no card per row). */
+export function RowGroup({ children }: { children: ReactNode }) {
+  const rows = Children.toArray(children);
+  return (
+    <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card, overflow: 'hidden' }}>
+      {rows.map((row, i) => (
+        <Fragment key={i}>
+          {i > 0 ? <View style={{ height: 1, marginLeft: 72, backgroundColor: colors.separator }} /> : null}
+          {row}
+        </Fragment>
+      ))}
+    </View>
+  );
+}
+
+/** A flat row: a round tile, two lines, the amount in sign figures and its state on the right. */
 function MoneyRow({
   tile,
   tileWash,
@@ -98,23 +109,24 @@ function MoneyRow({
   emphasis?: boolean;
 }) {
   const body = (pressed: boolean) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? '#FBFBFC' : colors.card, borderWidth: emphasis ? 1.5 : 0, borderColor: colors.danger }}>
-      <View style={{ width: 42, height: 42, borderRadius: 13, borderCurve: 'continuous', backgroundColor: tileWash, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 72, paddingVertical: 14, paddingLeft: 16, paddingRight: onPress ? 12 : 16, backgroundColor: pressed ? colors.pressed : colors.card }}>
+      {emphasis ? <View style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 4, borderTopRightRadius: 2, borderBottomRightRadius: 2, backgroundColor: colors.danger }} /> : null}
+      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: tileWash, alignItems: 'center', justifyContent: 'center' }}>
         <Icon sf={tile.sf} md={tile.md} size={19} color={tile.ink} />
       </View>
-      <View style={{ flex: 1, gap: 3 }}>
+      <View style={{ flex: 1, gap: 4 }}>
         {title}
         {lines.map((l) => (
-          <Text key={l} style={[text.caption, { color: colors.muted }]} numberOfLines={1}>
+          <Text key={l} style={[text.footnote, { color: colors.muted }, tabular]} numberOfLines={2}>
             {l}
           </Text>
         ))}
       </View>
-      <View style={{ alignItems: 'flex-end', gap: 5 }}>
-        <Text style={[{ fontFamily: fonts.heavy, fontSize: 15.5, color: colors.ink }, tabular]}>{formatVnd(amount)}</Text>
+      <View style={{ alignItems: 'flex-end', gap: 6 }}>
+        <Text maxFontSizeMultiplier={1.4} style={[sign.price, { color: colors.ink }, tabular]}>{formatVnd(amount)}</Text>
         {pill ? <StatusPill label={pill.label} tone={pill.tone} /> : null}
       </View>
-      {onPress ? <Icon sf="chevron.right" md="chevron_right" size={14} color={colors.muted} /> : null}
+      {onPress ? <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} /> : null}
     </View>
   );
   if (!onPress) return body(false);
@@ -134,9 +146,9 @@ export function FeeRow({ fee, onPress }: { fee: FeeItemDto; onPress?: () => void
       tile={paid ? { sf: 'checkmark', md: 'check', ink: colors.onLeaf } : { sf: 'calendar', md: 'calendar_month', ink: colors.primary }}
       tileWash={paid ? colors.leafTint : colors.brandTint}
       title={
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <SlotPlate code={fee.slotCode} />
-          <Text style={[text.subhead, { color: colors.ink, flexShrink: 1 }]} numberOfLines={1}>{fee.periodLabel}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Plate code={fee.slotCode} prefix="Ô" />
+          <Text style={{ fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.ink, flexShrink: 1 }} numberOfLines={2}>{fee.periodLabel}</Text>
         </View>
       }
       lines={[paid && fee.paidAt ? `Đã trả ${formatVietnamDate(fee.paidAt)}` : `Hạn ${formatDay(fee.dueDate)}`]}
@@ -155,8 +167,8 @@ export function PenaltyRow({ penalty, onPress }: { penalty: PenaltyListDto; onPr
     <MoneyRow
       tile={{ sf: 'exclamationmark.octagon.fill', md: 'report', ink: unpaid ? colors.danger : colors.muted }}
       tileWash={unpaid ? colors.dangerTint : colors.sunken}
-      title={<Text style={[text.subhead, { color: colors.ink }]} numberOfLines={2}>{penalty.violationLabel}</Text>}
-      lines={[[penalty.slotCode ? `Ô ${penalty.slotCode}` : null, `Lập ${formatVietnamDate(penalty.issuedAt)}`].filter(Boolean).join(' · ')]}
+      title={<Text style={{ fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.ink }} numberOfLines={2}>{penalty.violationLabel}</Text>}
+      lines={[[penalty.slotCode ? `Ô ${penalty.slotCode}` : null, `Lập ${formatVietnamDate(penalty.issuedAt)}`].filter(Boolean).join(', ')]}
       amount={penalty.amount}
       pill={{ label: s.label, tone: s.tone }}
       onPress={onPress}
@@ -166,47 +178,63 @@ export function PenaltyRow({ penalty, onPress }: { penalty: PenaltyListDto; onPr
 
 export function InvoiceRow({ invoice, onPress }: { invoice: InvoiceDto; onPress: () => void }) {
   const penalty = invoice.kind === 'PENALTY';
+  const what = penalty ? 'Tiền phạt' : invoice.periodLabel ? `Phí thuê ô, ${invoice.periodLabel}` : 'Phí thuê ô';
   return (
     <MoneyRow
-      tile={{ sf: 'doc.text.fill', md: 'receipt_long', ink: penalty ? colors.onDanger : colors.sign }}
-      tileWash={penalty ? colors.dangerTint : colors.signTint}
-      title={<Text style={[{ fontFamily: fonts.code, fontSize: 15, color: colors.ink }]}>{invoice.invoiceNumber}</Text>}
-      lines={[invoiceKindLine(invoice), formatVietnamDate(invoice.issuedAt)]}
+      tile={{ sf: 'doc.text.fill', md: 'receipt_long', ink: penalty ? colors.onDanger : colors.primary }}
+      tileWash={penalty ? colors.dangerTint : colors.brandTint}
+      title={<Text style={[{ fontFamily: fonts.code, fontSize: 16, lineHeight: 20, color: colors.ink }, tabular]}>{invoice.invoiceNumber}</Text>}
+      lines={[what, formatVietnamDate(invoice.issuedAt)]}
       amount={invoice.amount}
       onPress={onPress}
     />
   );
 }
 
-/** One contract's schedule progress: paid / total instalments, what is left, the next due one. */
+/**
+ * One contract's schedule: its slot plate and street, a tick for every instalment (filled green
+ * once paid), what is left, the next due one.
+ */
 export function ContractFinanceCard({ contract, onPress }: { contract: VendorContractFinanceDto; onPress: () => void }) {
   const share = paidShare(contract);
+  const ticks = contract.instalmentCount > 0 && contract.instalmentCount <= 24;
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Lịch đóng phí ô ${contract.slotCode}`}>
       {({ pressed }) => (
-        <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? '#FBFBFC' : colors.card }}>
+        <View style={{ padding: 18, gap: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.kerbPaint : colors.card, boxShadow: shadow.card }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <SlotPlate code={contract.slotCode} />
-            <Text style={[text.subhead, { flex: 1, color: colors.ink }]} numberOfLines={1}>
+            <Plate code={contract.slotCode} prefix="Ô" />
+            <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.ink }} numberOfLines={2}>
               {contract.zoneName ?? ''}
             </Text>
-            <Icon sf="chevron.right" md="chevron_right" size={14} color={colors.muted} />
+            <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
           </View>
-          <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.sunken, overflow: 'hidden' }}>
-            <View style={{ width: `${Math.round(share * 100)}%`, height: '100%', backgroundColor: colors.leaf }} />
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={[text.caption, { color: colors.ink }, tabular]}>
+          {ticks ? (
+            <View style={{ flexDirection: 'row', gap: 4 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              {Array.from({ length: contract.instalmentCount }, (_, i) => (
+                <View key={i} style={{ flex: 1, height: 10, borderRadius: 5, backgroundColor: i < contract.paidCount ? colors.leaf : colors.sunken }} />
+              ))}
+            </View>
+          ) : (
+            <View style={{ height: 10, borderRadius: 5, backgroundColor: colors.sunken, overflow: 'hidden' }}>
+              <View style={{ width: `${Math.round(share * 100)}%`, height: '100%', backgroundColor: colors.leaf }} />
+            </View>
+          )}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+            <Text style={[text.subhead, { color: colors.ink }, tabular]}>
               Đã nộp {contract.paidCount}/{contract.instalmentCount} kỳ
             </Text>
-            <Text style={[text.caption, { color: contract.outstandingAmount > 0 ? colors.primary : colors.onLeaf, fontFamily: fonts.bold }, tabular]}>
+            <Text style={[text.subhead, { color: contract.outstandingAmount > 0 ? colors.primary : colors.onLeaf, fontFamily: fonts.heavy }, tabular]}>
               {contract.outstandingAmount > 0 ? `Còn ${formatVnd(contract.outstandingAmount)}` : 'Đã nộp đủ'}
             </Text>
           </View>
           {contract.nextDue ? (
-            <Text style={[text.caption, { color: colors.muted }]}>
-              Kỳ tới: {contract.nextDue.periodLabel} · hạn {formatDay(contract.nextDue.dueDate)} · {formatVnd(contract.nextDue.amount)}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: colors.kerbPaint }}>
+              <Icon sf="calendar" md="calendar_month" size={15} color={colors.primary} />
+              <Text style={[text.footnote, { flex: 1, color: colors.ink }, tabular]}>
+                Kỳ tới: {contract.nextDue.periodLabel}, hạn {formatDay(contract.nextDue.dueDate)}, {formatVnd(contract.nextDue.amount)}
+              </Text>
+            </View>
           ) : null}
         </View>
       )}
@@ -222,8 +250,8 @@ const WALLETS: { value: PaymentProvider; label: string; note: string; color: str
 /** The two wallets as radio cards, MoMo first (the default). */
 export function WalletPicker({ value, onChange, disabled }: { value: PaymentProvider; onChange: (v: PaymentProvider) => void; disabled?: boolean }) {
   return (
-    <View style={{ gap: 8 }} accessibilityRole="radiogroup">
-      <Text style={[text.subhead, { color: colors.ink }]}>Ví thanh toán</Text>
+    <View style={{ gap: 10 }} accessibilityRole="radiogroup">
+      <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 18, lineHeight: 24, color: colors.ink }}>Ví thanh toán</Text>
       {WALLETS.map((w) => {
         const on = w.value === value;
         return (
@@ -236,16 +264,16 @@ export function WalletPicker({ value, onChange, disabled }: { value: PaymentProv
             }}
             accessibilityRole="radio"
             accessibilityState={{ selected: on, disabled }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, minHeight: 64, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: on ? colors.kerbPaint : colors.card, borderWidth: on ? 2 : 1, borderColor: on ? colors.cta : colors.line }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, minHeight: 68, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: on ? colors.kerbPaint : colors.card, borderWidth: 2, borderColor: on ? colors.cta : colors.line, opacity: disabled ? 0.6 : 1 }}
           >
-            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: w.color, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 44, height: 44, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: w.color, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: fonts.heavy, fontSize: 12, color: colors.white }}>{w.label === 'MoMo' ? 'MoMo' : 'Zalo'}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 15.5, color: colors.ink }}>{w.label}</Text>
-              <Text style={[text.caption, { color: colors.muted }]}>{w.note}</Text>
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>{w.label}</Text>
+              <Text style={[text.footnote, { color: colors.muted }]}>{w.note}</Text>
             </View>
-            <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: on ? 7 : 2, borderColor: on ? colors.cta : colors.line, backgroundColor: colors.white }} />
+            <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: on ? 7 : 2, borderColor: on ? colors.cta : colors.line, backgroundColor: colors.white }} />
           </Pressable>
         );
       })}
@@ -261,15 +289,17 @@ const SAFE_STEPS = [
 
 export function SafePaySteps() {
   return (
-    <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.leafTint }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Icon sf="checkmark.shield.fill" md="verified_user" size={17} color={colors.onLeaf} />
-        <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.onLeaf }}>Thanh toán an toàn trong 3 bước</Text>
+    <View style={{ padding: 16, gap: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.leafTint }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.leaf, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon sf="checkmark.shield.fill" md="verified_user" size={16} color={colors.white} />
+        </View>
+        <Text style={{ flex: 1, fontFamily: fonts.heavy, fontSize: 15, color: colors.onLeaf }}>Thanh toán an toàn trong 3 bước</Text>
       </View>
       {SAFE_STEPS.map((s, i) => (
-        <View key={s.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: colors.onLeaf }}>{i + 1}</Text>
+        <View key={s.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
+            <Text maxFontSizeMultiplier={1.3} style={[{ fontFamily: fonts.code, fontSize: 15, color: colors.onLeaf }, tabular]}>{i + 1}</Text>
           </View>
           <Text style={[text.footnote, { flex: 1, color: colors.onLeaf }]}>{s.text}</Text>
         </View>
@@ -292,10 +322,12 @@ export function ReturnCheck({ state, onRetry }: { state: FinanceReturnState; onR
       disabled={state.phase !== 'pending'}
       onPress={() => state.phase === 'pending' && onRetry(state.transactionId)}
       accessibilityRole={state.phase === 'pending' ? 'button' : 'text'}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: look.wash }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, minHeight: 56, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: look.wash }}
     >
-      <Icon sf={look.sf} md={look.md} size={18} color={look.ink} />
-      <Text style={[text.footnote, { flex: 1, color: look.ink }]}>{look.text}</Text>
+      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon sf={look.sf} md={look.md} size={17} color={look.ink} />
+      </View>
+      <Text style={[text.subhead, { flex: 1, color: look.ink }]}>{look.text}</Text>
     </Pressable>
   );
 }

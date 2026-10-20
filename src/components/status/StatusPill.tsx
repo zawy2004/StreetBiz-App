@@ -23,15 +23,15 @@ export function StatusPill({
           alignSelf: 'flex-start',
           gap: 5,
           borderRadius: 999,
-          paddingHorizontal: 9,
-          paddingVertical: 4,
+          paddingHorizontal: 10,
+          paddingVertical: 5,
           backgroundColor: t.wash,
         },
         style,
       ]}
     >
       <Icon sf={t.sf} md={t.md} size={13} color={t.ink} />
-      <Text style={{ fontFamily: fonts.semibold, fontSize: 12.5, lineHeight: 16, color: t.ink }}>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 12.5, lineHeight: 16, color: t.ink }}>
         {label}
       </Text>
     </View>

@@ -12,8 +12,9 @@ import { isDev } from '@/core/config/env';
 import type { RoleCode } from '@/core/types/role';
 import { phoneError, toLocalPhone } from '@/core/utils/phone';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius } from '@/theme';
-import { AuthHero, go, LegalLinks, TextLink } from '../components/auth-parts';
+import { colors, fonts, radius, shadow, text } from '@/theme';
+import { useLightStatusBar } from '@/ui';
+import { AuthSignboard, go, LegalLinks, TextLink } from '../components/auth-parts';
 
 /** The seeded demo accounts (StreetBiz-BE `docs/database.md`), offered on development builds only, as on the web. */
 const DEMO: { role: RoleCode; label: string; phone: string }[] = [
@@ -25,11 +26,13 @@ const DEMO: { role: RoleCode; label: string; phone: string }[] = [
 const DEMO_PASSWORD = 'Password123!';
 
 /**
- * A01 Đăng nhập (AUTH-03): the street photo up top, the form on a sheet that rises from the
- * kerb, the primary button under the thumb. Wrong input is said under its field; a server
- * error in a banner. Signing in lands on the role's home.
+ * A01 Đăng nhập (AUTH-03), v5 "Biển hiệu phố" (screens/v5/shared-admin.md): the orange street
+ * sign with the dishes of the hour; the form is a white sheet rising across the painted kerb,
+ * its primary button under the thumb. Wrong input is said under its field; a server error in a
+ * banner. Signing in lands on the role's home.
  */
 export function SignInScreen() {
+  useLightStatusBar();
   const signIn = useAuthStore((s) => s.signIn);
   const sessionExpired = useAuthStore((s) => s.sessionExpired);
   const clearSessionExpired = useAuthStore((s) => s.clearSessionExpired);
@@ -70,6 +73,54 @@ export function SignInScreen() {
     }
   };
 
+  // The form: a white sheet laid across the sign's kerb.
+  const form = (
+    <View style={{ padding: 20, gap: 16, borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.raised }}>
+      <View style={{ gap: 2 }}>
+        <Text accessibilityRole="header" style={[text.title2, { color: colors.ink }]}>
+          Đăng nhập
+        </Text>
+        <Text style={[text.footnote, { color: colors.muted }]}>Một tài khoản cho người mua, người bán và cán bộ phường.</Text>
+      </View>
+
+      {sessionExpired ? (
+        <Banner tone="warning">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</Banner>
+      ) : null}
+      {error ? <Banner tone="danger">{error}</Banner> : null}
+
+      <PhoneField
+        value={phone}
+        onChangeText={(v) => {
+          setPhone(v);
+          if (errors.phone) setErrors((e) => ({ ...e, phone: undefined }));
+        }}
+        error={errors.phone}
+        onSubmitEditing={() => passwordRef.current?.focus()}
+        submitBehavior="submit"
+      />
+      <View style={{ gap: 0 }}>
+        <PasswordField
+          ref={passwordRef}
+          value={password}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
+          }}
+          error={errors.password}
+          returnKeyType="go"
+          onSubmitEditing={submit}
+        />
+        <TextLink
+          label="Quên mật khẩu?"
+          align="flex-end"
+          onPress={() => go('/auth/password/reset-request')}
+        />
+      </View>
+
+      <Button label="Đăng nhập" size={56} loading={busy} onPress={submit} />
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.bg }}
@@ -81,66 +132,12 @@ export function SignInScreen() {
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 32 }}
         style={{ backgroundColor: colors.bg }}
       >
-        <AuthHero height={250} />
-        <View
-          style={{
-            marginTop: -2,
-            paddingHorizontal: 20,
-            paddingTop: 24,
-            gap: 16,
-          }}
-        >
-          <View style={{ gap: 4 }}>
-            <Text
-              accessibilityRole="header"
-              style={{ fontFamily: fonts.heavy, fontSize: 26, lineHeight: 32, color: colors.ink }}
-            >
-              Đăng nhập
-            </Text>
-            <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.muted }}>
-              Quản lý kinh doanh vỉa hè, minh bạch và đơn giản.
-            </Text>
-          </View>
+        <AuthSignboard overlap={form} onBrowse={() => router.replace('/customer/explore' as Href)} />
 
-          {sessionExpired ? (
-            <Banner tone="warning">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</Banner>
-          ) : null}
-          {error ? <Banner tone="danger">{error}</Banner> : null}
-
-          <PhoneField
-            value={phone}
-            onChangeText={(v) => {
-              setPhone(v);
-              if (errors.phone) setErrors((e) => ({ ...e, phone: undefined }));
-            }}
-            error={errors.phone}
-            onSubmitEditing={() => passwordRef.current?.focus()}
-            submitBehavior="submit"
-          />
-          <View style={{ gap: 2 }}>
-            <PasswordField
-              ref={passwordRef}
-              value={password}
-              onChangeText={(v) => {
-                setPassword(v);
-                if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
-              }}
-              error={errors.password}
-              returnKeyType="go"
-              onSubmitEditing={submit}
-            />
-            <TextLink
-              label="Quên mật khẩu?"
-              align="flex-end"
-              onPress={() => go('/auth/password/reset-request')}
-            />
-          </View>
-
-          <Button label="Đăng nhập" size={56} loading={busy} onPress={submit} />
-
+        <View style={{ paddingHorizontal: 20, paddingTop: 20, gap: 14 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
-            <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.muted }}>hoặc</Text>
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.muted }}>hoặc</Text>
             <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
           </View>
 
@@ -151,55 +148,21 @@ export function SignInScreen() {
             onPress={() => go('/auth/sign-in/otp')}
           />
 
-          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.muted }}>
               Chưa có tài khoản?
             </Text>
             <TextLink label="Đăng ký ngay" onPress={() => go('/auth/register')} />
           </View>
 
-          <Pressable
-            onPress={() => router.replace('/customer/explore' as Href)}
-            accessibilityRole="button"
-            style={({ pressed }) => ({
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 12,
-              padding: 14,
-              borderRadius: radius.card,
-              borderCurve: 'continuous',
-              backgroundColor: pressed ? colors.brandTint : colors.card,
-              borderWidth: 1,
-              borderColor: colors.brandTint,
-            })}
-          >
-            <View
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                backgroundColor: colors.brandTint,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon sf="fork.knife" md="restaurant" size={19} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>
-                Xem quán, không cần tài khoản
-              </Text>
-              <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.muted }}>
-                Khách vẫn tìm được quán có phép và kiểm tra giấy phép.
-              </Text>
-            </View>
-          </Pressable>
-
           {isDev ? (
-            <View style={{ gap: 8, marginTop: 4 }}>
-              <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.muted }}>
-                Tài khoản mẫu (bản phát triển)
-              </Text>
+            <View style={{ gap: 10, padding: 16, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.line, borderStyle: 'dashed' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Icon sf="hammer.fill" md="build" size={15} color={colors.muted} />
+                <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.muted }}>
+                  Tài khoản mẫu (bản phát triển)
+                </Text>
+              </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {DEMO.map((d) => (
                   <Pressable
@@ -212,15 +175,14 @@ export function SignInScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Điền nhanh tài khoản mẫu ${d.label}`}
                     style={({ pressed }) => ({
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      borderRadius: 999,
-                      backgroundColor: pressed ? colors.sunken : colors.card,
-                      borderWidth: 1,
-                      borderColor: colors.line,
+                      minHeight: 40,
+                      justifyContent: 'center',
+                      paddingHorizontal: 14,
+                      borderRadius: radius.full,
+                      backgroundColor: pressed ? colors.brandTint : colors.sunken,
                     })}
                   >
-                    <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.ink }}>{d.label}</Text>
+                    <Text style={{ fontFamily: fonts.semibold, fontSize: 13.5, color: colors.ink }}>{d.label}</Text>
                   </Pressable>
                 ))}
               </View>

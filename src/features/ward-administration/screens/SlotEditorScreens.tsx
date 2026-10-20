@@ -1,23 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { Card } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Chip } from '@/components/common/Chip';
 import { Icon } from '@/components/common/Icon';
-import { Banner } from '@/components/feedback/Banner';
+import { KerbStrip } from '@/components/common/KerbStrip';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
 import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { LeafletMap, type MapMarker } from '@/components/map/LeafletMap';
+import { Toggle } from '@/components/native/Toggle';
 import { Checkbox } from '@/features/authentication/components/auth-parts';
 import { DEFAULT_CENTER } from '@/features/sidewalk-slots/map-constants';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import {
   batchSlotCount,
   businessCategoryLabels,
@@ -49,11 +50,42 @@ function useEditorData() {
   return { userId, zones, grid };
 }
 
+/** A heading inside a long form (heavy, with an optional one-line note). */
+function Heading({ title, note, aside }: { title: string; note?: string; aside?: ReactNode }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12, marginTop: 8 }}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 19, lineHeight: 25, color: colors.ink }}>{title}</Text>
+        {note ? <Text style={[text.footnote, { color: colors.muted }]}>{note}</Text> : null}
+      </View>
+      {aside}
+    </View>
+  );
+}
+
+/** A white grouped surface (map cards, settings rows). */
+function Group({ children }: { children: ReactNode }) {
+  return <View style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.card, boxShadow: shadow.card }}>{children}</View>;
+}
+
+/** A strip of asphalt with its dashed centre line (decorative). */
+function Road() {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ height: 20, backgroundColor: colors.line, justifyContent: 'center', overflow: 'hidden' }}>
+      <View style={{ flexDirection: 'row', gap: 12, paddingLeft: 8 }}>
+        {Array.from({ length: 24 }, (_, i) => (
+          <View key={i} style={{ width: 18, height: 3, borderRadius: 2, backgroundColor: colors.white }} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 /** The zone chips every editor form starts with. */
 function ZonePicker({ zones, value, onChange }: { zones: WardZone[]; value: number; onChange: (id: number) => void }) {
   return (
     <>
-      <Text style={[text.subhead, { color: colors.ink }]}>Tuyến</Text>
+      <Heading title="Tuyến" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
         {zones.map((z) => (
           <Chip key={z.zoneId} label={z.zoneName} selected={z.zoneId === value} onPress={() => onChange(z.zoneId)} accessibilityRole="radio" />
@@ -68,7 +100,8 @@ function EditorGate({ title, zones, grid, children }: { title: string; zones: Re
     return (
       <Screen>
         <Stack.Screen options={{ title }} />
-        <ListSkeleton rows={3} height={110} />
+        <Skeleton height={300} radius={radius.card} />
+        <ListSkeleton rows={2} height={64} />
       </Screen>
     );
   }
@@ -90,6 +123,22 @@ function EditorGate({ title, zones, grid, children }: { title: string; zones: Re
   }
   return <>{children(zones.data)}</>;
 }
+
+/** A figure with its words, used for the measured stretch. */
+function Figure({ value, label, tone = colors.ink }: { value: string; label: string; tone?: string }) {
+  return (
+    <View accessible accessibilityLabel={`${label}: ${value}`} style={{ flex: 1, gap: 2 }}>
+      <Text maxFontSizeMultiplier={1.3} adjustsFontSizeToFit numberOfLines={1} style={[sign.title, tabular, { color: tone }]}>{value}</Text>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, color: colors.muted }}>{label}</Text>
+    </View>
+  );
+}
+
+const UTILITIES = [
+  ['hasPower', 'Có điện', { sf: 'bolt.fill', md: 'bolt' }],
+  ['hasWater', 'Có nước', { sf: 'drop.fill', md: 'water_drop' }],
+  ['hasTrashBin', 'Có thùng rác', { sf: 'trash.fill', md: 'delete' }],
+] as const;
 
 /**
  * W17b Rải ô hàng loạt (web BatchPanel): tap the two ends of a kerb stretch, set the slot size and
@@ -190,52 +239,57 @@ function BatchSlots({ zones, userId, existing }: { zones: WardZone[]; userId: st
     stale();
     setPins((p) => (p.length >= 2 ? [{ latitude, longitude }] : [...p, { latitude, longitude }]));
   };
+  const flagged = (preview?.candidates ?? []).filter((c) => c.issues.length > 0);
 
   return (
     <Screen
       footer={
         preview ? (
-          <Button label={`Tạo ${chosen.length} ô`} size={56} icon={{ sf: 'plus', md: 'add' }} loading={create.isPending} disabled={chosen.length === 0 || (warned && (!ack || !reason.trim()))} onPress={() => create.mutate()} />
+          <Button label={`Tạo ${chosen.length} ô`} variant="sign" size={56} icon={{ sf: 'plus', md: 'add' }} loading={create.isPending} disabled={chosen.length === 0 || (warned && (!ack || !reason.trim()))} onPress={() => create.mutate()} />
         ) : (
           <Button label="Xem trước dãy ô" size={56} variant="sign" icon={{ sf: 'eye', md: 'visibility' }} loading={run.isPending} disabled={pins.length < 2 || w == null || l == null || !gapValid || tooShort} onPress={() => run.mutate()} />
         )
       }
     >
       <Stack.Screen options={{ title: 'Rải ô hàng loạt' }} />
-      <Card padded={false}>
+      <Group>
         <LeafletMap center={pins[0] ? [pins[0].latitude, pins[0].longitude] : onRoute[0] ? [onRoute[0].latitude, onRoute[0].longitude] : DEFAULT_CENTER} zoom={18} markers={markers} onMapPress={tap} style={{ height: 300 }} />
-        <View style={{ padding: 12, gap: 6 }}>
+        <View style={{ padding: 14, gap: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {['Điểm đầu', 'Điểm cuối'].map((label, i) => (
-              <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 30, paddingHorizontal: 10, borderRadius: 15, backgroundColor: pins.length > i ? colors.sign : colors.sunken }}>
+              <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 34, paddingHorizontal: 12, borderRadius: radius.full, backgroundColor: pins.length > i ? colors.sign : colors.sunken }}>
                 <Icon sf={pins.length > i ? 'checkmark' : 'mappin'} md={pins.length > i ? 'check' : 'location_on'} size={13} color={pins.length > i ? colors.white : colors.muted} />
-                <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: pins.length > i ? colors.white : colors.muted }}>{label}</Text>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: pins.length > i ? colors.white : colors.muted }}>{label}</Text>
               </View>
             ))}
             <View style={{ flex: 1 }} />
             {pins.length ? (
-              <Pressable onPress={() => { setPins([]); stale(); }} accessibilityRole="button" hitSlop={8}>
-                <Text style={[text.subhead, { color: colors.sign }]}>Chọn lại</Text>
+              <Pressable onPress={() => { setPins([]); stale(); }} accessibilityRole="button" hitSlop={8} style={{ minHeight: 44, justifyContent: 'center' }}>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 14.5, color: colors.sign }}>Chọn lại</Text>
               </Pressable>
             ) : null}
           </View>
-          <Text style={[text.caption, { color: colors.muted }]}>{pins.length < 2 ? `Chạm bản đồ để chọn ${pins.length === 0 ? 'điểm đầu' : 'điểm cuối'} của đoạn vỉa hè. Tối đa ${MAX_BATCH_SLOTS} ô mỗi lần.` : 'Chạm lại bản đồ để chọn đoạn khác.'}</Text>
+          <Text style={[text.footnote, { color: colors.muted }]}>{pins.length < 2 ? `Chạm bản đồ để chọn ${pins.length === 0 ? 'điểm đầu' : 'điểm cuối'} của đoạn vỉa hè. Tối đa ${MAX_BATCH_SLOTS} ô mỗi lần.` : 'Chạm lại bản đồ để chọn đoạn khác.'}</Text>
         </View>
-      </Card>
+      </Group>
 
       {segment != null ? (
-        <Banner tone={tooShort ? 'danger' : 'neutral'}>
-          {`Đoạn dài khoảng ${segment < 10 ? segment.toFixed(1).replace('.', ',') : Math.round(segment)} m${
-            tooShort
-              ? ` — ngắn hơn chiều dài một ô (${l} m). Chọn điểm cuối xa hơn hoặc giảm chiều dài ô.`
-              : estimate != null
-                ? ` → rải được khoảng ${estimate} ô${estimate === MAX_BATCH_SLOTS ? ' (đã chạm giới hạn, phần còn lại rải ở lượt sau)' : ''}.`
-                : '.'
-          }`}
-        </Banner>
+        // The measured stretch, read like a tape: how long, and how many bays fit on it.
+        <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: tooShort ? colors.dangerTint : colors.card, boxShadow: tooShort ? undefined : shadow.card }}>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Figure value={`${segment < 10 ? segment.toFixed(1).replace('.', ',') : Math.round(segment)} m`} label="Đoạn dài khoảng" tone={tooShort ? colors.onDanger : colors.ink} />
+            {!tooShort && estimate != null ? <Figure value={`${estimate} ô`} label="Rải được khoảng" tone={colors.primary} /> : null}
+          </View>
+          {tooShort ? (
+            <Text style={[text.footnote, { color: colors.onDanger }]}>{`Ngắn hơn chiều dài một ô (${l} m). Chọn điểm cuối xa hơn hoặc giảm chiều dài ô.`}</Text>
+          ) : estimate === MAX_BATCH_SLOTS ? (
+            <Text style={[text.footnote, { color: colors.onMango }]}>Đã chạm giới hạn, phần còn lại rải ở lượt sau.</Text>
+          ) : null}
+        </View>
       ) : null}
 
       <ZonePicker zones={zones} value={zoneId} onChange={(id) => { setZoneId(id); stale(); }} />
+      <Heading title="Kích thước mỗi ô" />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <View style={{ flex: 1 }}>
           <TextField label="Rộng (m)" value={width} onChangeText={(v) => { setWidth(v); stale(); }} keyboardType="decimal-pad" error={w == null ? '0–20 m' : undefined} />
@@ -248,21 +302,18 @@ function BatchSlots({ zones, userId, existing }: { zones: WardZone[]; userId: st
         </View>
       </View>
 
-      <Card style={{ gap: 4 }}>
-        <Text style={[text.subhead, { color: colors.ink }]}>Tiện ích cho cả dãy</Text>
-        {(
-          [
-            ['hasPower', 'Có điện'],
-            ['hasWater', 'Có nước'],
-            ['hasTrashBin', 'Có thùng rác'],
-          ] as const
-        ).map(([k, label]) => (
-          <View key={k} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
-            <Text style={[text.callout, { color: colors.ink }]}>{label}</Text>
-            <Switch value={facilities[k]} onValueChange={(v) => setFacilities({ ...facilities, [k]: v })} trackColor={{ true: colors.leaf, false: colors.line }} thumbColor={colors.white} accessibilityLabel={label} />
+      <Heading title="Tiện ích cho cả dãy" />
+      <Group>
+        {UTILITIES.map(([k, label, icon], i) => (
+          <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingHorizontal: 14, paddingVertical: 8, borderTopWidth: i ? 1 : 0, borderTopColor: colors.separator }}>
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: facilities[k] ? colors.brandTint : colors.sunken, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon sf={icon.sf} md={icon.md} size={17} color={facilities[k] ? colors.primary : colors.muted} />
+            </View>
+            <Text style={[text.body, { flex: 1, fontFamily: fonts.semibold, color: colors.ink }]}>{label}</Text>
+            <Toggle value={facilities[k]} onChange={(v) => setFacilities({ ...facilities, [k]: v })} />
           </View>
         ))}
-      </Card>
+      </Group>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
         <Chip label="Không gợi ý ngành" selected={!facilities.businessCategory} onPress={() => setFacilities({ ...facilities, businessCategory: null })} accessibilityRole="radio" />
         {Object.entries(businessCategoryLabels).map(([k, label]) => (
@@ -271,47 +322,79 @@ function BatchSlots({ zones, userId, existing }: { zones: WardZone[]; userId: st
       </ScrollView>
 
       {preview ? (
-        <Card style={{ gap: 10 }}>
-          <Text style={[text.headline, { color: colors.ink }]}>{`${preview.candidates.length} vị trí đề xuất · chọn ${chosen.length} ô`}</Text>
-          {!preview.boundaryVerified ? <Text style={[text.caption, { color: colors.muted }]}>Phường chưa có ranh giới để đối chiếu.</Text> : null}
-          {preview.candidates.map((c) => {
-            const blocked = hasBlock(c.issues);
-            const on = !excluded.has(c.index);
-            return (
-              <View key={c.index} style={{ gap: 4, padding: 10, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: blocked ? colors.dangerTint : c.issues.length ? colors.mangoTint : colors.sunken }}>
-                <Pressable
-                  onPress={() => setExcluded((s) => { const n = new Set(s); if (on) n.add(c.index); else n.delete(c.index); return n; })}
-                  disabled={blocked}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: on, disabled: blocked }}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36 }}
-                >
-                  <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: on && !blocked ? colors.cta : colors.line, backgroundColor: on && !blocked ? colors.cta : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                    {on && !blocked ? <Icon sf="checkmark" md="check" size={12} color={colors.white} weight="bold" /> : null}
+        <>
+          <Heading title="Dãy ô xem trước" note={`${preview.candidates.length} vị trí đề xuất, chọn ${chosen.length} ô. Chạm một ô để bỏ hoặc giữ.`} />
+          {/* The stretch as it will be painted: road, kerb, and each proposed bay on the pavement */}
+          <Group>
+            <Road />
+            <KerbStrip height={8} segment={20} />
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 12, backgroundColor: colors.kerbPaint }}>
+              {preview.candidates.map((c) => {
+                const blocked = hasBlock(c.issues);
+                const on = !excluded.has(c.index);
+                const look = blocked
+                  ? { wash: colors.dangerTint, edge: colors.danger, ink: colors.onDanger, word: 'Bị chặn' }
+                  : !on
+                    ? { wash: colors.sunken, edge: '#9AA4AF', ink: colors.muted, word: 'Bỏ qua' }
+                    : c.issues.length
+                      ? { wash: colors.mangoTint, edge: colors.mango, ink: colors.onMango, word: 'Có cảnh báo' }
+                      : { wash: colors.leafTint, edge: colors.leaf, ink: colors.onLeaf, word: 'Sẽ tạo' };
+                return (
+                  <Pressable
+                    key={c.index}
+                    onPress={() => setExcluded((s) => { const n = new Set(s); if (on) n.add(c.index); else n.delete(c.index); return n; })}
+                    disabled={blocked}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on && !blocked, disabled: blocked }}
+                    accessibilityLabel={`Ô ${c.proposedCode}, ${look.word}`}
+                    style={({ pressed }) => ({ width: '31.3%', minHeight: 72, paddingHorizontal: 9, paddingVertical: 8, gap: 2, borderRadius: radius.plate, borderWidth: 2, borderStyle: on && !blocked ? 'solid' : 'dashed', borderColor: look.edge, backgroundColor: look.wash, opacity: pressed ? 0.75 : 1 })}
+                  >
+                    <Text maxFontSizeMultiplier={1.4} adjustsFontSizeToFit numberOfLines={1} style={[sign.price, tabular, { color: colors.ink }]}>{c.proposedCode}</Text>
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 12, lineHeight: 16, color: look.ink }}>{look.word}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Group>
+          {!preview.boundaryVerified ? <Text style={[text.footnote, { color: colors.muted }]}>Phường chưa có ranh giới để đối chiếu.</Text> : null}
+          {flagged.length ? (
+            <Group>
+              {flagged.map((c, i) => (
+                <View key={c.index} style={{ flexDirection: 'row', gap: 12, padding: 14, borderTopWidth: i ? 1 : 0, borderTopColor: colors.separator }}>
+                  <View style={{ alignSelf: 'flex-start', paddingHorizontal: 8, minHeight: 26, justifyContent: 'center', borderRadius: radius.plate, backgroundColor: colors.plate }}>
+                    <Text style={[sign.plate, { color: colors.white }]}>{c.proposedCode}</Text>
                   </View>
-                  <Text style={[{ fontFamily: fonts.code, fontSize: 16, color: colors.ink }, tabular]}>{c.proposedCode}</Text>
-                  <Text style={[text.caption, { color: blocked ? colors.onDanger : colors.onMango }]}>{blocked ? 'bị chặn' : c.issues.length ? 'có cảnh báo' : ''}</Text>
-                </Pressable>
-                {c.issues.map((issue, i) => (
-                  <Text key={i} style={[text.footnote, { color: issue.severity === 'BLOCK' ? colors.onDanger : colors.onMango }]}>{`• ${issue.message}`}</Text>
-                ))}
-              </View>
-            );
-          })}
+                  <View style={{ flex: 1, gap: 4 }}>
+                    {c.issues.map((issue, j) => (
+                      <Text key={j} style={[text.footnote, { color: issue.severity === 'BLOCK' ? colors.onDanger : colors.onMango }]}>{issue.message}</Text>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </Group>
+          ) : null}
           {warned ? (
             <View style={{ gap: 8 }}>
               <Checkbox checked={ack} onChange={setAck}>Tôi đã xem các cảnh báo và vẫn muốn tạo</Checkbox>
               {ack ? <TextField label="Lý do bỏ qua cảnh báo" value={reason} onChangeText={(v) => setReason(v.slice(0, 500))} multiline /> : null}
             </View>
           ) : null}
-          <Button label="Xem trước lại" variant="secondary" loading={run.isPending} onPress={() => run.mutate()} />
-        </Card>
+          <Button label="Xem trước lại" variant="secondary" icon={{ sf: 'arrow.clockwise', md: 'refresh' }} loading={run.isPending} onPress={() => run.mutate()} />
+        </>
       ) : null}
     </Screen>
   );
 }
 
 const FEATURE_TYPES = Object.keys(featureTypeLabels) as StreetFeatureType[];
+const FEATURE_ICONS: Record<StreetFeatureType, { sf: string; md: string }> = {
+  TRANSFORMER: { sf: 'bolt.fill', md: 'electrical_services' },
+  HYDRANT: { sf: 'flame.fill', md: 'fire_hydrant' },
+  TREE: { sf: 'tree.fill', md: 'park' },
+  LIGHT_POLE: { sf: 'lightbulb.fill', md: 'lightbulb' },
+  BUS_STOP: { sf: 'bus.fill', md: 'directions_bus' },
+  PARKING: { sf: 'parkingsign', md: 'local_parking' },
+};
 
 /**
  * W17c Chướng ngại vật (web FeaturePanel): hydrants, transformers, trees, poles, bus stops and
@@ -394,6 +477,7 @@ function StreetFeatures({ zones, userId, features }: { zones: WardZone[]; userId
       footer={
         <Button
           label={editing ? 'Lưu thay đổi' : 'Thêm chướng ngại vật'}
+          variant="sign"
           size={56}
           loading={create.isPending || update.isPending}
           disabled={!position || !label.trim()}
@@ -402,7 +486,7 @@ function StreetFeatures({ zones, userId, features }: { zones: WardZone[]; userId
       }
     >
       <Stack.Screen options={{ title: 'Chướng ngại vật' }} />
-      <Card padded={false}>
+      <Group>
         <LeafletMap
           key={focus ? `${focus.latitude},${focus.longitude}` : 'map'}
           center={center}
@@ -415,8 +499,9 @@ function StreetFeatures({ zones, userId, features }: { zones: WardZone[]; userId
           onMapPress={(latitude, longitude) => setPoint({ latitude, longitude })}
           style={{ height: 280 }}
         />
-        <View style={{ padding: 12 }}>
-          <Text style={[text.caption, { color: point ? colors.primary : colors.muted }, tabular]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 }}>
+          <Icon sf={point ? 'mappin.circle.fill' : 'hand.tap.fill'} md={point ? 'where_to_vote' : 'touch_app'} size={18} color={point ? colors.primary : colors.muted} />
+          <Text style={[text.footnote, tabular, { flex: 1, color: point ? colors.ink : colors.muted }]}>
             {editing
               ? point
                 ? 'Đã chọn vị trí mới; bấm Lưu để dời chướng ngại vật tới đó.'
@@ -426,55 +511,70 @@ function StreetFeatures({ zones, userId, features }: { zones: WardZone[]; userId
                 : 'Chạm bản đồ để chọn vị trí chướng ngại vật; chạm một ghim để sửa.'}
           </Text>
         </View>
-      </Card>
+      </Group>
       {editing ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={[text.headline, { flex: 1, color: colors.ink }]}>{`Sửa: ${editing.label}`}</Text>
-          <Pressable onPress={reset} accessibilityRole="button" hitSlop={8}>
-            <Text style={[text.subhead, { color: colors.sign }]}>Huỷ sửa</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.signTint }}>
+          <Icon sf="pencil" md="edit" size={18} color={colors.sign} />
+          <Text style={[text.headline, { flex: 1, color: colors.sign }]}>{`Sửa: ${editing.label}`}</Text>
+          <Pressable onPress={reset} accessibilityRole="button" hitSlop={8} style={{ minHeight: 44, justifyContent: 'center' }}>
+            <Text style={{ fontFamily: fonts.heavy, fontSize: 14.5, color: colors.sign }}>Huỷ sửa</Text>
           </Pressable>
         </View>
       ) : null}
       <ZonePicker zones={zones} value={zoneId} onChange={setZoneId} />
-      <Text style={[text.subhead, { color: colors.ink }]}>Loại</Text>
+      <Heading title="Loại" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {FEATURE_TYPES.map((t) => (
-          <Chip key={t} label={featureTypeLabels[t]} selected={t === type} onPress={() => setType(t)} accessibilityRole="radio" />
+          <Chip key={t} label={featureTypeLabels[t]} icon={FEATURE_ICONS[t]} selected={t === type} onPress={() => setType(t)} accessibilityRole="radio" />
         ))}
       </View>
       <TextField label="Tên / mô tả ngắn" value={label} onChangeText={(v) => setLabel(v.slice(0, 150))} placeholder="VD: Trụ cứu hoả trước số 12" />
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48, paddingHorizontal: 12, borderRadius: radius.control, backgroundColor: colors.dangerTint }}>
-        <Text style={[text.callout, { flex: 1, color: colors.onDanger }]}>Cấm đặt ô sạp đè lên vị trí này</Text>
-        <Switch value={blocks} onValueChange={setBlocks} trackColor={{ true: colors.danger, false: colors.line }} thumbColor={colors.white} accessibilityLabel="Cấm đặt ô sạp đè lên vị trí này" />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: blocks ? colors.dangerTint : colors.card, boxShadow: blocks ? undefined : shadow.card }}>
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: blocks ? colors.danger : colors.sunken, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon sf="nosign" md="block" size={18} color={blocks ? colors.white : colors.muted} />
+        </View>
+        <Text style={[text.callout, { flex: 1, fontFamily: fonts.semibold, color: blocks ? colors.onDanger : colors.ink }]}>Cấm đặt ô sạp đè lên vị trí này</Text>
+        <Toggle value={blocks} onChange={setBlocks} />
       </View>
       <TextField label="Ghi chú" optional value={note} onChangeText={(v) => setNote(v.slice(0, 200))} />
 
       {features.length ? (
-        <View style={{ gap: 8 }}>
-          <Text style={[text.subhead, { color: colors.ink }]}>{`Chướng ngại vật hiện có (${features.length})`}</Text>
-          {features.map((f) => (
-            <View key={f.featureId} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: editing?.featureId === f.featureId ? 2 : 0, borderColor: colors.cta }}>
-              <View style={{ width: 10, alignSelf: 'stretch', borderRadius: 5, backgroundColor: f.blocksBusiness ? colors.danger : colors.sign }} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={[text.subhead, { color: colors.ink }]} numberOfLines={1}>{f.label}</Text>
-                <Text style={[text.caption, { color: colors.muted }]} numberOfLines={1}>{`${featureTypeLabels[f.featureType]}${f.blocksBusiness ? ' · cấm đặt ô' : ''}${f.clearanceMeters ? ` · chừa ${f.clearanceMeters} m` : ''}`}</Text>
-              </View>
-              <Pressable onPress={() => startEdit(f)} accessibilityRole="button" accessibilityLabel={`Sửa ${f.label}`} hitSlop={6} style={{ padding: 8 }}>
-                <Icon sf="pencil" md="edit" size={18} color={colors.sign} />
-              </Pressable>
-              <Pressable
-                onPress={() => Alert.alert(`Xoá "${f.label}"?`, 'Các ô gần đó sẽ không còn bị ràng buộc bởi chướng ngại vật này.', [{ text: 'Giữ lại', style: 'cancel' }, { text: 'Xoá', style: 'destructive', onPress: () => remove.mutate(f) }])}
-                accessibilityRole="button"
-                accessibilityLabel={`Xoá ${f.label}`}
-                hitSlop={6}
-                style={{ padding: 8 }}
-              >
-                <Icon sf="trash" md="delete" size={18} color={colors.danger} />
-              </Pressable>
-            </View>
-          ))}
+        <View style={{ gap: 12 }}>
+          <Heading title={`Chướng ngại vật hiện có (${features.length})`} />
+          <Group>
+            {features.map((f, i) => {
+              const icon = FEATURE_ICONS[f.featureType];
+              const on = editing?.featureId === f.featureId;
+              return (
+                <View key={f.featureId} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 14, paddingRight: 6, paddingVertical: 10, minHeight: 64, borderTopWidth: i ? 1 : 0, borderTopColor: colors.separator, backgroundColor: on ? colors.signTint : colors.card }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: f.blocksBusiness ? colors.dangerTint : colors.signTint, alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon sf={icon.sf} md={icon.md} size={19} color={f.blocksBusiness ? colors.danger : colors.sign} />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.ink }} numberOfLines={2}>{f.label}</Text>
+                    <Text style={[text.footnote, { color: colors.muted }]}>
+                      {[featureTypeLabels[f.featureType], f.blocksBusiness ? 'cấm đặt ô' : null, f.clearanceMeters ? `chừa ${f.clearanceMeters} m` : null].filter(Boolean).join(', ')}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => startEdit(f)} accessibilityRole="button" accessibilityLabel={`Sửa ${f.label}`} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? colors.signTint : 'transparent' })}>
+                    <Icon sf="pencil" md="edit" size={18} color={colors.sign} />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => Alert.alert(`Xoá "${f.label}"?`, 'Các ô gần đó sẽ không còn bị ràng buộc bởi chướng ngại vật này.', [{ text: 'Giữ lại', style: 'cancel' }, { text: 'Xoá', style: 'destructive', onPress: () => remove.mutate(f) }])}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Xoá ${f.label}`}
+                    style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? colors.dangerTint : 'transparent' })}
+                  >
+                    <Icon sf="trash" md="delete" size={18} color={colors.danger} />
+                  </Pressable>
+                </View>
+              );
+            })}
+          </Group>
         </View>
-      ) : null}
+      ) : (
+        <StateView icon={{ sf: 'mappin.slash', md: 'location_off' }} tone="neutral" title="Chưa có chướng ngại vật" body="Chạm bản đồ ở trên để đánh dấu trụ cứu hoả, tủ điện, cây xanh mà ô sạp phải tránh." />
+      )}
     </Screen>
   );
 }

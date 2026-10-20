@@ -45,14 +45,15 @@ export function Chip({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        height: 38,
-        paddingLeft: leading ? 4 : 14,
-        paddingRight: 14,
-        borderRadius: 19,
+        minHeight: 40,
+        paddingLeft: leading ? 4 : 16,
+        paddingRight: 16,
+        borderRadius: 20,
         borderCurve: 'continuous',
-        backgroundColor: selected ? colors.cta : pressed ? colors.sunken : colors.card,
-        borderWidth: selected ? 0 : 1,
-        borderColor: colors.line,
+        backgroundColor: selected ? colors.cta : pressed ? colors.brandTint : colors.card,
+        borderWidth: selected ? 0 : 1.5,
+        borderColor: selected ? colors.cta : colors.line,
+        boxShadow: selected ? '0 8px 18px -10px rgba(238, 85, 0, 0.6)' : undefined,
       })}
     >
       {leading}
@@ -64,7 +65,7 @@ export function Chip({
           color={selected ? colors.white : colors.primary}
         />
       ) : null}
-      <Text style={{ fontFamily: selected ? fonts.bold : fonts.semibold, fontSize: 14, color: fg }}>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: fg }}>
         {label}
       </Text>
       {trailingChevron ? <Icon sf="chevron.down" md="expand_more" size={12} color={fg} /> : null}

@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, Switch, Text, View, useWindowDimensions } from 'react-native';
 
 import { Chip } from '@/components/common/Chip';
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
+import { PressableScale } from '@/components/common/PressableScale';
 import { Banner } from '@/components/feedback/Banner';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
@@ -20,7 +22,8 @@ import { apiAssetUrl } from '@/core/api/asset-url';
 import { sellerStoreApi, type MenuInput, type SellerMenuItem } from '@/core/api/seller-store-api';
 import type { PickedFile } from '@/core/api/upload';
 import { formatDay } from '@/features/food-safety/format';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
+import { PriceSticker } from '@/ui';
 import { formatVnd } from '@/utils/format';
 import { buyerVisibility } from '../menu-view';
 
@@ -49,9 +52,94 @@ function DishAttp({ item }: { item: SellerMenuItem }) {
   }
 }
 
+/**
+ * A dish on the stall's own menu, drawn like the dish buyers see in Khám phá: the square photo,
+ * the price on a mango sticker across its top edge ("Hết món" on a grey one when sold out), the
+ * pencil in its corner to edit; under it the name, the ATTP state and the sold-out switch.
+ * The photo is never greyed to say "sold out": the sticker and the switch say it in words.
+ */
+function MenuTile({
+  item,
+  width,
+  busy,
+  onEdit,
+  onToggle,
+}: {
+  item: SellerMenuItem;
+  width: number;
+  busy: boolean;
+  onEdit: () => void;
+  onToggle: () => void;
+}) {
+  const sold = item.availabilityStatus === 'SOLD_OUT';
+  const hidden = item.availabilityStatus === 'HIDDEN';
+  return (
+    <View style={{ width, gap: 8 }}>
+      <View style={{ paddingTop: 8 }}>
+        <PressableScale
+          onPress={onEdit}
+          accessibilityLabel={`Sửa món ${item.name}, ${sold ? 'đang hết món' : formatVnd(item.unitPrice)}`}
+          style={{ width, aspectRatio: 1, borderRadius: radius.photo, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: item.imageUrl ? colors.sunken : colors.kerbPaint }}
+        >
+          {item.imageUrl ? (
+            <Image source={{ uri: apiAssetUrl(item.imageUrl) }} style={{ width: '100%', height: '100%' }} contentFit="cover" recyclingKey={item.imageUrl} transition={120} accessibilityIgnoresInvertColors />
+          ) : (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radius.photo, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.brandLight }}>
+              <Icon sf="camera.fill" md="photo_camera" size={24} color={colors.primary} />
+              <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.primary }}>Thêm ảnh</Text>
+            </View>
+          )}
+          {item.foodSafetyStatus === 'APPROVED' ? (
+            <View style={{ position: 'absolute', right: 8, top: 8, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.white, borderRadius: radius.full, paddingHorizontal: 7, minHeight: 24 }}>
+              <Icon sf="checkmark.shield.fill" md="verified_user" size={12} color={colors.leaf} />
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 11, color: colors.onLeaf }}>ATTP</Text>
+            </View>
+          ) : null}
+          <View style={{ position: 'absolute', right: 8, bottom: 8, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', boxShadow: shadow.card }}>
+            <Icon sf="pencil" md="edit" size={16} color={colors.ink} />
+          </View>
+        </PressableScale>
+        <PriceSticker
+          value={sold ? 'Hết món' : formatVnd(item.unitPrice)}
+          tilt={-4}
+          style={[{ position: 'absolute', top: 0, left: 8 }, sold ? { backgroundColor: colors.sunken } : null]}
+        />
+      </View>
+
+      <View style={{ gap: 6, paddingHorizontal: 2 }}>
+        <View style={{ gap: 1 }}>
+          <Text numberOfLines={2} style={{ fontFamily: fonts.heavy, fontSize: 15.5, lineHeight: 20, color: colors.ink }}>
+            {item.name}
+          </Text>
+          <Text numberOfLines={1} style={{ fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 17, color: colors.muted }}>
+            {item.categoryName}
+          </Text>
+        </View>
+        <DishAttp item={item} />
+        {hidden ? <StatusPill label="Bị ẩn bởi quản trị" tone="danger" /> : null}
+        {!hidden ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, minHeight: 44 }}>
+            <Text style={{ flexShrink: 1, fontFamily: fonts.bold, fontSize: 13.5, color: sold ? colors.onDanger : colors.onLeaf }}>{sold ? 'Đang hết món' : 'Còn món'}</Text>
+            <Switch
+              value={!sold}
+              disabled={busy}
+              onValueChange={onToggle}
+              trackColor={{ true: colors.leaf, false: colors.line }}
+              thumbColor={colors.white}
+              accessibilityLabel={sold ? 'Còn hàng trở lại' : 'Đánh dấu hết món'}
+            />
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 /** V35 Thực đơn (SELL-02): the stall's few signature dishes, what buyers see, sold-out at a flick. */
 export function MenuScreen() {
   const { storefrontId } = useLocalSearchParams<{ storefrontId?: string }>();
+  const { width } = useWindowDimensions();
+  const tileWidth = Math.floor((width - 32 - 14) / 2);
   const cache = useQueryClient();
   const { stores, categories, menu, storeId } = useMenuData(storefrontId);
   const [switching, setSwitching] = useState<number | null>(null);
@@ -76,8 +164,15 @@ export function MenuScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Thực đơn' }} />
-        <ListSkeleton rows={1} height={110} />
-        <ListSkeleton rows={3} height={110} />
+        <Skeleton height={150} radius={radius.card} />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }} accessibilityLabel="Đang tải">
+          {[0, 1, 2, 3].map((i) => (
+            <View key={i} style={{ width: tileWidth, gap: 8 }}>
+              <Skeleton height={tileWidth} radius={radius.photo} />
+              <Skeleton height={14} width="70%" />
+            </View>
+          ))}
+        </View>
       </Screen>
     );
   }
@@ -103,18 +198,20 @@ export function MenuScreen() {
   const full = items.length >= maxItems;
   const store = stores.data!.find((s) => s.storefrontId === storeId);
   const v = buyerVisibility(items, store?.availabilityStatus);
+  const ink = v.storePaused ? colors.onMango : colors.onLeaf;
 
   return (
     <Screen
       onRefresh={() => void menu.refetch()}
       refreshing={menu.isRefetching}
+      gap={20}
       footer={
         full ? undefined : (
           <Button label="Thêm món" size={56} icon={{ sf: 'plus', md: 'add' }} onPress={() => go(`/vendor/home/store/dish?storefrontId=${storeId}&id=new`)} />
         )
       }
     >
-      <Stack.Screen options={{ title: store ? `Thực đơn · ${store.name}` : 'Thực đơn' }} />
+      <Stack.Screen options={{ title: 'Thực đơn' }} />
       {stores.data!.length > 1 ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {stores.data!.map((s) => (
@@ -123,88 +220,80 @@ export function MenuScreen() {
         </View>
       ) : null}
 
-      <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: v.storePaused ? colors.mangoTint : colors.leafTint }}>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-          <Text style={[{ fontFamily: fonts.code, fontSize: 30, color: v.storePaused ? colors.onMango : colors.onLeaf }, tabular]}>
+      {/* The stall's tray: how many dishes buyers can see, and a plate for each place on the menu */}
+      <View style={{ padding: 18, gap: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: v.storePaused ? colors.mangoTint : colors.leafTint }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            {store ? (
+              <Text numberOfLines={1} style={{ fontFamily: fonts.bold, fontSize: 13.5, color: ink }}>
+                {store.name}
+              </Text>
+            ) : null}
+            <Text style={{ fontFamily: fonts.heavy, fontSize: 17, lineHeight: 23, color: ink }}>Món khách đang thấy</Text>
+          </View>
+          <Text maxFontSizeMultiplier={1.3} style={[sign.figure, tabular, { color: ink }]} accessibilityLabel={`${v.storePaused ? 0 : v.visible} trên ${items.length} món`}>
             {v.storePaused ? 0 : v.visible}/{items.length}
           </Text>
-          <Text style={[text.subhead, { color: v.storePaused ? colors.onMango : colors.onLeaf }]}>món khách đang thấy</Text>
         </View>
-        {/* Slots for the stall's dishes: filled plates and empty ones, up to the limit. */}
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          {Array.from({ length: maxItems }, (_, i) => (
-            <View key={i} style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: i < items.length ? (v.storePaused ? colors.mango : colors.leaf) : colors.white }} />
-          ))}
+        <View style={{ flexDirection: 'row', gap: 8 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {Array.from({ length: maxItems }, (_, i) => {
+            const dish = items[i];
+            return (
+              <View key={i} style={{ flex: 1, aspectRatio: 1, borderRadius: radius.sticker, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: dish ? colors.white : 'transparent', borderWidth: dish ? 0 : 2, borderStyle: 'dashed', borderColor: v.storePaused ? colors.mango : colors.leaf, alignItems: 'center', justifyContent: 'center' }}>
+                {dish?.imageUrl ? (
+                  <Image source={{ uri: apiAssetUrl(dish.imageUrl) }} style={{ width: '100%', height: '100%' }} contentFit="cover" recyclingKey={dish.imageUrl} />
+                ) : dish ? (
+                  <Icon sf="fork.knife" md="restaurant" size={16} color={ink} />
+                ) : (
+                  <Icon sf="plus" md="add" size={14} color={ink} />
+                )}
+              </View>
+            );
+          })}
         </View>
         <Text style={[text.footnote, { color: colors.ink }]}>
           {v.storePaused
             ? 'Gian hàng đang tạm dừng nên khách chưa thấy món nào.'
-            : `Mỗi gian hàng bán tối đa ${maxItems} món chủ lực để dễ kiểm soát an toàn thực phẩm.`}
+            : full
+              ? `Thực đơn đã đủ ${maxItems} món. Gỡ một món để thêm món mới.`
+              : `Mỗi gian hàng bán tối đa ${maxItems} món chủ lực để dễ kiểm soát an toàn thực phẩm.`}
           {v.soldOut ? ` ${v.soldOut} món đang hết.` : ''}
         </Text>
       </View>
+
       {v.needsAttp > 0 ? (
         <Banner tone="danger" title={`${v.needsAttp} món cần giấy ATTP`} action={{ label: 'Nộp giấy ATTP', onPress: () => go(`/vendor/home/store/food-safety?storefrontId=${storeId}`) }}>
           Khách chưa thấy những món này cho đến khi Phường xác nhận giấy.
         </Banner>
       ) : (
-        <Pressable onPress={() => go(`/vendor/home/store/food-safety?storefrontId=${storeId}`)} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
-          <Icon sf="checkmark.shield" md="verified_user" size={16} color={colors.primary} />
-          <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>Giấy ATTP của gian hàng</Text>
+        <Pressable
+          onPress={() => go(`/vendor/home/store/food-safety?storefrontId=${storeId}`)}
+          accessibilityRole="button"
+          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingHorizontal: 14, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.sunken : colors.card, boxShadow: shadow.card })}
+        >
+          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.leafTint, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon sf="checkmark.shield.fill" md="verified_user" size={17} color={colors.leaf} />
+          </View>
+          <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>Giấy ATTP của gian hàng</Text>
+          <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
         </Pressable>
       )}
-      {full ? <Banner tone="neutral" title={`Thực đơn đã đủ ${maxItems} món`}>Gỡ một món để thêm món mới.</Banner> : null}
 
       {items.length === 0 ? (
         <StateView icon={{ sf: 'fork.knife', md: 'restaurant' }} title="Chưa có món nào" body="Thêm món có ảnh thật của quán để khách nhận ra ngay." />
       ) : (
-        items.map((item) => {
-          const sold = item.availabilityStatus === 'SOLD_OUT';
-          const hidden = item.availabilityStatus === 'HIDDEN';
-          return (
-            <View key={item.menuItemId} style={{ flexDirection: 'row', gap: 12, padding: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card }}>
-              <Pressable onPress={() => go(`/vendor/home/store/dish?storefrontId=${storeId}&id=${item.menuItemId}`)} accessibilityRole="button" accessibilityLabel={`Sửa món ${item.name}`}>
-                <View style={{ width: 92, height: 92, borderRadius: 16, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.sunken, alignItems: 'center', justifyContent: 'center' }}>
-                  {item.imageUrl ? (
-                    <Image source={{ uri: apiAssetUrl(item.imageUrl) }} style={{ width: '100%', height: '100%', opacity: sold ? 0.45 : 1 }} contentFit="cover" recyclingKey={item.imageUrl} transition={120} />
-                  ) : (
-                    <View style={{ alignItems: 'center', gap: 4 }}>
-                      <Icon sf="camera" md="photo_camera" size={20} color={colors.primary} />
-                      <Text style={[text.caption, { color: colors.primary }]}>Thêm ảnh</Text>
-                    </View>
-                  )}
-                  {sold ? (
-                    <View style={{ position: 'absolute', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: colors.plate }}>
-                      <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: colors.white }}>HẾT MÓN</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </Pressable>
-              <View style={{ flex: 1, gap: 5 }}>
-                <Text style={[text.headline, { color: colors.ink }]} numberOfLines={2}>{item.name}</Text>
-                <Text style={[{ fontFamily: fonts.heavy, fontSize: 15.5, color: colors.primary }, tabular]}>{formatVnd(item.unitPrice)}</Text>
-                <Text style={[text.caption, { color: colors.muted }]}>{item.categoryName}</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                  <DishAttp item={item} />
-                  {hidden ? <StatusPill label="Bị ẩn bởi quản trị" tone="danger" /> : null}
-                </View>
-                {!hidden ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-                    <Text style={[text.footnote, { color: sold ? colors.onDanger : colors.onLeaf, fontFamily: fonts.semibold }]}>{sold ? 'Đang hết món' : 'Còn món'}</Text>
-                    <Switch
-                      value={!sold}
-                      disabled={switching === item.menuItemId}
-                      onValueChange={() => toggle.mutate(item)}
-                      trackColor={{ true: colors.leaf, false: colors.line }}
-                      thumbColor={colors.white}
-                      accessibilityLabel={sold ? 'Còn hàng trở lại' : 'Đánh dấu hết món'}
-                    />
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          );
-        })
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 22 }}>
+          {items.map((item) => (
+            <MenuTile
+              key={item.menuItemId}
+              item={item}
+              width={tileWidth}
+              busy={switching === item.menuItemId}
+              onEdit={() => go(`/vendor/home/store/dish?storefrontId=${storeId}&id=${item.menuItemId}`)}
+              onToggle={() => toggle.mutate(item)}
+            />
+          ))}
+        </View>
       )}
     </Screen>
   );
@@ -264,7 +353,7 @@ export function DishEditScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: isNew ? 'Thêm món' : 'Sửa món' }} />
-        <ListSkeleton rows={1} height={200} />
+        <Skeleton height={240} radius={radius.photo} />
         <ListSkeleton rows={3} height={64} />
       </Screen>
     );
@@ -299,35 +388,42 @@ export function DishEditScreen() {
     setErrors((e) => ({ ...e, photo: undefined }));
   };
   const preview = photo?.uri ?? (editing?.imageUrl ? apiAssetUrl(editing.imageUrl) : undefined);
+  const typedPrice = Number(values.price);
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen footer={<Button label={isNew ? 'Thêm món' : 'Lưu thay đổi'} size={56} loading={save.isPending} onPress={submit} />}>
+      <Screen footer={<Button label={isNew ? 'Thêm món' : 'Lưu thay đổi'} size={56} loading={save.isPending} onPress={submit} />} gap={18}>
         <Stack.Screen options={{ title: isNew ? 'Thêm món' : 'Sửa món' }} />
-        <Pressable
-          onPress={() => void pickPhoto()}
-          accessibilityRole="button"
-          accessibilityLabel={preview ? 'Đổi ảnh món' : 'Thêm ảnh món'}
-          style={{ height: 210, borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: preview ? colors.card : colors.kerbPaint, borderWidth: preview ? 0 : 2, borderStyle: 'dashed', borderColor: errors.photo ? colors.danger : colors.brandLight, alignItems: 'center', justifyContent: 'center', gap: 6 }}
-        >
-          {preview ? (
-            <>
-              <Image source={{ uri: preview }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-              <View style={{ position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: 'rgba(17,28,43,0.7)' }}>
-                <Icon sf="camera.fill" md="photo_camera" size={13} color={colors.white} />
-                <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.white }}>Đổi ảnh</Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon sf="camera.fill" md="photo_camera" size={26} color={colors.primary} />
-              </View>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.primary }}>Chụp ảnh món</Text>
-              <Text style={[text.caption, { color: colors.muted }]}>Ảnh thật, đủ sáng, thấy rõ món</Text>
-            </>
-          )}
-        </Pressable>
+        {/* The dish photo, edge to edge, with the price sticker that follows the price being typed */}
+        <View style={{ marginHorizontal: -16, marginTop: -16, paddingBottom: 6 }}>
+          <Pressable
+            onPress={() => void pickPhoto()}
+            accessibilityRole="button"
+            accessibilityLabel={preview ? 'Đổi ảnh món' : 'Thêm ảnh món'}
+            style={{ aspectRatio: 4 / 3, width: '100%', overflow: 'hidden', backgroundColor: preview ? colors.sunken : colors.kerbPaint, alignItems: 'center', justifyContent: 'center', gap: 8, borderBottomWidth: preview ? 0 : 2, borderStyle: 'dashed', borderColor: errors.photo ? colors.danger : colors.brandLight }}
+          >
+            {preview ? (
+              <>
+                <Image source={{ uri: preview }} style={{ width: '100%', height: '100%' }} contentFit="cover" accessibilityIgnoresInvertColors />
+                <View style={{ position: 'absolute', right: 16, bottom: 16, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.full, paddingHorizontal: 14, minHeight: 40, backgroundColor: colors.white, boxShadow: shadow.raised }}>
+                  <Icon sf="camera.fill" md="photo_camera" size={15} color={colors.ink} />
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.ink }}>Đổi ảnh</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.cta, alignItems: 'center', justifyContent: 'center', boxShadow: shadow.glow }}>
+                  <Icon sf="camera.fill" md="photo_camera" size={32} color={colors.white} />
+                </View>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 17, color: colors.primary }}>Chụp ảnh món</Text>
+                <Text style={[text.footnote, { color: colors.muted }]}>Ảnh thật, đủ sáng, thấy rõ món</Text>
+              </>
+            )}
+          </Pressable>
+          {values.price && typedPrice > 0 ? (
+            <PriceSticker value={formatVnd(typedPrice)} tilt={-4} style={{ position: 'absolute', left: 16, bottom: 0 }} />
+          ) : null}
+        </View>
         {errors.photo ? <Text style={[text.footnote, { color: colors.onDanger }]}>{errors.photo}</Text> : null}
         <TextField label="Tên món" value={values.name} onChangeText={(v) => { set({ name: v }); setErrors((e) => ({ ...e, name: undefined })); }} error={errors.name} placeholder="VD: Bún chả Hà Nội" maxLength={120} />
         <TextField
@@ -339,7 +435,7 @@ export function DishEditScreen() {
           hint={values.price && Number(values.price) > 0 ? formatVnd(Number(values.price)) : undefined}
           trailing={<Text style={{ fontFamily: fonts.semibold, color: colors.muted }}>đ</Text>}
         />
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: 10 }}>
           <Text style={[text.subhead, { color: colors.ink }]}>Danh mục</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {categories.data?.map((c) => (
@@ -363,7 +459,7 @@ export function DishEditScreen() {
             }
             disabled={archive.isPending}
             accessibilityRole="button"
-            style={({ pressed }) => ({ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 16, opacity: pressed || archive.isPending ? 0.6 : 1 })}
+            style={({ pressed }) => ({ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 48, paddingHorizontal: 18, borderRadius: radius.full, backgroundColor: pressed ? colors.dangerTint : 'transparent', opacity: archive.isPending ? 0.6 : 1 })}
           >
             <Icon sf="trash" md="delete" size={16} color={colors.danger} />
             <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.danger }}>Gỡ món khỏi thực đơn</Text>

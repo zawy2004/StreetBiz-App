@@ -4,7 +4,7 @@ import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Pressable, Text, View } from 'react-native';
 
-import { Card, KeyValueList } from '@/components/common/Blocks';
+import { KeyValueList } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
 import { Banner } from '@/components/feedback/Banner';
@@ -26,13 +26,16 @@ import { isSandboxPaymentUrl, redirectToPayment } from '@/features/orders/paymen
 import { distanceLabel } from '@/features/orders/pickup/pickup-range';
 import { usePickupRange } from '@/features/orders/pickup/usePickupRange';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, sign, tabular, text } from '@/theme';
+import { BigNumber, Pass, Signboard } from '@/ui';
 import { formatVnd } from '@/utils/format';
 import { CART_KEY, useCart } from '../cart-api';
 
 type Provider = 'MOMO' | 'ZALOPAY';
 /** Only Development has the sandbox confirm/fail endpoints; elsewhere a real gateway is used. */
 const sandboxPayments = isDev && env.enablePaymentSandbox;
+/** The range notice's corner (its own `radius` below is the pickup radius in metres). */
+const NOTICE_RADIUS = radius.photo;
 
 function blockReason(storefrontStatus: string | undefined, availability: string[]): string | null {
   if (storefrontStatus !== 'OPEN') {
@@ -134,11 +137,11 @@ export function CheckoutScreen() {
     <Screen
       footer={
         <View style={{ gap: 8 }}>
-          {place.isError ? <Text style={[text.footnote, { color: colors.onDanger }]}>{errorMessage(place.error)}</Text> : null}
+          {place.isError ? <Text accessibilityRole="alert" style={[text.footnote, { color: colors.onDanger }]}>{errorMessage(place.error)}</Text> : null}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             <View>
-              <Text style={[text.caption, { color: colors.muted }]}>Tổng · {count} món</Text>
-              <Text style={[{ fontFamily: fonts.heavy, fontSize: 19, color: colors.ink }, tabular]}>{formatVnd(data.subtotal)}</Text>
+              <Text style={[text.caption, { color: colors.muted }, tabular]}>Tổng {count} món</Text>
+              <Text maxFontSizeMultiplier={1.3} style={[sign.price, { fontSize: 26, lineHeight: 32, color: colors.ink }, tabular]}>{formatVnd(data.subtotal)}</Text>
             </View>
             <Button label={place.isPending ? 'Đang khởi tạo…' : 'Thanh toán'} size={56} icon={{ sf: 'lock.fill', md: 'lock' }} loading={place.isPending} disabled={!!reason || !range.canOrder || !online} onPress={pay} style={{ flex: 1 }} />
           </View>
@@ -149,36 +152,43 @@ export function CheckoutScreen() {
       {!online ? <Banner tone="warning">Mất kết nối. Cần có mạng để thanh toán.</Banner> : null}
       {reason ? <Banner tone="danger">{reason}</Banner> : null}
 
-      <Card style={{ gap: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon sf="storefront.fill" md="storefront" size={20} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[text.caption, { color: colors.muted }]}>Đến lấy tại quầy</Text>
-            <Text style={[text.headline, { color: colors.ink }]}>{data.storefrontName}</Text>
-            <Text style={[text.footnote, { color: colors.muted }]}>{data.storefrontAddress || 'Địa chỉ điểm bán chưa được cập nhật'}</Text>
-          </View>
-        </View>
-        <RangeNotice range={range} />
-      </Card>
-
-      <Card style={{ gap: 10 }}>
-        <Text style={[text.subhead, { color: colors.ink }]}>Món của bạn</Text>
-        {data.items.map((i) => (
-          <View key={i.cartItemId} style={{ flexDirection: 'row', gap: 10 }}>
-            <Text style={[{ fontFamily: fonts.heavy, fontSize: 15, color: colors.primary, minWidth: 30 }, tabular]}>{i.quantity}×</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[text.callout, { color: colors.ink }]}>{i.itemName}</Text>
-              {i.note ? <Text style={[text.caption, { color: colors.onMango }]}>Ghi chú: {i.note}</Text> : null}
-              {i.availabilityStatus !== 'AVAILABLE' ? <Text style={[text.caption, { color: colors.onDanger }]}>Món này không còn bán</Text> : null}
+      {/* The receipt as a ticket: where to collect, then the dishes on the stub */}
+      <Pass
+        head={
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon sf="storefront.fill" md="storefront" size={24} color={colors.white} />
             </View>
-            <Text style={[text.callout, { color: colors.ink }, tabular]}>{formatVnd(i.unitPrice * i.quantity)}</Text>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[text.caption, { color: colors.muted }]}>Đến lấy tại quầy</Text>
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 18, lineHeight: 24, color: colors.ink }}>{data.storefrontName}</Text>
+              <Text style={[text.footnote, { color: colors.muted }]}>{data.storefrontAddress || 'Địa chỉ điểm bán chưa được cập nhật'}</Text>
+            </View>
           </View>
-        ))}
-        <View style={{ height: 1, backgroundColor: colors.separator }} />
-        <KeyValueList rows={[{ label: 'Tạm tính', value: formatVnd(data.subtotal), emphasis: true }]} />
-      </Card>
+        }
+        stub={
+          <View style={{ gap: 12 }}>
+            {data.items.map((i) => (
+              <View key={i.cartItemId} style={{ flexDirection: 'row', gap: 10 }}>
+                <Text maxFontSizeMultiplier={1.4} style={[sign.price, { color: colors.primary, minWidth: 34 }, tabular]}>{i.quantity}×</Text>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[text.callout, { color: colors.ink, fontFamily: fonts.semibold }]}>{i.itemName}</Text>
+                  {i.note ? <Text style={[text.caption, { color: colors.onMango }]}>Ghi chú: {i.note}</Text> : null}
+                  {i.availabilityStatus !== 'AVAILABLE' ? <Text style={[text.caption, { color: colors.onDanger }]}>Món này không còn bán</Text> : null}
+                </View>
+                <Text style={[text.callout, { color: colors.ink, fontFamily: fonts.semibold }, tabular]}>{formatVnd(i.unitPrice * i.quantity)}</Text>
+              </View>
+            ))}
+            <View style={{ height: 1, backgroundColor: colors.separator }} />
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+              <Text style={[text.subhead, { color: colors.ink }]}>Tạm tính</Text>
+              <Text maxFontSizeMultiplier={1.3} style={[sign.price, { fontSize: 24, lineHeight: 30, color: colors.ink }, tabular]}>{formatVnd(data.subtotal)}</Text>
+            </View>
+          </View>
+        }
+      />
+
+      <RangeNotice range={range} />
 
       <WalletPicker value={provider} onChange={setProvider} disabled={place.isPending} />
       <Text style={[text.caption, { color: colors.muted }]}>
@@ -203,7 +213,7 @@ function RangeNotice({ range }: { range: ReturnType<typeof usePickupRange> }) {
   if (live.status === 'UNAVAILABLE' || live.status === 'FAILED') return panel(LOCATE_MESSAGES[live.status], why, { label: 'Thử lại', onPress: live.retry });
   if (!verdict) {
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 4 }}>
         <ActivityIndicator size="small" color={colors.cta} />
         <Text style={[text.footnote, { color: colors.muted }]}>Đang xác định vị trí của bạn…</Text>
       </View>
@@ -215,10 +225,12 @@ function RangeNotice({ range }: { range: ReturnType<typeof usePickupRange> }) {
     return panel(`Bạn đang cách quán ${distanceLabel(verdict.distanceMeters)}`, `${why} Khoảng cách tự cập nhật khi bạn đến gần hơn.`, p ? { label: 'Chỉ đường đến quán', onPress: () => void Linking.openURL(directionsUrl(p.latitude, p.longitude)) } : undefined);
   }
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, backgroundColor: colors.leafTint }}>
-      <Icon sf="figure.walk" md="directions_walk" size={16} color={colors.onLeaf} />
-      <Text style={[text.footnote, { flex: 1, color: colors.onLeaf }]}>
-        Bạn cách quán {distanceLabel(verdict.distanceMeters)} · trong phạm vi nhận món {radius}
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: NOTICE_RADIUS, borderCurve: 'continuous', backgroundColor: colors.leafTint }}>
+      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.leaf, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon sf="figure.walk" md="directions_walk" size={18} color={colors.white} />
+      </View>
+      <Text style={[text.footnote, { flex: 1, color: colors.onLeaf, fontFamily: fonts.semibold }]}>
+        Bạn cách quán {distanceLabel(verdict.distanceMeters)}, trong phạm vi nhận món {radius}
       </Text>
     </View>
   );
@@ -301,58 +313,81 @@ export function OrderPaymentScreen() {
   const gateway = providerName(data.paymentProvider) ?? 'ví';
   const busy = (k: string) => action.isPending && action.variables === k;
   const look = pending
-    ? { wash: colors.mangoTint, ink: colors.onMango, sf: 'hourglass', md: 'hourglass_top', title: 'Đang chờ ví xác nhận', body: viaGateway ? `Nếu bạn đã thanh toán trên ${gateway}, bấm "Kiểm tra lại".` : showSandbox ? 'Môi trường thử nghiệm chưa nối cổng thanh toán thật. Chọn kết quả bên dưới.' : 'Hệ thống tự kiểm tra trạng thái với máy chủ.' }
+    ? { paint: colors.brand, line1: 'Chờ ví', line2: 'xác nhận', ink: colors.plate, sf: 'hourglass', md: 'hourglass_top', title: 'Đang chờ ví xác nhận', body: viaGateway ? `Nếu bạn đã thanh toán trên ${gateway}, bấm "Kiểm tra lại".` : showSandbox ? 'Môi trường thử nghiệm chưa nối cổng thanh toán thật. Chọn kết quả bên dưới.' : 'Hệ thống tự kiểm tra trạng thái với máy chủ.' }
     : placed
-      ? { wash: colors.leafTint, ink: colors.onLeaf, sf: 'checkmark.seal.fill', md: 'verified', title: 'Đặt món thành công', body: 'Máy chủ đã xác nhận thanh toán và chuyển đơn cho quán.' }
+      ? { paint: colors.leaf, line1: 'Đặt món', line2: 'thành công', ink: colors.white, sf: 'checkmark.seal.fill', md: 'verified', title: 'Đặt món thành công', body: 'Máy chủ đã xác nhận thanh toán và chuyển đơn cho quán.' }
       : failed
-        ? { wash: colors.dangerTint, ink: colors.onDanger, sf: 'xmark.octagon.fill', md: 'error', title: 'Thanh toán thất bại hoặc đơn đã huỷ', body: 'Giỏ hàng vẫn được giữ để bạn kiểm tra và đặt lại.' }
-        : { wash: colors.leafTint, ink: colors.onLeaf, sf: 'checkmark.circle.fill', md: 'check_circle', title: 'Đã thanh toán', body: 'Thanh toán đã được máy chủ xác nhận.' };
+        ? { paint: colors.danger, line1: 'Chưa', line2: 'thanh toán', ink: colors.white, sf: 'xmark.octagon.fill', md: 'error', title: 'Thanh toán thất bại hoặc đơn đã huỷ', body: 'Thanh toán thất bại hoặc đơn đã huỷ. Giỏ hàng vẫn được giữ để bạn kiểm tra và đặt lại.' }
+        : { paint: colors.leaf, line1: 'Đã', line2: 'thanh toán', ink: colors.white, sf: 'checkmark.circle.fill', md: 'check_circle', title: 'Đã thanh toán', body: 'Thanh toán đã được máy chủ xác nhận.' };
 
   return (
-    <Screen onRefresh={() => void order.refetch()} refreshing={order.isRefetching}>
+    <Screen padded={false} gap={18} onRefresh={() => void order.refetch()} refreshing={order.isRefetching}>
       <Stack.Screen options={{ title: `Đơn #${data.orderCode}` }} />
-      <View style={{ padding: 22, gap: 10, alignItems: 'center', borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: look.wash }}>
-        <View style={{ width: 68, height: 68, borderRadius: 34, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
-          {busy('sync') ? <ActivityIndicator color={look.ink} /> : <Icon sf={look.sf} md={look.md} size={34} color={look.ink} />}
-        </View>
-        <Text accessibilityRole="header" style={[text.title3, { color: look.ink, textAlign: 'center', fontFamily: fonts.heavy }]}>{look.title}</Text>
-        <Text style={[text.footnote, { color: look.ink, textAlign: 'center' }]}>{look.body}</Text>
-        {pending ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Icon sf="lock.fill" md="lock" size={13} color={look.ink} />
-            <Text style={[text.caption, { color: look.ink }]}>Giỏ bị khoá cho tới khi đơn được thanh toán hoặc huỷ.</Text>
+      {/* The verdict painted across the top: only the server's word counts (BR-32) */}
+      <View accessibilityLiveRegion="polite">
+        <Signboard
+          compact
+          color={look.paint}
+          kerb={pending}
+          line2Color={look.ink}
+          line1={look.line1}
+          line2={look.line2}
+          caption={look.body}
+          overlap={
+            <Pass
+              head={
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                  <BigNumber value={formatVnd(data.totalAmount)} label={data.storefront.storefrontName} style={{ flex: 1 }} />
+                  <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: pending ? colors.mangoTint : placed ? colors.leafTint : failed ? colors.dangerTint : colors.leafTint, alignItems: 'center', justifyContent: 'center' }}>
+                    {busy('sync') ? <ActivityIndicator color={colors.onMango} /> : <Icon sf={look.sf} md={look.md} size={26} color={pending ? colors.onMango : failed ? colors.danger : colors.leaf} />}
+                  </View>
+                </View>
+              }
+              stub={
+                <View style={{ gap: 6 }}>
+                  <KeyValueList
+                    rows={[
+                      { label: 'Mã đơn', value: `#${data.orderCode}`, mono: true },
+                      { label: 'Ví', value: gateway },
+                      { label: 'Đặt lúc', value: formatOrderDate(data.placedAt ?? data.createdAt) },
+                    ]}
+                  />
+                  {order.dataUpdatedAt ? <Text style={[text.caption, { color: colors.muted }]}>Kiểm tra gần nhất lúc {new Date(order.dataUpdatedAt).toLocaleTimeString('vi-VN')}</Text> : null}
+                  {options.data?.message?.trim() ? <Text style={[text.caption, { color: colors.muted }]}>{options.data.message.trim()}</Text> : null}
+                </View>
+              }
+            />
+          }
+        >
+          {pending ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <Icon sf="lock.fill" md="lock" size={13} color={colors.white} />
+              <Text style={[text.caption, { flex: 1, color: colors.white }]}>Giỏ bị khoá cho tới khi đơn được thanh toán hoặc huỷ.</Text>
+            </View>
+          ) : null}
+        </Signboard>
+      </View>
+
+      <View style={{ paddingHorizontal: 16, gap: 12 }}>
+        {pending && showSandbox ? (
+          <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.mango }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Icon sf="testtube.2" md="science" size={15} color={colors.onMango} />
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 14, color: colors.onMango }}>Thử nghiệm, không phải tiền thật</Text>
+            </View>
+            <Button label="Thanh toán thử (thành công)" loading={busy('pay')} disabled={action.isPending} onPress={() => action.mutate('pay')} />
+            <Button label="Giả lập thanh toán thất bại" variant="secondary" loading={busy('fail')} disabled={action.isPending} onPress={() => action.mutate('fail')} />
           </View>
         ) : null}
+        {pending && viaGateway ? <Button label="Kiểm tra lại" size={56} icon={{ sf: 'arrow.clockwise', md: 'refresh' }} loading={busy('sync')} disabled={action.isPending} onPress={() => action.mutate('sync')} /> : null}
+        {failed ? <Button label="Về giỏ hàng" onPress={() => router.dismissTo('/customer/explore' as Href)} /> : null}
+        <Button label="Xem chi tiết đơn" variant={placed ? 'primary' : 'secondary'} size={placed ? 56 : 50} onPress={() => router.replace(`/customer/orders/${data.orderId}` as Href)} />
+        {pending ? (
+          <Pressable onPress={() => action.mutate('cancel')} disabled={action.isPending} accessibilityRole="button" style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 }}>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.onDanger }}>{busy('cancel') ? 'Đang huỷ…' : 'Huỷ đơn này'}</Text>
+          </Pressable>
+        ) : null}
       </View>
-      <Card style={{ gap: 8 }}>
-        <KeyValueList
-          rows={[
-            { label: 'Mã đơn', value: `#${data.orderCode}`, mono: true },
-            { label: 'Quán', value: data.storefront.storefrontName },
-            { label: 'Số tiền', value: formatVnd(data.totalAmount), emphasis: true },
-            { label: 'Ví', value: gateway },
-            { label: 'Đặt lúc', value: formatOrderDate(data.placedAt ?? data.createdAt) },
-          ]}
-        />
-        {order.dataUpdatedAt ? <Text style={[text.caption, { color: colors.muted }]}>Kiểm tra gần nhất lúc {new Date(order.dataUpdatedAt).toLocaleTimeString('vi-VN')}</Text> : null}
-        {options.data?.message?.trim() ? <Text style={[text.caption, { color: colors.muted }]}>{options.data.message.trim()}</Text> : null}
-      </Card>
-
-      {pending && showSandbox ? (
-        <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.mango }}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.onMango }}>THỬ NGHIỆM · KHÔNG PHẢI TIỀN THẬT</Text>
-          <Button label="Thanh toán thử (thành công)" loading={busy('pay')} disabled={action.isPending} onPress={() => action.mutate('pay')} />
-          <Button label="Giả lập thanh toán thất bại" variant="secondary" loading={busy('fail')} disabled={action.isPending} onPress={() => action.mutate('fail')} />
-        </View>
-      ) : null}
-      {pending && viaGateway ? <Button label="Kiểm tra lại" variant="sign" loading={busy('sync')} disabled={action.isPending} onPress={() => action.mutate('sync')} /> : null}
-      {failed ? <Button label="Về giỏ hàng" onPress={() => router.dismissTo('/customer/explore' as Href)} /> : null}
-      <Button label="Xem chi tiết đơn" variant={placed ? 'primary' : 'secondary'} onPress={() => router.replace(`/customer/orders/${data.orderId}` as Href)} />
-      {pending ? (
-        <Pressable onPress={() => action.mutate('cancel')} disabled={action.isPending} accessibilityRole="button" style={{ alignSelf: 'center', padding: 10 }}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.onDanger }}>{busy('cancel') ? 'Đang huỷ…' : 'Huỷ đơn này'}</Text>
-        </Pressable>
-      ) : null}
     </Screen>
   );
 }

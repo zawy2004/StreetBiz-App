@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 
@@ -13,6 +13,7 @@ import { StatusHeader } from '@/components/native/StatusHeader';
 import { StepFooter, StepProgress } from '@/components/native/StepFlow';
 import { SwipeRow } from '@/components/native/SwipeRow';
 import { Toggle } from '@/components/native/Toggle';
+import { DevSwitch } from '@/dev/DevSwitch';
 import { colors, text } from '@/theme';
 
 /**
@@ -20,6 +21,12 @@ import { colors, text } from '@/theme';
  * check each piece on a device. Renders nothing in a release build.
  */
 export default function KitScreen() {
+  const { as } = useLocalSearchParams<{ as?: string }>();
+  if (__DEV__ && as) return <DevSwitch as={as} />;
+  return <KitGallery />;
+}
+
+function KitGallery() {
   const [seg, setSeg] = useState<'a' | 'b' | 'c'>('a');
   const [on, setOn] = useState(true);
   const [step, setStep] = useState(2);

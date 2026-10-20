@@ -2,7 +2,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { useCanChat, useChatUnreadCount } from '@/features/chat/hooks/useChat';
 import { useChatInboxFeed } from '@/features/chat/realtime/useChatRealtime';
-import { colors } from '@/theme';
+import { tabBarLook } from '@/ui';
 
 /**
  * Người mua (và khách): Khám phá, Quét QR, Đơn hàng, Tin nhắn, Tài khoản — đúng 5 tab như web.
@@ -14,7 +14,7 @@ export default function CustomerTabs() {
   useChatInboxFeed(canChat);
   const unread = useChatUnreadCount().data ?? 0;
   return (
-    <NativeTabs tintColor={colors.cta} minimizeBehavior="onScrollDown">
+    <NativeTabs {...tabBarLook} minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="explore" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'safari', selected: 'safari.fill' }} md="explore" />
         <NativeTabs.Trigger.Label>Khám phá</NativeTabs.Trigger.Label>

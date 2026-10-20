@@ -1,5 +1,4 @@
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { memo, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -9,7 +8,8 @@ import { PressableScale } from '@/components/common/PressableScale';
 import { Skeleton } from '@/components/feedback/Skeleton';
 import { StockTag } from '@/components/status/MockBadge';
 import type { MarketplaceCategory, StorefrontSummary } from '@/core/api/types';
-import { colors, fonts, radius, shadow, space, tabular, text } from '@/theme';
+import { Plate, PriceSticker } from '@/ui';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { formatDistance, formatVnd, todayHoursText } from '@/utils/format';
 import { categoryPhoto, storefrontPhotos } from '../food-photos';
 
@@ -105,7 +105,7 @@ export function Rating({ stall, size = 13 }: { stall: StorefrontSummary; size?: 
  * What sets StreetBiz apart from other food apps: the ward licensed this pavement slot.
  * Says so in words a buyer understands, with the slot code after it.
  */
-export function LicensedBadge({ slotCode }: { slotCode: string }) {
+export function LicensedBadge({ slotCode, withSlot = true }: { slotCode: string; withSlot?: boolean }) {
   return (
     <View
       style={{
@@ -125,18 +125,21 @@ export function LicensedBadge({ slotCode }: { slotCode: string }) {
       <Text
         style={{ fontFamily: fonts.bold, fontSize: 11.5, lineHeight: 15, color: colors.onLeaf }}
       >
-        Có phép
+        {withSlot ? 'Có phép' : 'Có phép của phường'}
       </Text>
-      <Text
-        style={{ fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15, color: colors.onLeaf }}
-      >
-        · Ô {slotCode}
-      </Text>
+      {withSlot ? (
+        <Text style={{ fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15, color: colors.onLeaf }}>
+          , ô {slotCode}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
-/** Browse by craving: round dish photos, the selected one ringed in orange. */
+/**
+ * Browse by craving: round dish-photo badges ringed in orange tint, the chosen one ringed in
+ * solid orange (v5). "Tất cả" is the orange signboard disc.
+ */
 export function CategoryRail({
   categories,
   selected,
@@ -158,39 +161,44 @@ export function CategoryRail({
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityState={{ selected: on }}
-        style={{ alignItems: 'center', width: 78, gap: 6 }}
+        style={{ alignItems: 'center', width: 76, gap: 8 }}
       >
         <View
           style={{
-            width: 66,
-            height: 66,
-            borderRadius: 33,
+            width: 70,
+            height: 70,
+            borderRadius: 35,
             padding: 3,
-            borderWidth: 2.5,
-            borderColor: on ? colors.cta : 'transparent',
+            backgroundColor: on ? colors.cta : colors.brandTint,
+            boxShadow: on ? shadow.glow : undefined,
           }}
         >
           {photo != null ? (
             <Image
               source={photo}
-              style={{ width: '100%', height: '100%', borderRadius: 30 }}
+              style={{ width: '100%', height: '100%', borderRadius: 32, borderWidth: 2, borderColor: colors.white }}
               contentFit="cover"
             />
           ) : (
-            <LinearGradient
-              colors={[colors.brandLight, colors.cta]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{ flex: 1, borderRadius: 30, alignItems: 'center', justifyContent: 'center' }}
+            <View
+              style={{
+                flex: 1,
+                borderRadius: 32,
+                borderWidth: 2,
+                borderColor: colors.white,
+                backgroundColor: colors.brand,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
             >
-              <Icon sf="fork.knife" md="restaurant" size={24} color={colors.white} />
-            </LinearGradient>
+              <Icon sf="square.grid.2x2.fill" md="apps" size={24} color={colors.white} />
+            </View>
           )}
         </View>
         <Text
           numberOfLines={2}
           style={{
-            fontFamily: on ? fonts.bold : fonts.medium,
+            fontFamily: on ? fonts.heavy : fonts.bold,
             fontSize: 12.5,
             lineHeight: 16,
             textAlign: 'center',
@@ -206,7 +214,7 @@ export function CategoryRail({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ paddingHorizontal: space.md - 6, gap: 2 }}
+      contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}
     >
       {item(null, 'Tất cả')}
       {categories.map((c) =>
@@ -216,7 +224,11 @@ export function CategoryRail({
   );
 }
 
-/** An open stall nearby: photo, name, the numbers that decide (rating, distance, price), the licence. */
+/**
+ * An open stall nearby, as it stands on the street (v5): a wide photo carrying the slot's
+ * number plate and the distance, a mango sticker with the cheapest dish, then the name, the
+ * score and closing time, and the ward's licence.
+ */
 export const NearbyCard = memo(function NearbyCard({
   stall,
   width,
@@ -226,7 +238,7 @@ export const NearbyCard = memo(function NearbyCard({
   width: number;
   onPress: () => void;
 }) {
-  const photoHeight = Math.round(width * 0.56);
+  const photoHeight = Math.round(width * 0.58);
   const distance = formatDistance(stall.distanceMeters);
   return (
     <PressableScale
@@ -238,86 +250,78 @@ export const NearbyCard = memo(function NearbyCard({
         style={{
           borderRadius: radius.card,
           borderCurve: 'continuous',
-          overflow: 'hidden',
           backgroundColor: colors.card,
           boxShadow: shadow.card,
         }}
       >
-        <StallPhoto stall={stall} width="100%" height={photoHeight} rounded={0} />
-        <LinearGradient
-          colors={['rgba(10,14,20,0)', 'rgba(10,14,20,0.55)']}
-          locations={[0.55, 1]}
-          style={{ position: 'absolute', left: 0, right: 0, top: 0, height: photoHeight }}
-          pointerEvents="none"
-        />
         <View
           style={{
-            position: 'absolute',
-            left: 10,
-            top: photoHeight - 34,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
+            borderTopLeftRadius: radius.card,
+            borderTopRightRadius: radius.card,
+            overflow: 'hidden',
           }}
         >
-          {distance ? (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 3,
-                backgroundColor: colors.white,
-                borderRadius: 999,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-              }}
-            >
-              <Icon sf="location.fill" md="near_me" size={10} color={colors.cta} />
-              <Text style={[{ fontFamily: fonts.bold, fontSize: 12, color: colors.ink }, tabular]}>
-                {distance}
-              </Text>
-            </View>
-          ) : null}
+          <StallPhoto stall={stall} width="100%" height={photoHeight} rounded={0} compactTag />
         </View>
-        <View style={{ padding: 12, paddingTop: 10, gap: 6 }}>
+        <Plate code={stall.slotCode} style={{ position: 'absolute', top: 12, left: 12 }} />
+        {distance ? (
+          <View
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: colors.white,
+              borderRadius: 999,
+              paddingHorizontal: 10,
+              height: 28,
+            }}
+          >
+            <Icon sf="location.fill" md="near_me" size={11} color={colors.cta} />
+            <Text style={[{ fontFamily: fonts.heavy, fontSize: 12.5, color: colors.ink }, tabular]}>
+              {distance}
+            </Text>
+          </View>
+        ) : null}
+        {stall.minPrice != null ? (
+          <PriceSticker
+            value={`từ ${formatVnd(stall.minPrice)}`}
+            style={{ position: 'absolute', right: 12, top: photoHeight - 46 }}
+          />
+        ) : null}
+        <View style={{ padding: 14, paddingTop: 12, gap: 6 }}>
           <Text
             numberOfLines={1}
-            style={{ fontFamily: fonts.bold, fontSize: 16.5, color: colors.ink }}
+            style={{
+              fontFamily: fonts.heavy,
+              fontSize: 18,
+              lineHeight: 24,
+              color: colors.ink,
+            }}
           >
             {stall.storefrontName}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Rating stall={stall} />
-            <Text style={{ color: colors.line }}>|</Text>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.leaf }} />
-            <Text numberOfLines={1} style={[text.footnote, { flex: 1, color: colors.onLeaf }]}>
+            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.line }} />
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.leaf }} />
+            <Text
+              numberOfLines={1}
+              style={{ flex: 1, fontFamily: fonts.bold, fontSize: 13.5, color: colors.onLeaf }}
+            >
               {openLine(stall)}
             </Text>
           </View>
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-          >
-            {stall.minPrice != null ? (
-              <Text
-                style={[{ fontFamily: fonts.regular, fontSize: 13, color: colors.muted }, tabular]}
-              >
-                Từ{' '}
-                <Text style={{ fontFamily: fonts.heavy, fontSize: 15.5, color: colors.primary }}>
-                  {formatVnd(stall.minPrice)}
-                </Text>
-              </Text>
-            ) : (
-              <View />
-            )}
-            <LicensedBadge slotCode={stall.slotCode} />
-          </View>
+          <LicensedBadge slotCode={stall.slotCode} withSlot={false} />
         </View>
       </View>
     </PressableScale>
   );
 });
 
-/** A list row: highlights under the finger (no scale); the price takes the right-hand column. */
+/** A list row: highlights under the finger (no scale); the slot plate sits on the photo's edge. */
 export const StallRow = memo(function StallRow({
   stall,
   onPress,
@@ -330,108 +334,102 @@ export const StallRow = memo(function StallRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${stall.storefrontName}, ${stall.isOpenNow ? 'đang mở' : 'đóng cửa'}${stall.minPrice != null ? `, từ ${formatVnd(stall.minPrice)}` : ''}`}
+      accessibilityLabel={`${stall.storefrontName}, ô ${stall.slotCode}, ${stall.isOpenNow ? 'đang mở' : 'đóng cửa'}${stall.minPrice != null ? `, từ ${formatVnd(stall.minPrice)}` : ''}`}
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 14,
-        paddingHorizontal: space.md,
+        paddingHorizontal: 20,
         paddingVertical: 12,
-        backgroundColor: pressed ? colors.pressed : colors.bg,
+        backgroundColor: pressed ? colors.pressed : colors.canvas,
       })}
     >
-      <StallPhoto stall={stall} width={84} height={84} rounded={radius.photo} compactTag />
-      <View style={{ flex: 1, gap: 5 }}>
-        <Text numberOfLines={1} style={[text.headline, { color: colors.ink }]}>
+      <View style={{ paddingBottom: 6 }}>
+        <StallPhoto stall={stall} width={88} height={88} rounded={radius.photo} />
+        <Plate
+          code={stall.slotCode}
+          style={{ position: 'absolute', left: 6, bottom: -2, minHeight: 24, paddingHorizontal: 6 }}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text
+          numberOfLines={1}
+          style={{
+            fontFamily: fonts.heavy,
+            fontSize: 16.5,
+            lineHeight: 22,
+            color: stall.isOpenNow ? colors.ink : colors.muted,
+          }}
+        >
           {stall.storefrontName}
         </Text>
-        {/* Where to go and pick up: the street first, the licensed slot after it */}
+        {/* Where to go and pick up */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <Icon sf="mappin" md="location_on" size={12} color={colors.muted} />
           <Text numberOfLines={1} style={[text.footnote, { flexShrink: 1, color: colors.muted }]}>
-            {stall.zoneName} · Ô {stall.slotCode}
+            {stall.zoneName}
+            {distance ? `, ${distance}` : ''}
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Rating stall={stall} size={12.5} />
-          <Text style={{ color: colors.line }}>|</Text>
+          <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.line }} />
           <Text
             numberOfLines={1}
-            style={[
-              text.footnote,
-              { flexShrink: 1, color: stall.isOpenNow ? colors.onLeaf : colors.muted },
-            ]}
+            style={{
+              flexShrink: 1,
+              fontFamily: fonts.bold,
+              fontSize: 12.5,
+              color: stall.isOpenNow ? colors.onLeaf : colors.muted,
+            }}
           >
             {openLine(stall)}
           </Text>
         </View>
       </View>
-      <View style={{ alignItems: 'flex-end', gap: 3, minWidth: 78 }}>
-        {stall.minPrice != null ? (
-          <>
-            <Text style={{ fontFamily: fonts.regular, fontSize: 11.5, color: colors.muted }}>
-              Từ
-            </Text>
-            <Text
-              style={[{ fontFamily: fonts.heavy, fontSize: 15, color: colors.primary }, tabular]}
-            >
-              {formatVnd(stall.minPrice)}
-            </Text>
-          </>
-        ) : null}
-        {distance ? (
-          <Text style={[{ fontFamily: fonts.code, fontSize: 13, color: colors.muted }, tabular]}>
-            {distance}
+      {stall.minPrice != null ? (
+        <View style={{ alignItems: 'flex-end', gap: 1, minWidth: 72 }}>
+          <Text style={{ fontFamily: fonts.semibold, fontSize: 11.5, color: colors.muted }}>Từ</Text>
+          <Text maxFontSizeMultiplier={1.4} style={[sign.price, { color: colors.primary }, tabular]}>
+            {formatVnd(stall.minPrice)}
           </Text>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
     </Pressable>
   );
 });
 
+/** Same shapes as the loaded screen under the signboard: category discs, the dish grid, rows. */
 export function ExploreSkeleton({ cardWidth }: { cardWidth: number }) {
   return (
-    <View style={{ gap: 18 }} accessibilityLabel="Đang tải quán ăn">
-      <View
-        style={{ flexDirection: 'row', gap: 12, paddingHorizontal: space.md, overflow: 'hidden' }}
-      >
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={{ gap: 8 }}>
-            <Skeleton width={156} height={132} radius={radius.card} />
-            <Skeleton width={80} height={14} />
-            <Skeleton width={120} height={13} />
+    <View style={{ gap: 22, paddingTop: 8 }} accessibilityLabel="Đang tải quán ăn">
+      <View style={{ flexDirection: 'row', gap: 14, paddingHorizontal: 20, overflow: 'hidden' }}>
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={{ alignItems: 'center', gap: 8 }}>
+            <Skeleton width={70} height={70} radius={35} />
+            <Skeleton width={52} height={12} />
           </View>
         ))}
       </View>
-      <View
-        style={{ flexDirection: 'row', gap: 12, paddingHorizontal: space.md, overflow: 'hidden' }}
-      >
-        <Skeleton
-          width={cardWidth}
-          height={Math.round(cardWidth * 0.56) + 96}
-          radius={radius.card}
-        />
-        <Skeleton
-          width={cardWidth}
-          height={Math.round(cardWidth * 0.56) + 96}
-          radius={radius.card}
-        />
+      <View style={{ flexDirection: 'row', gap: 14, paddingHorizontal: 20 }}>
+        {[0, 1].map((i) => (
+          <View key={i} style={{ flex: 1, gap: 8 }}>
+            <Skeleton width="100%" height={Math.round(cardWidth * 0.55)} radius={radius.photo} />
+            <Skeleton width="70%" height={15} />
+            <Skeleton width="45%" height={12} />
+          </View>
+        ))}
       </View>
       {[0, 1, 2].map((i) => (
         <View
           key={i}
-          style={{
-            flexDirection: 'row',
-            gap: 14,
-            alignItems: 'center',
-            paddingHorizontal: space.md,
-          }}
+          style={{ flexDirection: 'row', gap: 14, alignItems: 'center', paddingHorizontal: 20 }}
         >
-          <Skeleton width={84} height={84} radius={radius.photo} />
+          <Skeleton width={88} height={88} radius={radius.photo} />
           <View style={{ flex: 1, gap: 8 }}>
-            <Skeleton width="65%" height={15} />
-            <Skeleton width="45%" height={13} />
-            <Skeleton width="35%" height={13} />
+            <Skeleton width="65%" height={16} />
+            <Skeleton width="45%" height={12} />
+            <Skeleton width="35%" height={12} />
           </View>
         </View>
       ))}

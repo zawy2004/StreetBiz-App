@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
+import { EmptyArt } from '@/components/native/EmptyArt';
 import { Icon } from '@/components/common/Icon';
 import { colors, text } from '@/theme';
 import { selectableText } from '@/utils/platform';
@@ -27,10 +28,17 @@ export function StateView({ icon, tone = 'brand', title, body, action, art }: Pr
   const t = tones[tone];
   return (
     <View style={{ alignItems: 'center', paddingVertical: 36, paddingHorizontal: 28, gap: 6 }}>
-      {art ? <View style={{ marginBottom: 12 }}>{art}</View> : null}
+      {art ? (
+        <View style={{ marginBottom: 12 }}>{art}</View>
+      ) : tone !== 'danger' ? (
+        // v5: empty states stand a blank slot plate on the painted kerb (EmptyArt), not a generic disc
+        <View style={{ marginBottom: 12 }}>
+          <EmptyArt icon={icon} />
+        </View>
+      ) : null}
       <View
         style={{
-          display: art ? 'none' : 'flex',
+          display: art || tone !== 'danger' ? 'none' : 'flex',
           width: 64,
           height: 64,
           borderRadius: 32,

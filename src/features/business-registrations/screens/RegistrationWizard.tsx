@@ -18,7 +18,8 @@ import { TextField } from '@/components/forms/TextField';
 import { ResultView } from '@/components/native/ResultView';
 import { SegmentedControl } from '@/components/native/SegmentedControl';
 import { StatusHeader } from '@/components/native/StatusHeader';
-import { AiTag } from '@/components/status/AiTag';
+import { StepFooter } from '@/components/native/StepFlow';
+import { AiTag, aiPanel } from '@/components/status/AiTag';
 import {
   ApiError,
   errorMessage,
@@ -37,9 +38,10 @@ import {
 import { useWards } from '@/core/auth/useWards';
 import { Checkbox } from '@/features/authentication/components/auth-parts';
 import { LEGAL_ROUTES } from '@/features/legal/legal-content';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
+import { Pass } from '@/ui';
 import { formatVnd } from '@/utils/format';
-import { ControlLabel, DocTile, FieldGroup, goStep, returnToStep, useCloseFlow, useDocPicker, WizardStep, type StepKey } from '../components/WizardParts';
+import { ControlLabel, DocTile, FieldGroup, goStep, PickerField, returnToStep, SignPreview, useCloseFlow, useDocPicker, WizardStep, type StepKey } from '../components/WizardParts';
 import { EVIDENCE_LABELS, parseVndAmount, requiredEvidence, useNewRegistrationStore } from '../new-registration-store';
 import { submitRegistrationDraft } from '../submit-registration';
 import { REGISTRATIONS_KEY, useRegistrations } from '../useRegistrations';
@@ -85,7 +87,7 @@ export function RegistrationTypeStep() {
   const fixed = vendorType === VENDOR_TYPE.fixedStorefront;
 
   return (
-    <WizardStep step="type" hint="Lựa chọn này quyết định các bước sau hỏi gì." footer={<Button label="Tiếp tục" size={56} onPress={() => goStep('details')} />}>
+    <WizardStep step="type" hint="Lựa chọn này quyết định các bước sau hỏi gì." footer={<StepFooter next={{ label: 'Tiếp tục', onPress: () => goStep('details') }} />}>
       {pending ? (
         <StatusHeader
           tone="pending"
@@ -113,16 +115,16 @@ export function RegistrationTypeStep() {
               accessibilityRole="radio"
               selected={on}
               accessibilityLabel={`${t.label}. ${t.description}`}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: radius.card, borderCurve: 'continuous', borderWidth: on ? 2 : 1, borderColor: on ? colors.cta : colors.line, backgroundColor: on ? colors.brandTint : colors.card }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 18, minHeight: 104, borderRadius: radius.card, borderCurve: 'continuous', borderWidth: 2, borderColor: on ? colors.cta : 'transparent', backgroundColor: on ? colors.kerbPaint : colors.card, boxShadow: on ? shadow.glow : shadow.card }}
             >
-              <View style={{ width: 52, height: 52, borderRadius: 16, borderCurve: 'continuous', backgroundColor: on ? colors.cta : colors.sunken, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon sf={t.icon.sf} md={t.icon.md} size={25} color={on ? colors.white : colors.muted} />
+              <View style={{ width: 60, height: 60, borderRadius: radius.full, backgroundColor: on ? colors.cta : colors.brandTint, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.white }}>
+                <Icon sf={t.icon.sf} md={t.icon.md} size={27} color={on ? colors.white : colors.primary} />
               </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.ink }}>{t.label}</Text>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 17.5, lineHeight: 23, color: colors.ink }}>{t.label}</Text>
                 <Text style={[text.footnote, { color: colors.muted }]}>{t.description}</Text>
               </View>
-              <Icon sf={on ? 'checkmark.circle.fill' : 'circle'} md={on ? 'check_circle' : 'radio_button_unchecked'} size={24} color={on ? colors.cta : colors.line} />
+              <Icon sf={on ? 'checkmark.circle.fill' : 'circle'} md={on ? 'check_circle' : 'radio_button_unchecked'} size={26} color={on ? colors.cta : colors.line} />
             </PressableScale>
           );
         })}
@@ -192,8 +194,10 @@ export function RegistrationDetailsStep() {
   const hasPoint = draft.addressLatitude != null && draft.addressLongitude != null;
 
   return (
-    <WizardStep step="details" hint="Tên này in trên biển hiệu và giấy phép." scrollRef={place.scroll} footer={<Button label="Tiếp tục" size={56} onPress={submit} />}>
-      <FieldGroup title="Biển hiệu" onLayout={place.at('name')}>
+    <WizardStep step="details" hint="Tên này in trên biển hiệu và giấy phép." scrollRef={place.scroll} footer={<StepFooter next={{ label: 'Tiếp tục', onPress: submit }} />}>
+      {/* The household's sign, painted as the name is typed */}
+      <SignPreview name={draft.displayName} />
+      <FieldGroup title="Tên trên biển hiệu" onLayout={place.at('name')}>
         <TextField
           label="Tên hộ kinh doanh"
           value={draft.displayName}
@@ -208,26 +212,19 @@ export function RegistrationDetailsStep() {
           autoCapitalize="words"
           returnKeyType="done"
         />
-        <View accessibilityLabel={`Biển hiệu: ${draft.displayName.trim() || 'chưa có tên'}`} style={{ alignSelf: 'center', maxWidth: '100%', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10, backgroundColor: draft.displayName.trim() ? colors.plate : colors.sunken, borderWidth: 2, borderColor: colors.white, boxShadow: draft.displayName.trim() ? '0 0 0 2px #111C2B' : undefined }}>
-          <Text style={{ fontFamily: fonts.heavy, fontSize: 18, color: draft.displayName.trim() ? colors.white : colors.muted, letterSpacing: 0.5 }} numberOfLines={1}>
-            {draft.displayName.trim() ? draft.displayName.trim().toUpperCase() : 'TÊN HỘ KINH DOANH'}
-          </Text>
-        </View>
       </FieldGroup>
 
       <FieldGroup title="Nơi quản lý và địa điểm" onLayout={place.at('ward')}>
         <ControlLabel label="Phường/xã quản lý" error={errors.ward ?? wardsError}>
-          <Pressable
+          <PickerField
             onPress={() => (wardsError ? void refetch() : setWardSheet(true))}
-            disabled={wardsLoading}
-            accessibilityRole="button"
+            loading={wardsLoading}
+            error={!!errors.ward}
             accessibilityLabel={`Phường/xã quản lý: ${ward?.unitName ?? 'chưa chọn'}`}
-            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 14, borderRadius: radius.control, borderCurve: 'continuous', borderWidth: errors.ward ? 1.5 : 1, borderColor: errors.ward ? colors.danger : colors.line, backgroundColor: pressed ? colors.pressed : colors.card })}
-          >
-            <Icon sf="building.columns.fill" md="account_balance" size={18} color={colors.muted} />
-            <Text style={{ flex: 1, fontFamily: fonts.medium, fontSize: 16, color: ward ? colors.ink : colors.muted }}>{ward ? ward.unitName : wardsLoading ? 'Đang tải danh sách…' : wardsError ? 'Bấm để tải lại' : 'Chọn phường/xã'}</Text>
-            {wardsLoading ? <ActivityIndicator size="small" color={colors.cta} /> : <Icon sf="chevron.down" md="expand_more" size={14} color={colors.muted} />}
-          </Pressable>
+            icon={{ sf: 'building.columns.fill', md: 'account_balance' }}
+            value={ward?.unitName}
+            placeholder={wardsLoading ? 'Đang tải danh sách…' : wardsError ? 'Bấm để tải lại' : 'Chọn phường/xã'}
+          />
         </ControlLabel>
         <View onLayout={(e) => place.at('address')(e.nativeEvent.layout.y)}>
           <TextField
@@ -249,9 +246,9 @@ export function RegistrationDetailsStep() {
         <ListRow
           title={hasPoint ? `${draft.addressLatitude}, ${draft.addressLongitude}` : 'Dùng vị trí hiện tại'}
           subtitle={hasPoint ? 'Bấm để lấy lại' : 'Không bắt buộc'}
-          icon={{ sf: 'location.fill', md: 'my_location' }}
-          tint={colors.sign}
-          tileColor={colors.signTint}
+          icon={{ sf: hasPoint ? 'mappin.circle.fill' : 'location.fill', md: hasPoint ? 'where_to_vote' : 'my_location' }}
+          tint={hasPoint ? colors.white : colors.primary}
+          tileColor={hasPoint ? colors.cta : colors.brandTint}
           onPress={() => void locateHere()}
           disabled={locating}
           chevron={false}
@@ -410,15 +407,15 @@ export function RegistrationOwnerStep() {
   const filledCount = AI_FIELDS.filter((k) => ai.has(k)).length;
 
   return (
-    <WizardStep step="owner" hint="Điền đúng như trên CCCD của chủ hộ." scrollRef={place.scroll} footer={<Button label="Tiếp tục" size={56} onPress={submit} />}>
+    <WizardStep step="owner" hint="Điền đúng như trên CCCD của chủ hộ." scrollRef={place.scroll} footer={<StepFooter next={{ label: 'Tiếp tục', onPress: submit }} />}>
       {/* [AI] scan: optional help, never required to go on */}
-      <View style={{ gap: 14, padding: 16, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: '#FFFAEB' }}>
+      <View style={{ ...aiPanel, gap: 16, padding: 18, borderRadius: radius.card }}>
         <View style={{ gap: 6 }}>
           <AiTag label="Không bắt buộc" />
-          <Text style={[text.headline, { color: colors.ink }]}>Quét CCCD để điền nhanh</Text>
+          <Text style={{ fontFamily: fonts.heavy, fontSize: 18, lineHeight: 24, color: colors.ink }}>Quét CCCD để điền nhanh</Text>
           <Text style={[text.footnote, { color: colors.onMango }]}>Chỉ là gợi ý: bạn kiểm tra lại từng ô. Cán bộ phường vẫn đối chiếu CCCD gốc.</Text>
         </View>
-        <View style={consentShake && !draft.biometricConsent ? { padding: 8, margin: -8, borderRadius: 12, backgroundColor: colors.dangerTint } : undefined}>
+        <View style={consentShake && !draft.biometricConsent ? { padding: 8, margin: -8, borderRadius: radius.control, backgroundColor: colors.dangerTint } : undefined}>
           <Checkbox
             checked={draft.biometricConsent}
             onChange={(v) => {
@@ -443,8 +440,9 @@ export function RegistrationOwnerStep() {
         </View>
         {extraction ? (
           <View style={{ gap: 4 }}>
+            {extraction.fullName ? <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>{extraction.fullName}</Text> : null}
             <Text style={[text.subhead, { color: colors.ink }, tabular]}>
-              Đã điền {filledCount} ô · tin cậy {extraction.confidencePercent}%{extraction.fullName ? ` · ${extraction.fullName}` : ''}
+              Đã điền {filledCount} ô, tin cậy {extraction.confidencePercent}%
             </Text>
             {extraction.needsManualVerification ? <Text style={[text.footnote, { color: colors.onMango }]}>Ảnh chưa đủ rõ, kiểm tra kỹ các ô có nhãn [AI].</Text> : null}
             {extraction.warnings.map((w) => (
@@ -468,8 +466,8 @@ export function RegistrationOwnerStep() {
           <DocTile size="thumb" label="Ảnh chân dung" type={EVIDENCE_TYPE.portraitSelfie} onPick={() => void docs.choose(EVIDENCE_TYPE.portraitSelfie, false)} state={docs.state[EVIDENCE_TYPE.portraitSelfie]} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[text.subhead, { color: colors.ink }]}>Ảnh chân dung</Text>
-            <Text style={[text.footnote, { color: face ? (face.isMatch ? colors.onLeaf : colors.onDanger) : colors.muted }]}>
-              {face ? `${face.isMatch ? 'Khớp' : 'Chưa khớp'} · giống ${face.similarityPercent}%` : selfie ? 'Bấm Đối chiếu để so với CCCD' : 'Không bắt buộc, để đối chiếu khuôn mặt'}
+            <Text style={[text.footnote, tabular, { color: face ? (face.isMatch ? colors.onLeaf : colors.onDanger) : colors.muted, fontFamily: face ? fonts.bold : fonts.regular }]}>
+              {face ? `${face.isMatch ? 'Khớp' : 'Chưa khớp'}, giống ${face.similarityPercent}%` : selfie ? 'Bấm Đối chiếu để so với CCCD' : 'Không bắt buộc, để đối chiếu khuôn mặt'}
             </Text>
           </View>
           {selfie ? (
@@ -478,15 +476,15 @@ export function RegistrationOwnerStep() {
               disabled={matching || !selfie.uploadedUrl}
               accessibilityRole="button"
               accessibilityLabel="Đối chiếu khuôn mặt với CCCD"
-              style={({ pressed }) => ({ minHeight: 44, paddingHorizontal: 14, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line, backgroundColor: pressed ? colors.pressed : colors.card, opacity: !selfie.uploadedUrl ? 0.45 : 1 })}
+              style={({ pressed }) => ({ minHeight: 44, paddingHorizontal: 16, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? colors.sticker : colors.white, borderWidth: 1.5, borderColor: colors.sticker, opacity: !selfie.uploadedUrl ? 0.45 : 1 })}
             >
-              {matching ? <ActivityIndicator size="small" color={colors.cta} /> : <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.ink }}>Đối chiếu</Text>}
+              {matching ? <ActivityIndicator size="small" color={colors.cta} /> : <Text style={{ fontFamily: fonts.heavy, fontSize: 14, color: colors.onMango }}>Đối chiếu</Text>}
             </Pressable>
           ) : null}
         </View>
         {face ? <Text style={[text.footnote, { color: colors.onMango }]}>{face.summary}</Text> : null}
         {docs.error ? (
-          <View style={{ flexDirection: 'row', gap: 8, padding: 12, borderRadius: 12, backgroundColor: colors.dangerTint }}>
+          <View style={{ flexDirection: 'row', gap: 8, padding: 12, borderRadius: radius.control, backgroundColor: colors.dangerTint }}>
             <Icon sf="exclamationmark.circle.fill" md="error" size={16} color={colors.danger} />
             <Text style={[text.footnote, { flex: 1, color: colors.onDanger }]}>{docs.error}</Text>
           </View>
@@ -575,7 +573,7 @@ export function RegistrationBusinessStep() {
   };
 
   return (
-    <WizardStep step="business" hint="Quy mô hộ kinh doanh theo Mẫu số 01." scrollRef={place.scroll} footer={<Button label="Tiếp tục" size={56} onPress={submit} />}>
+    <WizardStep step="business" hint="Quy mô hộ kinh doanh theo Mẫu số 01." scrollRef={place.scroll} footer={<StepFooter next={{ label: 'Tiếp tục', onPress: submit }} />}>
       <FieldGroup title="Ngành nghề và quy mô" onLayout={place.at('business')}>
         <TextField label="Ngành, nghề kinh doanh" value={draft.businessLine} onChangeText={(v) => set('businessLine', v)} error={errors.businessLine} placeholder="Ví dụ: Bán bánh mì, nước giải khát" />
         <TextField label="Mã ngành" optional value={draft.businessLineCode} onChangeText={(v) => set('businessLineCode', v)} keyboardType="number-pad" placeholder="5610" />
@@ -586,8 +584,17 @@ export function RegistrationBusinessStep() {
           error={errors.capitalAmount}
           keyboardType="number-pad"
           trailing={<Text style={{ fontFamily: fonts.semibold, color: colors.muted }}>đ</Text>}
-          hint={capital != null ? formatVnd(capital) : 'Số tiền, không dấu chấm'}
+          hint={capital != null ? undefined : 'Số tiền, không dấu chấm'}
         />
+        {capital != null && !errors.capitalAmount ? (
+          // The capital read back as the figure it is, in sign lettering
+          <View accessible accessibilityLabel={`Vốn kinh doanh ${formatVnd(capital)}`} style={{ marginTop: -8, flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} adjustsFontSizeToFit style={[sign.title, tabular, { flexShrink: 1, color: colors.primary }]}>
+              {formatVnd(capital)}
+            </Text>
+            <Text style={[text.footnote, { color: colors.muted }]}>vốn</Text>
+          </View>
+        ) : null}
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <View style={{ flex: 1 }}>
             <TextField label="Số lao động" value={draft.laborCount} onChangeText={(v) => set('laborCount', v.replace(/[^\d]/g, ''))} error={errors.laborCount} keyboardType="number-pad" />
@@ -599,21 +606,21 @@ export function RegistrationBusinessStep() {
       </FieldGroup>
 
       <View style={{ gap: 12 }}>
-        <View style={{ gap: 2, marginHorizontal: 4 }}>
-          <Text accessibilityRole="header" style={[text.headline, { color: colors.ink }]}>
+        <View style={{ gap: 2 }}>
+          <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 18, lineHeight: 24, letterSpacing: -0.2, color: colors.ink }}>
             Thành viên hộ góp vốn
           </Text>
           <Text style={[text.footnote, { color: colors.muted }]}>Không bắt buộc.</Text>
         </View>
         {draft.householdMembers.length > 0 ? (
-          <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, overflow: 'hidden' }}>
+          <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, overflow: 'hidden', boxShadow: shadow.card }}>
             {draft.householdMembers.map((m, i) => {
               const open = openIdx === i;
               return (
                 <View key={i} style={{ borderTopWidth: i ? 1 : 0, borderTopColor: colors.separator }}>
                   <ListRow
                     title={m.fullName.trim() || `Thành viên ${i + 1}`}
-                    subtitle={[m.relationshipToOwner, m.capitalContribution ? formatVnd(parseVndAmount(m.capitalContribution) ?? 0) : null].filter(Boolean).join(' · ') || 'Chưa điền'}
+                    subtitle={[m.relationshipToOwner, m.capitalContribution ? formatVnd(parseVndAmount(m.capitalContribution) ?? 0) : null].filter(Boolean).join(', ') || 'Chưa điền'}
                     icon={{ sf: 'person.fill', md: 'person' }}
                     onPress={() => setOpenIdx(open ? null : i)}
                     chevron={false}
@@ -751,19 +758,21 @@ export function RegistrationDocumentsStep() {
       step="documents"
       hint={editing ? 'Giấy tờ đã nộp vẫn được giữ. Chỉ thêm nếu phường yêu cầu.' : 'Ảnh rõ, đủ bốn góc. JPG, PNG, WEBP hoặc PDF, tối đa 5 MB.'}
       footer={
-        <View style={{ gap: 8 }}>
-          {error ? (
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-              <Icon sf="exclamationmark.circle.fill" md="error" size={16} color={colors.danger} />
-              <Text style={[text.footnote, { flex: 1, color: colors.onDanger }]}>{error}</Text>
-            </View>
-          ) : null}
-          <Button label={sending ? 'Đang gửi hồ sơ…' : editing ? 'Cập nhật và gửi lại' : 'Nộp hồ sơ'} size={56} icon={{ sf: 'paperplane.fill', md: 'send' }} loading={sending} disabled={sending} onPress={() => void submit()} />
-        </View>
+        <StepFooter
+          extra={
+            error ? (
+              <View accessibilityRole="alert" style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', padding: 12, borderRadius: radius.control, backgroundColor: colors.dangerTint }}>
+                <Icon sf="exclamationmark.circle.fill" md="error" size={16} color={colors.danger} style={{ marginTop: 1 }} />
+                <Text style={[text.footnote, { flex: 1, color: colors.onDanger }]}>{error}</Text>
+              </View>
+            ) : undefined
+          }
+          next={{ label: sending ? 'Đang gửi hồ sơ…' : editing ? 'Cập nhật và gửi lại' : 'Nộp hồ sơ', onPress: () => void submit(), loading: sending, disabled: sending }}
+        />
       }
     >
       <View style={{ gap: 12 }}>
-        <Text accessibilityRole="header" style={[text.headline, { color: colors.ink, marginHorizontal: 4 }]}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 18, lineHeight: 24, letterSpacing: -0.2, color: colors.ink }}>
           Giấy tờ
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
@@ -771,14 +780,44 @@ export function RegistrationDocumentsStep() {
             <DocTile key={t} label={EVIDENCE_LABELS[t]} type={t} required={required.includes(t)} missing={tried && !editing && missing.includes(t as never)} onPick={() => void docs.choose(t)} />
           ))}
         </View>
-        {docs.error ? <Text style={[text.footnote, { color: colors.onDanger, marginHorizontal: 4 }]}>{docs.error}</Text> : null}
+        {docs.error ? <Text style={[text.footnote, { color: colors.onDanger }]}>{docs.error}</Text> : null}
       </View>
 
-      <ListGroup title="Xem lại trước khi nộp" inset={16} footer="Mục còn thiếu vẫn nộp được; phường có thể yêu cầu bổ sung.">
-        {review.map((r) => (
-          <ListRow key={r.title} title={r.title} value={r.value} onPress={() => returnToStep(r.step)} accessory={r.warn ? <Icon sf="exclamationmark.circle.fill" md="error" size={16} color={colors.mango} /> : undefined} />
-        ))}
-      </ListGroup>
+      {/* The application as the slip that goes to the ward: the sign's name on top, every answer under the tear line */}
+      <View style={{ gap: 12 }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 18, lineHeight: 24, letterSpacing: -0.2, color: colors.ink }}>
+          Xem lại trước khi nộp
+        </Text>
+        <Pass
+          head={
+            <View style={{ gap: 4 }}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.muted }}>Tờ khai gửi {ward?.unitName ?? 'phường'}</Text>
+              <Text maxFontSizeMultiplier={1.3} numberOfLines={2} style={[sign.title, { color: draft.displayName.trim() ? colors.ink : colors.line }]}>
+                {(draft.displayName.trim() || 'Chưa có tên').toLocaleUpperCase('vi-VN')}
+              </Text>
+            </View>
+          }
+          stub={
+            <View style={{ marginHorizontal: -20, marginBottom: -18 }}>
+              {review.map((r, i) => (
+                <Pressable
+                  key={r.title}
+                  onPress={() => returnToStep(r.step)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${r.title}: ${r.value}${r.warn ? ', cần xem lại' : ''}. Sửa`}
+                  style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: pressed ? colors.pressed : 'transparent', borderTopWidth: i ? 1 : 0, borderTopColor: colors.separator })}
+                >
+                  <Text style={[text.subhead, { width: '36%', fontFamily: fonts.regular, color: colors.muted }]}>{r.title}</Text>
+                  <Text style={[text.subhead, tabular, { flex: 1, textAlign: 'right', color: r.warn ? colors.onMango : colors.ink }]}>{r.value}</Text>
+                  {r.warn ? <Icon sf="exclamationmark.circle.fill" md="error" size={16} color={colors.mango} /> : null}
+                  <Icon sf="chevron.right" md="chevron_right" size={12} color={colors.muted} />
+                </Pressable>
+              ))}
+            </View>
+          }
+        />
+        <Text style={[text.footnote, { color: colors.muted }]}>Mục còn thiếu vẫn nộp được; phường có thể yêu cầu bổ sung.</Text>
+      </View>
       {docs.sheet}
     </WizardStep>
   );

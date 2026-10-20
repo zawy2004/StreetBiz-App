@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { selectableText } from '@/utils/platform';
 import { Icon } from './Icon';
 
-/** A white rounded surface: the one card of the app (radius 20, continuous corners). */
+/** A white rounded surface: the one card of the app (radius 22, continuous, resting shadow). */
 export function Card({
   children,
   style,
@@ -24,6 +24,7 @@ export function Card({
           borderCurve: 'continuous',
           padding: padded ? 16 : 0,
           overflow: 'hidden',
+          boxShadow: shadow.card,
         },
         style,
       ]}
@@ -46,7 +47,7 @@ export function SectionHeader({
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
       <View style={{ flex: 1, gap: 1 }}>
-        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 19, lineHeight: 25, color: colors.ink }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 20, lineHeight: 26, letterSpacing: -0.2, color: colors.ink }}>
           {title}
         </Text>
         {note ? <Text style={[text.footnote, { color: colors.muted }]}>{note}</Text> : null}
@@ -106,7 +107,7 @@ export function KeyValueList({ rows }: { rows: (KeyValue | null | false | undefi
   );
 }
 
-/** A 44 pt round header button with an optional count badge (bell, chat). */
+/** A 44 pt round header button with an optional count badge (bell, chat). v5: white disc, soft lift. */
 export function HeaderIconButton({
   icon,
   label,
@@ -125,35 +126,34 @@ export function HeaderIconButton({
       accessibilityRole="button"
       accessibilityLabel={badge ? `${label}, ${badge} chưa đọc` : label}
       style={({ pressed }) => ({
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        backgroundColor: pressed ? colors.sunken : colors.card,
-        borderWidth: 1,
-        borderColor: colors.line,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: pressed ? colors.brandTint : colors.card,
         alignItems: 'center',
         justifyContent: 'center',
+        boxShadow: '0 4px 12px -6px rgba(17, 28, 43, 0.28)',
       })}
     >
-      <Icon sf={icon.sf} md={icon.md} size={19} color={colors.ink} />
+      <Icon sf={icon.sf} md={icon.md} size={20} color={colors.ink} />
       {badge ? (
         <View
           style={{
             position: 'absolute',
             top: -3,
             right: -3,
-            minWidth: 20,
-            height: 20,
-            borderRadius: 10,
+            minWidth: 22,
+            height: 22,
+            borderRadius: 11,
             paddingHorizontal: 5,
             backgroundColor: colors.cta,
             borderWidth: 2,
-            borderColor: colors.bg,
+            borderColor: colors.white,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Text style={[{ fontFamily: fonts.bold, fontSize: 11, color: colors.white }, tabular]}>
+          <Text style={[{ fontFamily: fonts.heavy, fontSize: 11, color: colors.white }, tabular]}>
             {badge > 99 ? '99+' : badge}
           </Text>
         </View>
@@ -192,17 +192,18 @@ export function StatTile({
     danger: colors.dangerTint,
     sign: colors.signTint,
   }[tone];
+  // v5: the figure in sign lettering, coloured by its tone; the icon on a round wash.
   const body = (
-    <View style={{ flex: 1, padding: 14, gap: 6, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card }}>
+    <View style={{ flex: 1, padding: 16, gap: 8, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
       {icon ? (
-        <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: wash, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon sf={icon.sf} md={icon.md} size={16} color={ink} />
+        <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: wash, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon sf={icon.sf} md={icon.md} size={18} color={ink} />
         </View>
       ) : null}
-      <Text style={[{ fontFamily: fonts.heavy, fontSize: 24, lineHeight: 30, color: ink }, tabular]} numberOfLines={1} adjustsFontSizeToFit>
+      <Text maxFontSizeMultiplier={1.3} style={[sign.title, { color: ink }, tabular]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </Text>
-      <Text style={[text.footnote, { color: colors.muted }]} numberOfLines={2}>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, color: colors.muted }} numberOfLines={2}>
         {label}
       </Text>
     </View>
@@ -215,7 +216,10 @@ export function StatTile({
   );
 }
 
-/** A soft segmented filter (tabs inside a screen), scrolling sideways when long. */
+/**
+ * A segmented filter (tabs inside a screen). v5: a sunken capsule track; the chosen segment is a
+ * solid orange capsule with white words, its count on a white disc.
+ */
 export function Segments<T extends string>({
   value,
   options,
@@ -226,7 +230,7 @@ export function Segments<T extends string>({
   onChange: (key: T) => void;
 }) {
   return (
-    <View style={{ flexDirection: 'row', backgroundColor: colors.sunken, borderRadius: 14, padding: 4, gap: 4 }}>
+    <View style={{ flexDirection: 'row', backgroundColor: colors.sunken, borderRadius: 999, padding: 4, gap: 4 }}>
       {options.map((o) => {
         const on = o.key === value;
         return (
@@ -237,24 +241,23 @@ export function Segments<T extends string>({
             accessibilityState={{ selected: on }}
             style={{
               flex: 1,
-              minHeight: 38,
-              borderRadius: 11,
-              borderCurve: 'continuous',
+              minHeight: 40,
+              borderRadius: 999,
               alignItems: 'center',
               justifyContent: 'center',
               flexDirection: 'row',
-              gap: 5,
-              paddingHorizontal: 6,
-              backgroundColor: on ? colors.card : 'transparent',
-              boxShadow: on ? '0 2px 6px -2px rgba(17, 28, 43, 0.18)' : undefined,
+              gap: 6,
+              paddingHorizontal: 8,
+              backgroundColor: on ? colors.cta : 'transparent',
+              boxShadow: on ? '0 6px 14px -8px rgba(238, 85, 0, 0.7)' : undefined,
             }}
           >
-            <Text numberOfLines={1} style={{ fontFamily: on ? fonts.bold : fonts.medium, fontSize: 13.5, color: on ? colors.ink : colors.muted }}>
+            <Text numberOfLines={1} style={{ fontFamily: on ? fonts.heavy : fonts.semibold, fontSize: 13.5, color: on ? colors.white : colors.muted }}>
               {o.label}
             </Text>
             {o.count != null && o.count > 0 ? (
-              <View style={{ minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: on ? colors.cta : colors.line, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={[{ fontFamily: fonts.bold, fontSize: 10.5, color: on ? colors.white : colors.ink }, tabular]}>{o.count}</Text>
+              <View style={{ minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: on ? colors.white : colors.line, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={[{ fontFamily: fonts.heavy, fontSize: 11, color: on ? colors.primary : colors.ink }, tabular]}>{o.count}</Text>
               </View>
             ) : null}
           </Pressable>

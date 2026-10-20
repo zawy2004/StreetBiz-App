@@ -1,6 +1,6 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
-import { colors } from '@/theme';
+import { tabBarLook } from '@/ui';
 
 /**
  * Quản trị nền tảng: Tổng quan, Tài khoản, Danh mục, Kiểm duyệt, Cá nhân.
@@ -9,7 +9,7 @@ import { colors } from '@/theme';
  */
 export default function PlatformTabs() {
   return (
-    <NativeTabs tintColor={colors.cta} minimizeBehavior="onScrollDown">
+    <NativeTabs {...tabBarLook} minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="dashboard" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} md="insights" />
         <NativeTabs.Trigger.Label>Tổng quan</NativeTabs.Trigger.Label>

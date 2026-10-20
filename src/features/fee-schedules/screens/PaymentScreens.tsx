@@ -8,8 +8,8 @@ import { KeyValueList } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
 import { shareProtectedFile } from '@/components/common/ProtectedFile';
-import { SlotPlate } from '@/components/common/SlotPlate';
 import { Banner } from '@/components/feedback/Banner';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
@@ -18,7 +18,8 @@ import { StatusPill } from '@/components/status/StatusPill';
 import { ApiError, errorMessage, financeApi, type FinanceCheckoutDto, type PaymentProvider } from '@/core/api';
 import { uuid } from '@/core/utils/uuid';
 import { isSandboxPaymentUrl, redirectToPayment } from '@/features/orders/payment-redirect';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
+import { Pass, Plate } from '@/ui';
 import { formatVietnamDate, formatVietnamDateTime, formatVnd } from '@/utils/format';
 import { feeUrgency } from '../finance-view';
 import { ReturnCheck, SafePaySteps, WalletPicker } from '../components/FinanceParts';
@@ -93,7 +94,7 @@ function useCheckoutFlow(run: (key: string) => Promise<FinanceCheckoutDto>, onPa
   return { pay, busy, error, momo, refreshAll };
 }
 
-/** V26 Thanh toán phí thuê ô (FEE-01): the instalment as a slip, the contract's progress, the wallet, pay. */
+/** V26 Thanh toán phí thuê ô (FEE-01): the instalment as a torn-off slip, the contract's progress, the wallet, pay. */
 export function FeePaymentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const feeItemId = Number(id);
@@ -112,8 +113,8 @@ export function FeePaymentScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Thanh toán phí' }} />
-        <ListSkeleton rows={1} height={190} />
-        <ListSkeleton rows={2} height={64} />
+        <Skeleton height={300} radius={radius.pass} />
+        <ListSkeleton rows={2} height={68} />
       </Screen>
     );
   }
@@ -134,6 +135,7 @@ export function FeePaymentScreen() {
     <Screen
       onRefresh={() => void detail.refetch()}
       refreshing={detail.isRefetching}
+      gap={18}
       footer={
         payable ? (
           <PayBar amount={item.amount}>
@@ -145,23 +147,23 @@ export function FeePaymentScreen() {
       <Stack.Screen options={{ title: 'Thanh toán phí' }} />
       <ReturnCheck state={flow.momo.state} onRetry={flow.momo.retry} />
       <Slip
-        caption="PHÍ THUÊ Ô VỈA HÈ"
+        caption="Phí thuê ô vỉa hè"
         title={item.periodLabel}
         amount={item.amount}
         rows={[
-          { label: 'Ô', value: <SlotPlate code={contract.slotCode} /> },
+          { label: 'Ô vỉa hè', value: <Plate code={contract.slotCode} /> },
           { label: 'Tuyến', value: contract.zoneName ?? '—' },
           { label: 'Hạn nộp', value: formatDay(item.dueDate) },
           { label: 'Kỳ', value: `${item.ordinal}/${item.ofCount}` },
         ]}
         pill={urgency ? { label: urgency.text, tone: urgency.tone === 'danger' ? 'danger' : urgency.tone === 'pending' ? 'pending' : 'neutral' } : null}
       />
-      <View style={{ padding: 16, gap: 8, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={[text.footnote, { color: colors.ink }, tabular]}>Đã nộp {contract.paidCount}/{contract.instalmentCount} kỳ</Text>
-          <Text style={[text.footnote, { color: colors.primary, fontFamily: fonts.bold }, tabular]}>Còn {formatVnd(contract.outstandingAmount)}</Text>
+      <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+          <Text style={[text.subhead, { color: colors.ink }, tabular]}>Đã nộp {contract.paidCount}/{contract.instalmentCount} kỳ</Text>
+          <Text style={[text.subhead, { color: colors.primary, fontFamily: fonts.heavy }, tabular]}>Còn {formatVnd(contract.outstandingAmount)}</Text>
         </View>
-        <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.sunken, overflow: 'hidden' }}>
+        <View style={{ height: 10, borderRadius: 5, backgroundColor: colors.sunken, overflow: 'hidden' }}>
           <View style={{ width: `${Math.round(paidShare(contract) * 100)}%`, height: '100%', backgroundColor: colors.leaf }} />
         </View>
       </View>
@@ -175,55 +177,69 @@ export function FeePaymentScreen() {
 /** After paying: the receipt and its invoice, not a bounce back to the list. */
 function FeeReceipt({ detail }: { detail: NonNullable<ReturnType<typeof useFeeItemDetail>['data']> }) {
   const { item, contract } = detail;
+  const next = contract.nextDue;
   const [downloading, setDownloading] = useState(false);
   return (
-    <Screen footer={<Button label="Về Tài chính" variant="secondary" size={56} onPress={() => router.dismissTo('/vendor/finance' as Href)} />}>
+    <Screen footer={<Button label="Về Tài chính" variant="secondary" size={56} onPress={() => router.dismissTo('/vendor/finance' as Href)} />} gap={18}>
       <Stack.Screen options={{ title: 'Đã thanh toán' }} />
-      <View style={{ padding: 22, gap: 14, borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.card, alignItems: 'center' }}>
-        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.leafTint, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon sf="checkmark.seal.fill" md="verified" size={34} color={colors.leaf} />
-        </View>
-        <Text style={[text.title3, { color: colors.ink }]}>Thanh toán thành công</Text>
-        <Text style={[{ fontFamily: fonts.heavy, fontSize: 32, color: colors.ink }, tabular]}>{formatVnd(item.amount)}</Text>
-        <View style={{ alignSelf: 'stretch' }}>
-          <KeyValueList
-            rows={[
-              { label: 'Kỳ phí', value: item.periodLabel },
-              { label: 'Ô', value: <SlotPlate code={contract.slotCode} /> },
-              item.paidAt ? { label: 'Thanh toán lúc', value: formatVietnamDateTime(item.paidAt) } : null,
-              item.invoiceNumber ? { label: 'Hoá đơn', value: item.invoiceNumber, mono: true } : null,
-            ]}
-          />
-        </View>
-        {item.invoiceId && item.invoiceNumber ? (
-          <View style={{ flexDirection: 'row', gap: 10, alignSelf: 'stretch' }}>
-            <Button label="Xem hoá đơn" icon={{ sf: 'doc.text', md: 'receipt_long' }} onPress={() => router.push(`/vendor/finance/invoices/${item.invoiceId}` as Href)} style={{ flex: 1 }} />
-            <Button
-              label="PDF"
-              variant="secondary"
-              icon={{ sf: 'square.and.arrow.down', md: 'download' }}
-              loading={downloading}
-              onPress={async () => {
-                setDownloading(true);
-                await shareProtectedFile(`/vendor/finance/invoices/${item.invoiceId}/pdf`, `${item.invoiceNumber}.pdf`, 'application/pdf');
-                setDownloading(false);
-              }}
-            />
-          </View>
-        ) : (
-          <Text style={[text.footnote, { color: colors.muted }]}>Hoá đơn đang được phát hành…</Text>
-        )}
-      </View>
-      {contract.nextDue ? (
-        <Pressable onPress={() => router.push(`/vendor/finance/contracts/${contract.contractId}` as Href)} accessibilityRole="button">
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card }}>
-            <Icon sf="calendar" md="calendar_month" size={20} color={colors.primary} />
-            <View style={{ flex: 1 }}>
-              <Text style={[text.caption, { color: colors.muted }]}>Kỳ tiếp theo</Text>
-              <Text style={[text.subhead, { color: colors.ink }]}>{contract.nextDue.periodLabel} · hạn {formatDay(contract.nextDue.dueDate)}</Text>
+      <Pass
+        accent={colors.leaf}
+        head={
+          <View style={{ alignItems: 'center', gap: 10 }}>
+            <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.leaf, alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: colors.leafTint }}>
+              <Icon sf="checkmark" md="check" size={34} color={colors.white} weight="bold" />
             </View>
-            <Text style={[{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }, tabular]}>{formatVnd(contract.nextDue.amount)}</Text>
+            <Text accessibilityRole="header" style={[text.title3, { color: colors.onLeaf, fontFamily: fonts.heavy }]}>Thanh toán thành công</Text>
+            <Text maxFontSizeMultiplier={1.3} adjustsFontSizeToFit numberOfLines={1} style={[sign.figure, { color: colors.ink }, tabular]}>{formatVnd(item.amount)}</Text>
           </View>
+        }
+        stub={
+          <View style={{ gap: 14 }}>
+            <KeyValueList
+              rows={[
+                { label: 'Kỳ phí', value: item.periodLabel },
+                { label: 'Ô vỉa hè', value: <Plate code={contract.slotCode} /> },
+                item.paidAt ? { label: 'Thanh toán lúc', value: formatVietnamDateTime(item.paidAt) } : null,
+                item.invoiceNumber ? { label: 'Hoá đơn', value: item.invoiceNumber, mono: true } : null,
+              ]}
+            />
+            {item.invoiceId && item.invoiceNumber ? (
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Button label="Xem hoá đơn" icon={{ sf: 'doc.text', md: 'receipt_long' }} onPress={() => router.push(`/vendor/finance/invoices/${item.invoiceId}` as Href)} style={{ flex: 1 }} />
+                <Button
+                  label="PDF"
+                  variant="secondary"
+                  icon={{ sf: 'square.and.arrow.down', md: 'download' }}
+                  loading={downloading}
+                  onPress={async () => {
+                    setDownloading(true);
+                    await shareProtectedFile(`/vendor/finance/invoices/${item.invoiceId}/pdf`, `${item.invoiceNumber}.pdf`, 'application/pdf');
+                    setDownloading(false);
+                  }}
+                />
+              </View>
+            ) : (
+              <Text style={[text.footnote, { color: colors.muted, textAlign: 'center' }]}>Hoá đơn đang được phát hành…</Text>
+            )}
+          </View>
+        }
+      />
+      {next ? (
+        <Pressable onPress={() => router.push(`/vendor/finance/contracts/${contract.contractId}` as Href)} accessibilityRole="button">
+          {({ pressed }) => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, minHeight: 72, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.kerbPaint : colors.card, boxShadow: shadow.card }}>
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon sf="calendar" md="calendar_month" size={19} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[text.caption, { color: colors.muted }]}>Kỳ tiếp theo</Text>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.ink }}>{next.periodLabel}</Text>
+                <Text style={[text.footnote, { color: colors.muted }, tabular]}>Hạn {formatDay(next.dueDate)}</Text>
+              </View>
+              <Text maxFontSizeMultiplier={1.4} style={[sign.price, { color: colors.ink }, tabular]}>{formatVnd(next.amount)}</Text>
+              <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
+            </View>
+          )}
         </Pressable>
       ) : null}
     </Screen>
@@ -250,7 +266,7 @@ export function PenaltyPaymentScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Nộp phạt' }} />
-        <ListSkeleton rows={1} height={190} />
+        <Skeleton height={300} radius={radius.pass} />
       </Screen>
     );
   }
@@ -274,6 +290,7 @@ export function PenaltyPaymentScreen() {
 
   return (
     <Screen
+      gap={18}
       footer={
         unpaid ? (
           <PayBar amount={penalty.amount}>
@@ -285,12 +302,12 @@ export function PenaltyPaymentScreen() {
       <Stack.Screen options={{ title: 'Nộp phạt' }} />
       <ReturnCheck state={flow.momo.state} onRetry={flow.momo.retry} />
       <Slip
-        caption="BIÊN BẢN XỬ PHẠT"
+        caption="Biên bản xử phạt"
         title={penalty.violationLabel}
         amount={penalty.amount}
         danger
         rows={[
-          penalty.slotCode ? { label: 'Ô', value: <SlotPlate code={penalty.slotCode} /> } : null,
+          penalty.slotCode ? { label: 'Ô vỉa hè', value: <Plate code={penalty.slotCode} /> } : null,
           { label: 'Lập ngày', value: formatVietnamDate(penalty.issuedAt) },
           { label: 'Mã biên bản', value: `#${penalty.penaltyId}` },
         ]}
@@ -306,7 +323,10 @@ export function PenaltyPaymentScreen() {
   );
 }
 
-/** A paper slip: caption, what it is for, the amount large, the facts under a dashed tear line. */
+/**
+ * A paper slip (v5 `Pass`): what it is for and the amount in sign figures above the tear, the
+ * facts below it. Orange band for a fee, red for a fine.
+ */
 function Slip({
   caption,
   title,
@@ -323,31 +343,32 @@ function Slip({
   danger?: boolean;
 }) {
   return (
-    <View style={{ borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.card, overflow: 'hidden' }}>
-      <View style={{ padding: 18, gap: 8, backgroundColor: danger ? colors.dangerTint : colors.brandTint }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 12, letterSpacing: 0.6, color: danger ? colors.onDanger : colors.primary }}>{caption}</Text>
-          {pill ? <StatusPill label={pill.label} tone={pill.tone} /> : null}
+    <Pass
+      accent={danger ? colors.danger : colors.brand}
+      head={
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <Text style={{ fontFamily: fonts.heavy, fontSize: 14, color: danger ? colors.onDanger : colors.primary }}>{caption}</Text>
+            {pill ? <StatusPill label={pill.label} tone={pill.tone} /> : null}
+          </View>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 16.5, lineHeight: 22, color: colors.ink }}>{title}</Text>
+          <Text maxFontSizeMultiplier={1.3} adjustsFontSizeToFit numberOfLines={1} style={[sign.figure, { color: colors.ink }, tabular]}>
+            {formatVnd(amount)}
+          </Text>
         </View>
-        <Text style={[text.headline, { color: colors.ink }]}>{title}</Text>
-        <Text style={[{ fontFamily: fonts.heavy, fontSize: 32, lineHeight: 38, color: colors.ink }, tabular]} adjustsFontSizeToFit numberOfLines={1}>
-          {formatVnd(amount)}
-        </Text>
-      </View>
-      <View style={{ height: 0, borderTopWidth: 2, borderStyle: 'dashed', borderColor: colors.line }} />
-      <View style={{ padding: 16 }}>
-        <KeyValueList rows={rows} />
-      </View>
-    </View>
+      }
+      stub={<KeyValueList rows={rows} />}
+    />
   );
 }
 
+/** The amount being paid, in sign figures, beside the pay button in the pinned footer. */
 function PayBar({ amount, children }: { amount: number; children: React.ReactNode }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-      <View>
+      <View style={{ flexShrink: 1 }}>
         <Text style={[text.caption, { color: colors.muted }]}>Số tiền</Text>
-        <Text style={[{ fontFamily: fonts.heavy, fontSize: 19, color: colors.ink }, tabular]}>{formatVnd(amount)}</Text>
+        <Text maxFontSizeMultiplier={1.4} style={[sign.price, { fontSize: 21, lineHeight: 26, color: colors.ink }, tabular]}>{formatVnd(amount)}</Text>
       </View>
       {children}
     </View>

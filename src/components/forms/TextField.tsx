@@ -18,8 +18,8 @@ export type TextFieldProps = Omit<TextInputProps, 'style'> & {
 };
 
 /**
- * The one text field of the app: a visible label above, a 52 pt box that turns orange when
- * focused and red with a message below when wrong. Errors sit next to the field they are
+ * The one text field of the app: a visible label above, a filled 56 pt box that turns white
+ * with an orange rim when focused and red with a message below when wrong. Errors sit next to the field they are
  * about, never only at the top of the form.
  */
 export const TextField = forwardRef<TextInput, TextFieldProps>(function TextField(
@@ -30,7 +30,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
   const border = error ? colors.danger : focused ? colors.cta : colors.line;
   return (
     <View style={{ gap: 6 }}>
-      <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
+      <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.ink }}>
         {label}
         {optional ? (
           <Text style={{ fontFamily: fonts.regular, color: colors.muted }}> (không bắt buộc)</Text>
@@ -40,13 +40,15 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
         style={{
           flexDirection: 'row',
           alignItems: multiline ? 'flex-start' : 'center',
-          minHeight: multiline ? 104 : 52,
+          minHeight: multiline ? 108 : 56,
           borderRadius: radius.control,
           borderCurve: 'continuous',
-          borderWidth: focused || error ? 1.5 : 1,
-          borderColor: border,
-          backgroundColor: editable ? colors.card : colors.sunken,
-          paddingHorizontal: 14,
+          // v5: a filled field that lights up white with an orange rim and glow when typed in.
+          borderWidth: 1.5,
+          borderColor: focused || error ? border : 'transparent',
+          backgroundColor: !editable ? colors.sunken : focused ? colors.card : error ? colors.dangerTint : colors.sunken,
+          boxShadow: focused && !error ? '0 0 0 4px rgba(238, 85, 0, 0.14)' : undefined,
+          paddingHorizontal: 16,
           paddingVertical: multiline ? 12 : 0,
           gap: 10,
         }}
@@ -56,7 +58,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
             sf={icon.sf}
             md={icon.md}
             size={18}
-            color={focused ? colors.cta : colors.muted}
+            color={focused ? colors.cta : error ? colors.danger : colors.muted}
             style={multiline ? { marginTop: 2 } : undefined}
           />
         ) : null}
@@ -80,8 +82,8 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
           }}
           style={{
             flex: 1,
-            minHeight: multiline ? 80 : 50,
-            fontFamily: fonts.medium,
+            minHeight: multiline ? 84 : 52,
+            fontFamily: fonts.semibold,
             fontSize: 16,
             color: colors.ink,
             paddingVertical: multiline ? 0 : 0,

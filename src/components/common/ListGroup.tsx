@@ -13,7 +13,7 @@ type IconSpec = { sf: string; md: string };
 export function ListGroup({
   title,
   footer,
-  inset = 60,
+  inset = 66,
   children,
 }: {
   title?: string;
@@ -28,9 +28,9 @@ export function ListGroup({
       {title ? (
         <Text
           style={{
-            fontFamily: fonts.semibold,
-            fontSize: 13,
-            color: colors.muted,
+            fontFamily: fonts.heavy,
+            fontSize: 15,
+            color: colors.ink,
             marginLeft: 4,
           }}
         >
@@ -43,6 +43,7 @@ export function ListGroup({
           borderCurve: 'continuous',
           backgroundColor: colors.card,
           overflow: 'hidden',
+          boxShadow: '0 1px 2px rgba(17, 28, 43, 0.04)',
         }}
       >
         {rows.map((row, i) => (
@@ -120,20 +121,20 @@ export function ListRow({
       {icon ? (
         <View
           style={{
-            width: 34,
-            height: 34,
-            borderRadius: 10,
+            width: 38,
+            height: 38,
+            borderRadius: 12,
             borderCurve: 'continuous',
             backgroundColor: destructive ? colors.dangerTint : tileColor,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Icon sf={icon.sf} md={icon.md} size={17} color={destructive ? colors.danger : tint} />
+          <Icon sf={icon.sf} md={icon.md} size={19} color={destructive ? colors.danger : tint} />
         </View>
       ) : null}
       <View style={{ flex: 1, gap: 1 }}>
-        <Text style={[text.body, { color: ink, fontFamily: fonts.medium }]}>{title}</Text>
+        <Text style={[text.body, { color: ink, fontFamily: fonts.semibold }]}>{title}</Text>
         {subtitle ? (
           <Text style={[text.footnote, { color: colors.muted }]}>{subtitle}</Text>
         ) : null}

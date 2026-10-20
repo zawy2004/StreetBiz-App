@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { OfflineBanner } from '@/components/feedback/OfflineBanner';
 import { ToastHost } from '@/components/feedback/Toast';
+import { API_RECORD, ApiRouteTracker } from '@/dev/api-recorder';
 import { AppProviders } from '@/providers/AppProviders';
 import { useAuthStore } from '@/store/auth-store';
 import { headerOptions } from '@/core/navigation/header-options';
@@ -50,6 +51,7 @@ export default function RootLayout() {
           <ThemeProvider value={theme}>
             {/* Expo Go on Android paints an opaque black status bar unless asked for a transparent, translucent one. */}
             <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+            {API_RECORD ? <ApiRouteTracker /> : null}
             {fontsReady && ready ? (
               <Stack screenOptions={{ headerShown: false, ...headerOptions }}>
                 <Stack.Screen name="index" />

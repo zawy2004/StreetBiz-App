@@ -1,6 +1,6 @@
 import { router, type Href } from 'expo-router';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
 import { Banner } from '@/components/feedback/Banner';
@@ -12,8 +12,7 @@ import { ROLE_HOME_ROUTE } from '@/core/auth/role-routes';
 import { formatPhone, phoneError, toLocalPhone } from '@/core/utils/phone';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts } from '@/theme';
-import { AuthTitle, LegalLinks, TextLink } from '../components/auth-parts';
+import { AuthTitle, LegalLinks, PhonePlate, ResendSticker, TextLink } from '../components/auth-parts';
 
 const RESEND_SECONDS = 60; // the backend OTP cooldown (BR-61)
 const OTP_LENGTH = 6;
@@ -93,6 +92,7 @@ export function OtpSignInScreen() {
         <AuthTitle
           title="Đăng nhập bằng mã OTP"
           subtitle="Không cần mật khẩu: chúng tôi gửi mã xác thực tới số điện thoại của bạn."
+          icon={{ sf: 'message.badge.fill', md: 'sms' }}
         />
         {error ? <Banner tone="danger">{error}</Banner> : null}
         <PhoneField
@@ -118,18 +118,14 @@ export function OtpSignInScreen() {
     >
       <AuthTitle
         title="Nhập mã xác thực"
-        subtitle={`Nhập mã ${OTP_LENGTH} số vừa gửi tới ${formatPhone(phone)}.`}
+        subtitle={`Nhập mã ${OTP_LENGTH} số vừa gửi qua tin nhắn.`}
+        icon={{ sf: 'lock.shield.fill', md: 'shield_lock' }}
       />
+      <PhonePlate phone={formatPhone(phone)} />
       {error ? <Banner tone="danger">{error}</Banner> : null}
       <OtpField value={code} onChange={setCode} onComplete={verify} error={!!error} autoFocus />
-      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
-        {isRunning ? (
-          <Text style={{ fontFamily: fonts.medium, fontSize: 15, color: colors.muted }}>
-            Gửi lại mã sau {seconds} giây
-          </Text>
-        ) : (
-          <TextLink label="Gửi lại mã" onPress={resend} />
-        )}
+      <View style={{ alignItems: 'center', minHeight: 44, justifyContent: 'center' }}>
+        {isRunning ? <ResendSticker seconds={seconds} /> : <TextLink label="Gửi lại mã" onPress={resend} />}
       </View>
       <TextLink
         label="Đổi số điện thoại"

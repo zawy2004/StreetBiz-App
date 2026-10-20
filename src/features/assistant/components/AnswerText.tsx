@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
 
-import { colors, fonts, text } from '@/theme';
+import { colors, fonts, radius, tabular, text } from '@/theme';
 
 /**
  * The assistant writes light Markdown (headings, lists, bold, small tables). The web renders
@@ -101,7 +101,7 @@ export function AnswerText({ markdown, color = colors.ink }: { markdown: string;
         switch (b.kind) {
           case 'heading':
             return (
-              <Text key={i} selectable accessibilityRole="header" style={[text.headline, { color, marginTop: i ? 4 : 0 }]}>
+              <Text key={i} selectable accessibilityRole="header" style={[text.headline, { fontFamily: fonts.heavy, fontSize: 17, color, marginTop: i ? 6 : 0 }]}>
                 {inline(b.text, color)}
               </Text>
             );
@@ -113,25 +113,30 @@ export function AnswerText({ markdown, color = colors.ink }: { markdown: string;
             );
           case 'bullet':
           case 'ordered':
+            // Markers in the assistant's mango (AI output is mango, never the brand orange).
             return (
               <View key={i} style={{ flexDirection: 'row', gap: 8, paddingLeft: b.kind === 'bullet' ? b.depth * 16 : 0 }}>
-                <Text style={[body, { fontFamily: fonts.bold, color: colors.primary, minWidth: b.kind === 'ordered' ? 20 : 10 }]}>
-                  {b.kind === 'ordered' ? b.marker : '•'}
-                </Text>
+                {b.kind === 'ordered' ? (
+                  <Text style={[body, { fontFamily: fonts.code, color: colors.onMango, minWidth: 20 }, tabular]}>{b.marker}</Text>
+                ) : (
+                  <View style={{ width: 10, alignItems: 'center', paddingTop: 9 }}>
+                    <View style={{ width: 7, height: 7, borderRadius: radius.full, backgroundColor: b.depth ? colors.sticker : colors.mango }} />
+                  </View>
+                )}
                 <Text selectable style={[body, { flex: 1 }]}>
                   {inline(b.text, color)}
                 </Text>
               </View>
             );
           case 'rule':
-            return <View key={i} style={{ height: 1, backgroundColor: colors.line, marginVertical: 4 }} />;
+            return <View key={i} style={{ height: 1, backgroundColor: colors.separator, marginVertical: 4 }} />;
           case 'table': {
             const [head, ...rows] = b.rows;
             // A phone is too narrow for columns: each row reads as "Header: value" lines.
             return (
               <View key={i} style={{ gap: 6 }}>
                 {(rows.length ? rows : [head!]).map((row, r) => (
-                  <View key={r} style={{ padding: 10, borderRadius: 12, borderCurve: 'continuous', backgroundColor: colors.sunken, gap: 2 }}>
+                  <View key={r} style={{ padding: 12, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: colors.mangoTint, gap: 3 }}>
                     {row.map((cell, c) => (
                       <Fragment key={c}>
                         <Text selectable style={[text.footnote, { color }]}>

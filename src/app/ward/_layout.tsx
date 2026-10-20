@@ -1,6 +1,6 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
-import { colors } from '@/theme';
+import { tabBarLook } from '@/ui';
 
 /**
  * Cán bộ Phường: Tổng quan, Hộp duyệt, Tuần tra, Lưới ô, Thêm (thu phí, giá và khung giờ, báo cáo, tài khoản; web có 7 tab).
@@ -9,7 +9,7 @@ import { colors } from '@/theme';
  */
 export default function WardTabs() {
   return (
-    <NativeTabs tintColor={colors.cta} minimizeBehavior="onScrollDown">
+    <NativeTabs {...tabBarLook} minimizeBehavior="onScrollDown">
       <NativeTabs.Trigger name="dashboard" labelVisibilityMode="labeled">
         <NativeTabs.Trigger.Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} md="insights" />
         <NativeTabs.Trigger.Label>Tổng quan</NativeTabs.Trigger.Label>

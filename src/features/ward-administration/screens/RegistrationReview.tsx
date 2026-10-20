@@ -19,7 +19,8 @@ import { AiTag } from '@/components/status/AiTag';
 import { StatusPill } from '@/components/status/StatusPill';
 import { errorMessage } from '@/core/api';
 import { statusLabel } from '@/core/constants/status-labels';
-import { colors, fonts, radius, statusTones, tabular, text, type StatusTone } from '@/theme';
+import { colors, fonts, radius, shadow, sign, statusTones, tabular, text, type StatusTone } from '@/theme';
+import { Pass, Plate } from '@/ui';
 import { formatVietnamDate, formatVietnamDateTime, formatVnd } from '@/utils/format';
 import { AiSuggestionCard } from '../components/ReviewParts';
 import { useRegistrationIntegrity, type IntegrityFlag, type RegistrationIntegrity } from '../ward-integrity-api';
@@ -138,25 +139,24 @@ export function RegistrationReviewScreen() {
                 style={{
                   minHeight: 56,
                   paddingHorizontal: 18,
-                  borderRadius: 28,
+                  borderRadius: radius.full,
                   borderCurve: 'continuous',
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 6,
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.line,
+                  backgroundColor: colors.signTint,
                 }}
               >
-                <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.ink }}>Khác</Text>
-                <Icon sf="chevron.up" md="expand_less" size={14} color={colors.ink} />
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.sign }}>Khác</Text>
+                <Icon sf="chevron.up" md="expand_less" size={14} color={colors.sign} />
               </View>
             </ActionMenu>
             {d.identityVerified ? (
-              <Button label="Duyệt điểm bán" size={56} icon={{ sf: 'checkmark.seal.fill', md: 'verified' }} onPress={() => router.push(decisionHref(d.id, 'APPROVE'))} style={{ flex: 1 }} />
+              <Button label="Duyệt điểm bán" variant="sign" size={56} icon={{ sf: 'checkmark.seal.fill', md: 'verified' }} onPress={() => router.push(decisionHref(d.id, 'APPROVE'))} style={{ flex: 1 }} />
             ) : (
               <Button
                 label="Đối chiếu CCCD"
+                variant="sign"
                 size={56}
                 icon={{ sf: 'person.text.rectangle', md: 'badge' }}
                 onPress={() => router.push(decisionHref(d.id, 'IDENTITY'))}
@@ -210,7 +210,7 @@ export function RegistrationReviewScreen() {
         }}
       />
 
-      <Applicant d={d} />
+      <Applicant d={d} onDocs={() => show('docs')} />
       <Verdict d={d} open={open} />
       {flags[0] ? (
         <StatusHeader
@@ -245,11 +245,7 @@ function ReviewSkeleton() {
   return (
     <Screen gap={20}>
       <Stack.Screen options={{ title: 'Hồ sơ đăng ký', headerRight: () => null }} />
-      <View style={{ gap: 8 }}>
-        <Skeleton width="70%" height={30} />
-        <Skeleton width="50%" height={16} />
-      </View>
-      <Skeleton height={64} radius={radius.card} />
+      <Skeleton height={236} radius={radius.pass} />
       <Skeleton height={190} radius={radius.card} />
       <Skeleton height={36} radius={18} />
       <Skeleton height={260} radius={radius.card} />
@@ -257,23 +253,59 @@ function ReviewSkeleton() {
   );
 }
 
-function Applicant({ d }: { d: WardEnrollmentDetail }) {
+/** The paint on the dossier's band: orange while it is open, then the colour of the decision. */
+const passAccent = (status: string) =>
+  status === 'APPROVED' ? colors.leaf : status === 'REJECTED' ? colors.danger : status === 'MORE_INFORMATION_REQUIRED' ? colors.sticker : colors.brand;
+
+/**
+ * The dossier as a filed ticket (v5 `Pass`): its number on a street plate, who applied, how they
+ * trade, the owner; under the tear line where it stands and how many papers are attached (a tap
+ * opens them).
+ */
+function Applicant({ d, onDocs }: { d: WardEnrollmentDetail; onDocs: () => void }) {
   const s = statusLabel(d.status);
   const name = d.displayName || d.ownerName;
+  const fixed = d.vendorType === 'FIXED_STOREFRONT';
   return (
-    <View style={{ gap: 6 }}>
-      <Text selectable style={[text.title1, { fontFamily: fonts.heavy, color: colors.ink }]}>
-        {name}
-      </Text>
-      <Text style={[text.footnote, { color: colors.muted }, tabular]}>
-        {d.vendorType === 'FIXED_STOREFRONT' ? 'Cửa hàng cố định' : 'Hàng rong lưu động'}
-        {d.displayName && d.ownerName ? ` · ${d.ownerName}` : ''} · Nộp {formatVietnamDateTime(d.createdAt)}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
-        <StatusPill label={s.label} tone={s.tone} />
-        {d.fastTrack ? <StatusPill label="Ưu tiên xét nhanh" tone="ok" /> : null}
-      </View>
-    </View>
+    <Pass
+      accent={passAccent(d.status)}
+      head={
+        <View style={{ gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Plate code={`#${d.id}`} prefix="HỒ SƠ" />
+            <View style={{ flex: 1 }} />
+            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon sf={fixed ? 'storefront.fill' : 'figure.walk'} md={fixed ? 'storefront' : 'directions_walk'} size={21} color={colors.primary} />
+            </View>
+          </View>
+          <Text selectable style={[text.title1, { color: colors.ink }]}>
+            {name}
+          </Text>
+          <View style={{ gap: 2 }}>
+            <Text style={[text.callout, { color: colors.ink, fontFamily: fonts.semibold }]}>{fixed ? 'Cửa hàng cố định' : 'Hàng rong lưu động'}</Text>
+            {d.displayName && d.ownerName ? <Text style={[text.callout, { color: colors.muted }]}>Chủ hộ {d.ownerName}</Text> : null}
+            <Text style={[text.footnote, { color: colors.muted }, tabular]}>Nộp {formatVietnamDateTime(d.createdAt)}</Text>
+          </View>
+        </View>
+      }
+      stub={
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            <StatusPill label={s.label} tone={s.tone} />
+            {d.fastTrack ? <StatusPill label="Ưu tiên xét nhanh" tone="ok" /> : null}
+          </View>
+          <Pressable
+            onPress={onDocs}
+            accessibilityRole="button"
+            accessibilityLabel={`${d.evidence.length} giấy tờ đính kèm. Xem giấy tờ`}
+            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 14, borderRadius: radius.full, backgroundColor: pressed ? colors.sticker : colors.mangoTint })}
+          >
+            <Icon sf="doc.on.doc.fill" md="folder_open" size={15} color={colors.onMango} />
+            <Text style={[{ fontFamily: fonts.heavy, fontSize: 14, color: colors.onMango }, tabular]}>{d.evidence.length} giấy tờ</Text>
+          </Pressable>
+        </View>
+      }
+    />
   );
 }
 
@@ -283,7 +315,7 @@ function Verdict({ d, open }: { d: WardEnrollmentDetail; open: boolean }) {
   const tone: StatusTone = d.status === 'APPROVED' ? 'ok' : d.status === 'REJECTED' ? 'danger' : d.status === 'MORE_INFORMATION_REQUIRED' ? 'pending' : 'neutral';
   const title = d.status === 'APPROVED' ? 'Đã duyệt' : d.status === 'REJECTED' ? 'Đã từ chối' : d.status === 'MORE_INFORMATION_REQUIRED' ? 'Đã yêu cầu bổ sung' : statusLabel(d.status).label;
   const by = d.reviewedBy ? (/^\d+$/.test(d.reviewedBy) ? `Cán bộ mã ${d.reviewedBy}` : d.reviewedBy) : null;
-  const meta = [by, d.reviewedAt ? formatVietnamDateTime(d.reviewedAt) : null].filter(Boolean).join(' · ');
+  const meta = [by, d.reviewedAt ? formatVietnamDateTime(d.reviewedAt) : null].filter(Boolean).join(', ');
   return <StatusHeader tone={tone} title={title} detail={[d.reviewReason, meta].filter(Boolean).join('\n') || undefined} />;
 }
 
@@ -295,17 +327,21 @@ type StepState = 'done' | 'warn' | 'todo' | 'locked' | 'idle' | 'busy';
  */
 function Gate({ d, ai, ocrBusy, onAi }: { d: WardEnrollmentDetail; ai: Ai; ocrBusy: boolean; onAi: () => void }) {
   const aiState: StepState = ocrBusy ? 'busy' : !ai ? 'idle' : ai.isAiGenerated && !ai.needsManualVerification && ai.matchPercentage >= 85 ? 'done' : 'warn';
-  const aiNote = ocrBusy ? 'Đang đọc ảnh CCCD…' : !ai ? 'Chưa chạy · không bắt buộc' : ai.isAiGenerated ? `Khớp ${ai.matchPercentage}% · chỉ để tham khảo` : 'Chưa dùng được AI · đối chiếu thủ công';
-  const who = [d.identityVerifiedByName, d.identityVerifiedAt ? formatVietnamDateTime(d.identityVerifiedAt) : null].filter(Boolean).join(' · ');
+  const aiNote = ocrBusy ? 'Đang đọc ảnh CCCD…' : !ai ? 'Chưa chạy, không bắt buộc' : ai.isAiGenerated ? `Khớp ${ai.matchPercentage}%, chỉ để tham khảo` : 'Chưa dùng được AI, đối chiếu thủ công';
+  const who = [d.identityVerifiedByName, d.identityVerifiedAt ? formatVietnamDateTime(d.identityVerifiedAt) : null].filter(Boolean).join(', ');
   return (
-    <View style={{ gap: 8 }}>
-      <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.muted, marginLeft: 4 }}>Cổng duyệt</Text>
+    <View style={{ gap: 12 }}>
+      <View style={{ gap: 2 }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 21, lineHeight: 27, letterSpacing: -0.2, color: colors.ink }}>Cổng duyệt</Text>
+        <Text style={[text.footnote, { color: colors.muted }]}>AI chỉ đọc ảnh, không tra cơ sở dữ liệu dân cư.</Text>
+      </View>
       <View
         style={{
           borderRadius: radius.card,
           borderCurve: 'continuous',
           backgroundColor: colors.card,
           overflow: 'hidden',
+          boxShadow: shadow.card,
         }}
       >
         <GateStep n={1} state={aiState} title="[AI] Đọc & đối chiếu CCCD" note={aiNote} onPress={onAi} />
@@ -319,7 +355,6 @@ function Gate({ d, ai, ocrBusy, onAi }: { d: WardEnrollmentDetail; ai: Ai; ocrBu
         />
         <GateStep n={3} state={d.identityVerified ? 'todo' : 'locked'} title="Quyết định" note={d.identityVerified ? 'Đã mở khoá duyệt' : 'Mở khi xong bước 2'} last />
       </View>
-      <Text style={[text.footnote, { color: colors.muted, marginHorizontal: 4 }]}>AI chỉ đọc ảnh, không tra cơ sở dữ liệu dân cư.</Text>
     </View>
   );
 }
@@ -337,36 +372,36 @@ function GateStep({ n, state, title, note, extra, onPress, last }: { n: number; 
         : state === 'locked'
           ? { bg: colors.sunken, fg: colors.muted, icon: { sf: 'lock.fill', md: 'lock' } }
           : state === 'todo'
-            ? { bg: colors.cta, fg: colors.white, icon: null }
+            ? { bg: colors.sign, fg: colors.white, icon: null }
             : { bg: colors.sunken, fg: colors.muted, icon: null };
   const body = (pressed: boolean) => (
     <View
       style={{
         flexDirection: 'row',
-        gap: 12,
-        paddingHorizontal: 14,
-        paddingTop: 12,
-        paddingBottom: last ? 12 : 0,
+        gap: 14,
+        paddingHorizontal: 16,
+        paddingTop: 14,
+        paddingBottom: last ? 14 : 0,
         backgroundColor: pressed ? colors.pressed : colors.card,
       }}
     >
       <View style={{ alignItems: 'center' }}>
         <View
           style={{
-            width: 30,
-            height: 30,
-            borderRadius: 15,
+            width: 36,
+            height: 36,
+            borderRadius: 18,
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: mark.bg,
           }}
         >
           {state === 'busy' ? (
-            <ActivityIndicator size="small" color={colors.cta} />
+            <ActivityIndicator size="small" color={colors.onMango} />
           ) : mark.icon ? (
-            <Icon sf={mark.icon.sf} md={mark.icon.md} size={15} color={mark.fg} weight="bold" />
+            <Icon sf={mark.icon.sf} md={mark.icon.md} size={17} color={mark.fg} weight="bold" />
           ) : (
-            <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: fonts.bold, fontSize: 14, color: mark.fg }}>{n}</Text>
+            <Text maxFontSizeMultiplier={1.2} style={[sign.price, { color: mark.fg }]}>{n}</Text>
           )}
         </View>
         {last ? null : (
@@ -387,7 +422,7 @@ function GateStep({ n, state, title, note, extra, onPress, last }: { n: number; 
           style={[
             text.footnote,
             {
-              color: state === 'todo' ? colors.primary : state === 'done' ? colors.onLeaf : colors.muted,
+              color: state === 'todo' ? colors.sign : state === 'done' ? colors.onLeaf : state === 'warn' ? colors.onMango : colors.muted,
             },
             tabular,
           ]}
@@ -400,7 +435,7 @@ function GateStep({ n, state, title, note, extra, onPress, last }: { n: number; 
           </Text>
         ) : null}
       </View>
-      {onPress ? <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} style={{ marginTop: 9 }} /> : null}
+      {onPress ? <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} style={{ marginTop: 12 }} /> : null}
     </View>
   );
   if (!onPress) return body(false);
@@ -454,7 +489,7 @@ function ProfileSection({ d }: { d: WardEnrollmentDetail }) {
           { label: 'Giới tính', value: gender },
           {
             label: 'Ngày cấp CCCD',
-            value: owner.idIssuedDate ? `${formatVietnamDate(owner.idIssuedDate)}${owner.idIssuedPlace ? ` · ${owner.idIssuedPlace}` : ''}` : null,
+            value: owner.idIssuedDate ? `${formatVietnamDate(owner.idIssuedDate)}${owner.idIssuedPlace ? `, ${owner.idIssuedPlace}` : ''}` : null,
           },
           { label: 'Thường trú', value: owner.permanentAddress },
           { label: 'Chỗ ở hiện tại', value: owner.contactAddress },
@@ -504,9 +539,9 @@ function ProfileSection({ d }: { d: WardEnrollmentDetail }) {
         }
       />
       {d.householdMembers.length > 0 ? (
-        <ListGroup title={`Thành viên hộ · ${d.householdMembers.length}`} inset={16}>
+        <ListGroup title={`Thành viên hộ (${d.householdMembers.length})`} inset={16}>
           {d.householdMembers.map((m, i) => (
-            <ListRow key={`${m.fullName}-${i}`} title={m.fullName} subtitle={[m.relationshipToOwner, m.idNumber].filter(Boolean).join(' · ') || undefined} />
+            <ListRow key={`${m.fullName}-${i}`} title={m.fullName} subtitle={[m.relationshipToOwner, m.idNumber].filter(Boolean).join(', ') || undefined} />
           ))}
         </ListGroup>
       ) : null}
@@ -558,7 +593,7 @@ function ChecksSection({
           {d.kycChecks.map((k, i) => {
             const bad = k.isMatch === false;
             const warn = bad || Boolean(k.warnings);
-            const figures = [k.similarityPercent != null ? `Giống ${k.similarityPercent}%` : null, k.confidencePercent != null ? `Tin cậy ${k.confidencePercent}%` : null].filter(Boolean).join(' · ');
+            const figures = [k.similarityPercent != null ? `Giống ${k.similarityPercent}%` : null, k.confidencePercent != null ? `Tin cậy ${k.confidencePercent}%` : null].filter(Boolean).join(', ');
             return (
               <ListRow
                 key={`${k.checkType}-${i}`}
@@ -618,7 +653,7 @@ function IntegrityPanel({ data }: { data: RegistrationIntegrity | undefined }) {
   }
   return (
     <View style={{ gap: 8 }}>
-      <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.muted, marginLeft: 4 }}>Đối chiếu hồ sơ trùng lặp · {data.flags.length} cảnh báo</Text>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.muted, marginLeft: 4 }}>Đối chiếu hồ sơ trùng lặp: {data.flags.length} cảnh báo</Text>
       {data.flags.map((f) => (
         <View
           key={f.code}
@@ -635,7 +670,7 @@ function IntegrityPanel({ data }: { data: RegistrationIntegrity | undefined }) {
                 alignSelf: 'flex-start',
                 paddingHorizontal: 8,
                 paddingVertical: 2,
-                borderRadius: 999,
+                borderRadius: radius.full,
                 backgroundColor: statusTones[severityTone[f.severity]].wash,
               }}
             >
@@ -657,7 +692,7 @@ function IntegrityPanel({ data }: { data: RegistrationIntegrity | undefined }) {
               <View key={`${r.registrationId}-${i}`} style={{ borderTopWidth: 1, borderTopColor: colors.separator }}>
                 <ListRow
                   title={r.businessName ?? `Hồ sơ #${r.registrationId}`}
-                  subtitle={`#${r.registrationId} · ${statusLabel(r.status).label}`}
+                  subtitle={`#${r.registrationId}, ${statusLabel(r.status).label}`}
                   onPress={() => router.push(`/ward/inbox/registrations/${r.registrationId}` as Href)}
                 />
               </View>
@@ -672,7 +707,7 @@ function IntegrityPanel({ data }: { data: RegistrationIntegrity | undefined }) {
                 }}
               >
                 <Text style={[text.footnote, { color: colors.muted }]}>
-                  Hồ sơ ở {r.wardName} · {statusLabel(r.status).label}
+                  Hồ sơ ở {r.wardName}, {statusLabel(r.status).label}
                 </Text>
               </View>
             ),

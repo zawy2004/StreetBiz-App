@@ -2,13 +2,15 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, KeyValueList } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Chip } from '@/components/common/Chip';
 import { Icon } from '@/components/common/Icon';
 import { Banner } from '@/components/feedback/Banner';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
@@ -18,7 +20,8 @@ import { StatusPill } from '@/components/status/StatusPill';
 import { errorMessage } from '@/core/api';
 import { ApiError } from '@/core/api/problem';
 import { statusLabel } from '@/core/constants/status-labels';
-import { colors, fonts, radius, shadow, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, statusTones, tabular, text } from '@/theme';
+import { Pass, RoundButton, Signboard, useLightStatusBar } from '@/ui';
 import { formatVnd } from '@/utils/format';
 import { enteredStageAt, lateCount, providerLabel, tallyItems } from '@/features/storefronts/orders-view';
 import { orderApi } from '../api/orderApi';
@@ -73,6 +76,14 @@ const DONE_TOAST: Record<Kind, string> = {
 const PAGE_SIZE = 10;
 const go = (href: string) => router.push(href as Href);
 
+/** The colour an order's ticket is banded in: its kitchen stage, or its verdict once closed. */
+function ticketAccent(status: OrderStatus) {
+  const stage = STAGES.find((s) => s.value === status);
+  if (stage) return stage.wash;
+  const tone = statusLabel(status).tone;
+  return tone === 'ok' ? colors.leaf : tone === 'danger' ? colors.danger : tone === 'pending' ? colors.mango : colors.muted;
+}
+
 function useNowTick(ms: number) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -108,8 +119,23 @@ function useTransition(onDone?: () => void) {
   });
 }
 
-/** V36 Đơn hàng (ORD-03..06): the kitchen board — four stations, tickets with the next step on each. */
+/** What the kitchen sign says, from the live counts: new orders first, then what is cooking. */
+function signWords(placed: number | undefined, cooking: number | undefined): { line1: string; line2: string } {
+  if (placed == null || cooking == null) return { line1: 'Bảng bếp', line2: 'đang đếm đơn…' };
+  if (placed > 0) return { line1: `${placed} đơn mới,`, line2: cooking > 0 ? `${cooking} đang làm` : 'nhận ngay nhé!' };
+  if (cooking > 0) return { line1: `${cooking} đang làm,`, line2: 'chưa có đơn mới' };
+  return { line1: 'Chưa có đơn,', line2: 'bếp đang rảnh' };
+}
+
+/**
+ * V36 Đơn hàng (ORD-03..06), v5 (screens/v5/vendor-commerce.md): the stall's orange sign counts
+ * the new and cooking orders; the four kitchen stations lie across its edge as a white board
+ * (tap one to see its tickets); each ticket is a kitchen slip banded in its stage's colour with
+ * the next step under the thumb. Scanning the buyer's code floats at the bottom.
+ */
 export function VendorOrdersScreen() {
+  const insets = useSafeAreaInsets();
+  useLightStatusBar();
   const cache = useQueryClient();
   const [tab, setTab] = useState<Tab>('PLACED');
   const [page, setPage] = useState(1);
@@ -136,81 +162,125 @@ export function VendorOrdersScreen() {
     setPage(1);
   };
   const busyId = transition.isPending ? transition.variables?.order.orderId : undefined;
+  const words = signWords(counts.PLACED, counts.PREPARING);
 
   const header = (
-    <View style={{ gap: 12, paddingBottom: 12 }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16 }}>
-        {STAGES.map((s) => {
-          const on = tab === s.value;
-          const n = counts[s.value];
-          return (
-            <Pressable
-              key={s.value}
-              onPress={() => openTab(s.value)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: on }}
-              accessibilityLabel={`${s.label}${n != null ? `, ${n} đơn` : ''}`}
-              style={{ minWidth: 92, paddingVertical: 10, paddingHorizontal: 12, gap: 2, borderRadius: 16, borderCurve: 'continuous', backgroundColor: on ? s.wash : colors.card, borderWidth: on ? 0 : 1, borderColor: colors.line }}
-            >
-              <Text style={[{ fontFamily: fonts.code, fontSize: 24, lineHeight: 28, color: on ? s.ink : n ? colors.ink : colors.muted }, tabular]}>{n ?? '·'}</Text>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: on ? s.ink : colors.ink }}>{s.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={[text.caption, { color: colors.muted }]}>Lịch sử</Text>
-        <Chip label="Hoàn thành" selected={tab === 'COMPLETED'} onPress={() => openTab('COMPLETED')} accessibilityRole="radio" />
-        <Chip label="Từ chối / hủy" selected={tab === 'CLOSED'} onPress={() => openTab('CLOSED')} accessibilityRole="radio" />
-      </View>
-      <Text style={[text.footnote, { color: colors.ink }]}>{TAB_GUIDE[tab]}</Text>
-      {tab === 'PLACED' && late > 0 ? (
-        <Banner tone="danger" icon={{ sf: 'alarm.fill', md: 'alarm' }} title={`${late} đơn chờ hơn 10 phút`}>Khách đã trả tiền và đang chờ. Nhận hoặc từ chối ngay.</Banner>
-      ) : null}
-      {(tab === 'ACCEPTED' || tab === 'PREPARING') && tally.length > 0 ? (
-        <View style={{ padding: 14, gap: 6, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.mangoTint }}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.onMango }}>Cần làm trong trang này</Text>
-          <Text style={[text.footnote, { color: colors.onMango }]}>{tally.map((t) => `${t.quantity}× ${t.itemName}`).join(' · ')}</Text>
+    <View style={{ gap: 18, paddingBottom: 4 }}>
+      <Signboard
+        top={
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Icon sf="flame.fill" md="local_fire_department" size={18} color={colors.white} />
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 15, color: colors.white }}>Đơn hàng của quán</Text>
+            </View>
+            <RoundButton icon={{ sf: 'chart.bar.fill', md: 'bar_chart' }} label="Doanh thu" onPress={() => go('/vendor/orders/sales-summary')} />
+          </View>
+        }
+        line1={words.line1}
+        line2={words.line2}
+        overlap={
+          <View accessibilityRole="tablist" style={{ flexDirection: 'row', padding: 6, gap: 6, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.raised }}>
+            {STAGES.map((s) => {
+              const on = tab === s.value;
+              const n = counts[s.value];
+              return (
+                <Pressable
+                  key={s.value}
+                  onPress={() => openTab(s.value)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={`${s.label}${n != null ? `, ${n} đơn` : ''}`}
+                  style={({ pressed }) => ({ flex: 1, minHeight: 78, paddingVertical: 10, paddingHorizontal: 4, gap: 2, alignItems: 'center', justifyContent: 'center', borderRadius: radius.photo, borderCurve: 'continuous', backgroundColor: on ? s.wash : pressed ? colors.sunken : 'transparent' })}
+                >
+                  <Text maxFontSizeMultiplier={1.3} style={[{ fontFamily: fonts.code, fontSize: 30, lineHeight: 36, color: on ? s.ink : n ? colors.ink : colors.muted }, tabular]}>{n ?? '…'}</Text>
+                  <Text numberOfLines={2} style={{ fontFamily: fonts.bold, fontSize: 12.5, lineHeight: 16, textAlign: 'center', color: on ? s.ink : colors.ink }}>{s.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        }
+      />
+      <View style={{ paddingHorizontal: 16, gap: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.muted }}>Lịch sử</Text>
+          <Chip label="Hoàn thành" selected={tab === 'COMPLETED'} onPress={() => openTab('COMPLETED')} accessibilityRole="radio" />
+          <Chip label="Từ chối / hủy" selected={tab === 'CLOSED'} onPress={() => openTab('CLOSED')} accessibilityRole="radio" />
         </View>
-      ) : null}
+        <Text style={[text.footnote, { color: colors.muted }]}>{TAB_GUIDE[tab]}</Text>
+        {tab === 'PLACED' && late > 0 ? (
+          <Banner tone="danger" icon={{ sf: 'alarm.fill', md: 'alarm' }} title={`${late} đơn chờ hơn 10 phút`}>Khách đã trả tiền và đang chờ. Nhận hoặc từ chối ngay.</Banner>
+        ) : null}
+        {(tab === 'ACCEPTED' || tab === 'PREPARING') && tally.length > 0 ? (
+          <View style={{ padding: 16, gap: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.mangoTint }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Icon sf="list.bullet.clipboard.fill" md="checklist" size={17} color={colors.onMango} />
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 15, color: colors.onMango }}>Cần làm trong trang này</Text>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {tally.map((t) => (
+                <View key={t.itemName} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: 10, borderRadius: radius.full, backgroundColor: colors.white }}>
+                  <Text style={[{ fontFamily: fonts.code, fontSize: 16, color: colors.primary }, tabular]}>{t.quantity}×</Text>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 13.5, color: colors.ink }}>{t.itemName}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Stack.Screen options={{ title: 'Đơn hàng' }} />
+      <Stack.Screen options={{ headerShown: false, title: 'Đơn hàng' }} />
       <FlatList
         data={orders.isPending ? [] : items}
         keyExtractor={(o) => String(o.orderId)}
-        contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 120, gap: 12 }}
+        contentContainerStyle={{ paddingBottom: 120, gap: 14 }}
         ListHeaderComponent={header}
-        refreshControl={<RefreshControl refreshing={orders.isRefetching && !orders.isPending} onRefresh={() => void cache.invalidateQueries({ queryKey: orderKeys.vendorLists })} tintColor={colors.cta} colors={[colors.cta]} />}
+        refreshControl={<RefreshControl refreshing={orders.isRefetching && !orders.isPending} onRefresh={() => void cache.invalidateQueries({ queryKey: orderKeys.vendorLists })} tintColor={colors.cta} colors={[colors.cta]} progressViewOffset={insets.top} />}
         renderItem={({ item }) => (
-          <Ticket
-            order={item}
-            now={now}
-            arrival={arrivals.get(item.orderId)}
-            acking={ack.isPending && ack.variables === item.orderId}
-            onAcknowledge={() => ack.mutate(item.orderId)}
-            busy={busyId === item.orderId}
-            disabled={transition.isPending}
-            onAct={(kind) => transition.mutate({ kind, order: item })}
-          />
+          <View style={{ paddingHorizontal: 16 }}>
+            <Ticket
+              order={item}
+              now={now}
+              arrival={arrivals.get(item.orderId)}
+              acking={ack.isPending && ack.variables === item.orderId}
+              onAcknowledge={() => ack.mutate(item.orderId)}
+              busy={busyId === item.orderId}
+              disabled={transition.isPending}
+              onAct={(kind) => transition.mutate({ kind, order: item })}
+            />
+          </View>
         )}
         ListEmptyComponent={
-          orders.isPending ? (
-            <ListSkeleton rows={3} height={170} />
-          ) : orders.isError ? (
-            <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />
-          ) : (
-            <StateView icon={{ sf: EMPTY[tab].sf, md: EMPTY[tab].md }} tone="neutral" title={EMPTY[tab].title} body={EMPTY[tab].body} />
-          )
+          <View style={{ paddingHorizontal: 16 }}>
+            {orders.isPending ? (
+              <View style={{ gap: 14 }} accessibilityLabel="Đang tải">
+                {[0, 1].map((i) => (
+                  <View key={i} style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.card, boxShadow: shadow.card }}>
+                    <Skeleton height={8} radius={0} />
+                    <View style={{ padding: 16, gap: 12 }}>
+                      <Skeleton height={26} width="45%" />
+                      <Skeleton height={14} width="60%" />
+                      <Skeleton height={14} width="80%" />
+                      <Skeleton height={50} radius={radius.full} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : orders.isError ? (
+              <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />
+            ) : (
+              <StateView icon={{ sf: EMPTY[tab].sf, md: EMPTY[tab].md }} tone="neutral" title={EMPTY[tab].title} body={EMPTY[tab].body} />
+            )}
+          </View>
         }
         ListFooterComponent={
           totalPages > 1 ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, paddingTop: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, paddingTop: 4, paddingHorizontal: 16 }}>
               <Button label="Trước" variant="secondary" disabled={page <= 1} onPress={() => setPage((p) => p - 1)} style={{ paddingHorizontal: 18 }} />
-              <Text style={[text.footnote, { color: colors.ink }, tabular]}>Trang {page}/{totalPages}</Text>
+              <Text style={[text.subhead, { color: colors.ink }, tabular]}>Trang {page}/{totalPages}</Text>
               <Button label="Sau" variant="secondary" disabled={page >= totalPages} onPress={() => setPage((p) => p + 1)} style={{ paddingHorizontal: 18 }} />
             </View>
           ) : null
@@ -221,13 +291,13 @@ export function VendorOrdersScreen() {
           onPress={() => go('/vendor/orders/scan')}
           accessibilityRole="button"
           accessibilityLabel="Quét mã nhận hàng của khách"
-          style={({ pressed }) => ({ height: 56, borderRadius: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: pressed ? colors.ctaPressed : colors.cta, boxShadow: shadow.raised, transform: [{ scale: pressed ? 0.98 : 1 }] })}
+          style={({ pressed }) => ({ minHeight: 58, paddingVertical: 8, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: pressed ? colors.ctaPressed : colors.cta, boxShadow: shadow.glow, transform: [{ scale: pressed ? 0.98 : 1 }] })}
         >
           <Icon sf="qrcode.viewfinder" md="qr_code_scanner" size={22} color={colors.white} />
-          <Text style={{ fontFamily: fonts.bold, fontSize: 16, color: colors.white }}>Quét mã nhận hàng</Text>
+          <Text style={{ fontFamily: fonts.heavy, fontSize: 16.5, color: colors.white }}>Quét mã nhận hàng</Text>
           {counts.READY_FOR_PICKUP ? (
-            <View style={{ minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 6, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={[{ fontFamily: fonts.bold, fontSize: 12.5, color: colors.primary }, tabular]}>{counts.READY_FOR_PICKUP}</Text>
+            <View style={{ minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 6, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
+              <Text maxFontSizeMultiplier={1.3} style={[{ fontFamily: fonts.heavy, fontSize: 13, color: colors.primary }, tabular]}>{counts.READY_FOR_PICKUP}</Text>
             </View>
           ) : null}
         </Pressable>
@@ -236,7 +306,12 @@ export function VendorOrdersScreen() {
   );
 }
 
-/** One ticket: who, when, how long it has waited, the dishes with notes, and the one next step. */
+/** A dashed tear line across a slip. */
+function TearLine() {
+  return <View style={{ borderTopWidth: 2, borderStyle: 'dashed', borderColor: colors.line }} />;
+}
+
+/** One kitchen slip: its stage band, the order code in sign lettering, how long it has waited, the dishes with notes, and the one next step. */
 function Ticket({
   order,
   now,
@@ -261,80 +336,84 @@ function Ticket({
   const shown = order.items.slice(0, ticketItemsShown(order.items.length));
   const hidden = order.items.length - shown.length;
   const stage = STAGES.find((s) => s.value === order.orderStatus);
-  const waitWash = urgency === 'late' ? colors.dangerTint : urgency === 'warn' ? colors.mangoTint : colors.sunken;
-  const waitInk = urgency === 'late' ? colors.onDanger : urgency === 'warn' ? colors.onMango : colors.ink;
+  const waitWash = urgency === 'late' ? colors.danger : urgency === 'warn' ? colors.mangoTint : colors.sunken;
+  const waitInk = urgency === 'late' ? colors.white : urgency === 'warn' ? colors.onMango : colors.ink;
   const s = statusLabel(order.orderStatus);
   const open = () => go(`/vendor/orders/${order.orderId}`);
 
   return (
-    <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, overflow: 'hidden', borderWidth: urgency === 'late' ? 2 : 0, borderColor: colors.danger }}>
-      {stage ? <View style={{ height: 5, backgroundColor: stage.wash }} /> : null}
-      <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={`Đơn ${order.orderCode}, ${order.customerName || 'khách hàng'}`} style={({ pressed }) => ({ padding: 14, gap: 10, backgroundColor: pressed ? colors.pressed : 'transparent' })}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[text.headline, { color: colors.ink }]} numberOfLines={1}>{order.customerName || 'Khách hàng'}</Text>
-            <Text style={[text.caption, { color: colors.muted }, tabular]}>#{order.orderCode} · {formatOrderTime(order.placedAt ?? order.createdAt)}</Text>
-          </View>
-          {stage ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: waitWash }}>
-              <Icon sf="clock" md="schedule" size={12} color={waitInk} />
-              <Text style={[{ fontFamily: fonts.bold, fontSize: 12, color: waitInk }, tabular]}>{formatWait(waited)}</Text>
+    <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card, borderWidth: urgency === 'late' ? 2 : 0, borderColor: colors.danger }}>
+      <View style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden' }}>
+        <View style={{ height: 8, backgroundColor: ticketAccent(order.orderStatus) }} />
+        <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={`Đơn ${order.orderCode}, ${order.customerName || 'khách hàng'}`} style={({ pressed }) => ({ padding: 16, gap: 12, backgroundColor: pressed ? colors.pressed : 'transparent' })}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text maxFontSizeMultiplier={1.4} numberOfLines={1} style={[{ fontFamily: fonts.code, fontSize: 24, lineHeight: 30, color: colors.ink }, tabular]}>#{order.orderCode}</Text>
+              <Text style={[text.headline, { color: colors.ink }]} numberOfLines={1}>{order.customerName || 'Khách hàng'}</Text>
+              <Text style={[text.footnote, { color: colors.muted }, tabular]}>Đặt lúc {formatOrderTime(order.placedAt ?? order.createdAt)}</Text>
             </View>
-          ) : (
-            <StatusPill label={s.label} tone={s.tone} />
-          )}
-        </View>
-        {arrival && !arrival.acknowledgedAt ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, backgroundColor: colors.signTint }}>
-            <Icon sf="figure.walk" md="directions_walk" size={16} color={colors.sign} />
-            <Text style={[text.footnote, { flex: 1, color: colors.sign }]} numberOfLines={2}>{arrival.message}</Text>
-            <Pressable onPress={onAcknowledge} disabled={acking} accessibilityRole="button" accessibilityLabel="Báo khách: quán đã thấy" hitSlop={6} style={({ pressed }) => ({ paddingHorizontal: 12, height: 32, borderRadius: 16, justifyContent: 'center', backgroundColor: pressed ? colors.signTint : colors.white, borderWidth: 1, borderColor: colors.sign })}>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.sign }}>{acking ? 'Đang báo…' : 'Đã thấy'}</Text>
-            </Pressable>
+            {stage ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 30, borderRadius: radius.full, paddingHorizontal: 11, backgroundColor: waitWash }}>
+                <Icon sf="clock.fill" md="schedule" size={13} color={waitInk} />
+                <Text style={[{ fontFamily: fonts.heavy, fontSize: 13, color: waitInk }, tabular]}>{formatWait(waited)}</Text>
+              </View>
+            ) : (
+              <StatusPill label={s.label} tone={s.tone} />
+            )}
+          </View>
+          {arrival && !arrival.acknowledgedAt ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: colors.signTint }}>
+              <Icon sf="figure.walk" md="directions_walk" size={18} color={colors.sign} />
+              <Text style={[text.footnote, { flex: 1, color: colors.sign, fontFamily: fonts.semibold }]} numberOfLines={2}>{arrival.message}</Text>
+              <Pressable onPress={onAcknowledge} disabled={acking} accessibilityRole="button" accessibilityLabel="Báo khách: quán đã thấy" hitSlop={6} style={({ pressed }) => ({ paddingHorizontal: 14, minHeight: 36, borderRadius: radius.full, justifyContent: 'center', backgroundColor: pressed ? colors.signTint : colors.white, borderWidth: 1.5, borderColor: colors.sign })}>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 13, color: colors.sign }}>{acking ? 'Đang báo…' : 'Đã thấy'}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          <TearLine />
+          <View style={{ gap: 8 }}>
+            {shown.map((it) => (
+              <View key={it.orderItemId} style={{ gap: 2 }}>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <Text style={[{ fontFamily: fonts.code, fontSize: 19, lineHeight: 24, color: colors.primary, minWidth: 34 }, tabular]}>{it.quantity}×</Text>
+                  <Text style={[text.body, { flex: 1, color: colors.ink, fontFamily: fonts.semibold }]}>{it.itemName}</Text>
+                </View>
+                {it.note ? (
+                  <Text style={[text.footnote, { marginLeft: 44, color: colors.onMango, fontFamily: fonts.semibold }]}>Ghi chú: {it.note}</Text>
+                ) : null}
+              </View>
+            ))}
+            {hidden > 0 ? <Text style={[text.footnote, { color: colors.muted, marginLeft: 44 }]}>+{hidden} món nữa</Text> : null}
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+            <Text style={[text.caption, { flex: 1, color: colors.muted }]}>{order.paymentProvider ? `Đã trả qua ${providerLabel(order.paymentProvider)}` : 'Đã thanh toán'}</Text>
+            <Text style={[sign.price, { color: colors.ink }, tabular]}>{formatVnd(order.totalAmount)}</Text>
+          </View>
+        </Pressable>
+        {order.orderStatus === 'PLACED' ? (
+          <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingBottom: 16 }}>
+            <Button label="Từ chối" variant="secondary" disabled={disabled} onPress={() => go(`/vendor/orders/${order.orderId}?reject=1`)} style={{ flex: 1, paddingHorizontal: 12 }} />
+            <Button label="Nhận đơn" icon={{ sf: 'checkmark', md: 'check' }} loading={busy} disabled={disabled} onPress={() => onAct('accept')} style={{ flex: 1.6 }} />
+          </View>
+        ) : order.orderStatus === 'ACCEPTED' ? (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <Button label="Bắt đầu chuẩn bị" icon={{ sf: 'flame.fill', md: 'local_fire_department' }} loading={busy} disabled={disabled} onPress={() => onAct('preparing')} />
+          </View>
+        ) : order.orderStatus === 'PREPARING' ? (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <Button label="Sẵn sàng lấy món" icon={{ sf: 'bell.fill', md: 'notifications_active' }} loading={busy} disabled={disabled} onPress={() => onAct('ready')} />
+          </View>
+        ) : order.orderStatus === 'READY_FOR_PICKUP' ? (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <Button label="Quét mã để giao" variant="secondary" icon={{ sf: 'qrcode.viewfinder', md: 'qr_code_scanner' }} onPress={() => go('/vendor/orders/scan')} />
           </View>
         ) : null}
-        <View style={{ gap: 6 }}>
-          {shown.map((it) => (
-            <View key={it.orderItemId} style={{ gap: 2 }}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Text style={[{ fontFamily: fonts.heavy, fontSize: 16, color: colors.primary, minWidth: 30 }, tabular]}>{it.quantity}×</Text>
-                <Text style={[text.body, { flex: 1, color: colors.ink, fontFamily: fonts.semibold }]}>{it.itemName}</Text>
-              </View>
-              {it.note ? (
-                <Text style={[text.footnote, { marginLeft: 38, color: colors.onMango, fontFamily: fonts.semibold }]}>Ghi chú: {it.note}</Text>
-              ) : null}
-            </View>
-          ))}
-          {hidden > 0 ? <Text style={[text.footnote, { color: colors.muted, marginLeft: 38 }]}>+{hidden} món nữa</Text> : null}
-        </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderColor: colors.separator }}>
-          <Text style={[text.caption, { color: colors.muted }]}>{order.paymentProvider ? `Đã trả qua ${providerLabel(order.paymentProvider)}` : 'Đã thanh toán'}</Text>
-          <Text style={[{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }, tabular]}>{formatVnd(order.totalAmount)}</Text>
-        </View>
-      </Pressable>
-      {order.orderStatus === 'PLACED' ? (
-        <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingBottom: 14 }}>
-          <Button label="Từ chối" variant="secondary" disabled={disabled} onPress={() => go(`/vendor/orders/${order.orderId}?reject=1`)} style={{ flex: 1 }} />
-          <Button label="Nhận đơn" icon={{ sf: 'checkmark', md: 'check' }} loading={busy} disabled={disabled} onPress={() => onAct('accept')} style={{ flex: 1.6 }} />
-        </View>
-      ) : order.orderStatus === 'ACCEPTED' ? (
-        <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
-          <Button label="Bắt đầu chuẩn bị" icon={{ sf: 'flame.fill', md: 'local_fire_department' }} loading={busy} disabled={disabled} onPress={() => onAct('preparing')} />
-        </View>
-      ) : order.orderStatus === 'PREPARING' ? (
-        <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
-          <Button label="Sẵn sàng lấy món" icon={{ sf: 'bell.fill', md: 'notifications_active' }} loading={busy} disabled={disabled} onPress={() => onAct('ready')} />
-        </View>
-      ) : order.orderStatus === 'READY_FOR_PICKUP' ? (
-        <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
-          <Button label="Quét mã để giao" variant="sign" icon={{ sf: 'qrcode.viewfinder', md: 'qr_code_scanner' }} onPress={() => go('/vendor/orders/scan')} />
-        </View>
-      ) : null}
+      </View>
     </View>
   );
 }
 
-/** Chi tiết đơn (người bán): the ticket in full, its history, and every action including the two that need words. */
+/** Chi tiết đơn (người bán): the slip in full, its history, and every action including the two that need words. */
 export function VendorOrderDetailScreen() {
   const { orderId, reject } = useLocalSearchParams<{ orderId: string; reject?: string }>();
   const cache = useQueryClient();
@@ -369,7 +448,8 @@ export function VendorOrderDetailScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Chi tiết đơn' }} />
-        <ListSkeleton rows={1} height={240} />
+        <Skeleton height={300} radius={radius.pass} />
+        <ListSkeleton rows={1} height={140} />
       </Screen>
     );
   }
@@ -400,7 +480,7 @@ export function VendorOrderDetailScreen() {
       />
     ) : (
       <View style={{ flexDirection: 'row', gap: 10 }}>
-        <Button label="Từ chối" variant="secondary" size={56} disabled={busy} onPress={() => setRejecting(true)} style={{ flex: 1 }} />
+        <Button label="Từ chối" variant="secondary" size={56} disabled={busy} onPress={() => setRejecting(true)} style={{ flex: 1, paddingHorizontal: 12 }} />
         <Button label="Nhận đơn" size={56} icon={{ sf: 'checkmark', md: 'check' }} loading={busy} onPress={() => transition.mutate({ kind: 'accept', order: data })} style={{ flex: 1.6 }} />
       </View>
     )
@@ -424,8 +504,10 @@ export function VendorOrderDetailScreen() {
     )
   ) : undefined;
 
+  const history = [...data.statusHistory].reverse();
+
   return (
-    <Screen footer={footer} onRefresh={() => void order.refetch()} refreshing={order.isRefetching}>
+    <Screen footer={footer} onRefresh={() => void order.refetch()} refreshing={order.isRefetching} gap={18}>
       <Stack.Screen options={{ title: `#${data.orderCode}` }} />
       {arrival ? (
         <Banner
@@ -437,37 +519,48 @@ export function VendorOrderDetailScreen() {
           {arrival.message}
         </Banner>
       ) : null}
-      <Card style={{ gap: 12 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={[text.title3, { color: colors.ink }]}>{data.customerName || 'Khách hàng'}</Text>
-            <Text style={[text.caption, { color: colors.muted }]}>{formatOrderDate(data.placedAt ?? data.createdAt)}</Text>
-          </View>
-          <StatusPill label={s.label} tone={s.tone} />
-        </View>
-        {data.items.map((it) => (
-          <View key={it.orderItemId} style={{ flexDirection: 'row', gap: 10 }}>
-            <Text style={[{ fontFamily: fonts.heavy, fontSize: 16, color: colors.primary, minWidth: 32 }, tabular]}>{it.quantity}×</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[text.body, { color: colors.ink, fontFamily: fonts.semibold }]}>{it.itemName}</Text>
-              {it.note ? <Text style={[text.footnote, { color: colors.onMango }]}>Ghi chú: {it.note}</Text> : null}
+
+      {/* The order as its kitchen slip: who and when above the tear, the dishes and money below */}
+      <Pass
+        accent={ticketAccent(data.orderStatus)}
+        head={
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+              <Text maxFontSizeMultiplier={1.3} numberOfLines={1} adjustsFontSizeToFit style={[sign.title, { flex: 1, color: colors.ink }, tabular]}>#{data.orderCode}</Text>
+              <StatusPill label={s.label} tone={s.tone} style={{ marginTop: 6 }} />
             </View>
-            <Text style={[text.callout, { color: colors.ink }, tabular]}>{formatVnd(it.lineTotal)}</Text>
+            <View style={{ gap: 2 }}>
+              <Text style={[text.title3, { color: colors.ink }]}>{data.customerName || 'Khách hàng'}</Text>
+              <Text style={[text.footnote, { color: colors.muted }, tabular]}>Đặt lúc {formatOrderDate(data.placedAt ?? data.createdAt)}</Text>
+            </View>
           </View>
-        ))}
-        <View style={{ height: 1, backgroundColor: colors.separator }} />
-        <KeyValueList
-          rows={[
-            { label: 'Tổng tiền', value: formatVnd(data.totalAmount), emphasis: true },
-            data.paymentProvider ? { label: 'Thanh toán', value: providerLabel(data.paymentProvider) } : null,
-            data.rejectionReason ? { label: 'Lý do từ chối', value: data.rejectionReason } : null,
-            data.refundStatus ? { label: 'Hoàn tiền', value: `${formatVnd(data.refundAmount ?? 0)} · ${statusLabel(data.refundStatus).label}` } : null,
-          ]}
-        />
-      </Card>
+        }
+        stub={
+          <View style={{ gap: 10 }}>
+            {data.items.map((it) => (
+              <View key={it.orderItemId} style={{ flexDirection: 'row', gap: 10 }}>
+                <Text style={[{ fontFamily: fonts.code, fontSize: 19, lineHeight: 24, color: colors.primary, minWidth: 34 }, tabular]}>{it.quantity}×</Text>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[text.body, { color: colors.ink, fontFamily: fonts.semibold }]}>{it.itemName}</Text>
+                  {it.note ? <Text style={[text.footnote, { color: colors.onMango, fontFamily: fonts.semibold }]}>Ghi chú: {it.note}</Text> : null}
+                </View>
+                <Text style={[text.callout, { color: colors.ink }, tabular]}>{formatVnd(it.lineTotal)}</Text>
+              </View>
+            ))}
+            <KeyValueList
+              rows={[
+                { label: 'Tổng tiền', value: formatVnd(data.totalAmount), emphasis: true },
+                data.paymentProvider ? { label: 'Thanh toán', value: providerLabel(data.paymentProvider) } : null,
+                data.rejectionReason ? { label: 'Lý do từ chối', value: data.rejectionReason } : null,
+                data.refundStatus ? { label: 'Hoàn tiền', value: `${formatVnd(data.refundAmount ?? 0)}, ${statusLabel(data.refundStatus).label}` } : null,
+              ]}
+            />
+          </View>
+        }
+      />
 
       {rejecting && actions.includes('reject') ? (
-        <View style={{ gap: 10 }}>
+        <View style={{ gap: 12 }}>
           <Banner tone="danger">Từ chối thì khách được hoàn tiền. Ghi rõ lý do để khách hiểu.</Banner>
           <TextField label="Lý do từ chối" value={reason} onChangeText={(v) => { setReason(v); setReasonError(undefined); }} error={reasonError} multiline placeholder="VD: Hết món này hôm nay" />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -475,39 +568,47 @@ export function VendorOrderDetailScreen() {
               <Chip key={r} label={r} selected={reason === r} onPress={() => { setReason(r); setReasonError(undefined); }} />
             ))}
           </View>
-          <Pressable onPress={() => setRejecting(false)} accessibilityRole="button" style={{ alignSelf: 'center', padding: 8 }}>
-            <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.muted }}>Không từ chối nữa</Text>
+          <Pressable onPress={() => setRejecting(false)} accessibilityRole="button" style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 }}>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.muted }}>Không từ chối nữa</Text>
           </Pressable>
         </View>
       ) : null}
 
       {actions.includes('handover') ? (
         noCode ? (
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 12 }}>
             <Banner tone="warning" title="Giao khi khách không có mã">Lý do được ghi vào lịch sử đơn và khách thấy được. Chỉ dùng khi đã chắc đúng người nhận.</Banner>
             <TextField label="Lý do" value={noCodeReason} onChangeText={setNoCodeReason} multiline placeholder="VD: Máy khách hết pin, đã đối chiếu tên và món" />
-            <Pressable onPress={() => setNoCode(false)} accessibilityRole="button" style={{ alignSelf: 'center', padding: 8 }}>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.muted }}>Quay lại quét mã</Text>
+            <Pressable onPress={() => setNoCode(false)} accessibilityRole="button" style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 }}>
+              <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.muted }}>Quay lại quét mã</Text>
             </Pressable>
           </View>
         ) : (
-          <Pressable onPress={() => setNoCode(true)} accessibilityRole="button" style={{ alignSelf: 'center', padding: 8 }}>
-            <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>Khách không có mã?</Text>
+          <Pressable onPress={() => setNoCode(true)} accessibilityRole="button" style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 }}>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.primary }}>Khách không có mã?</Text>
           </Pressable>
         )
       ) : null}
 
-      <Card style={{ gap: 10 }}>
-        <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>Tiến trình</Text>
-        {[...data.statusHistory].reverse().map((h, i) => (
-          <View key={`${h.toStatus}-${h.changedAt}-${i}`} style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, marginTop: 5, backgroundColor: i === 0 ? colors.cta : colors.line }} />
-            <View style={{ flex: 1 }}>
-              <Text style={[text.subhead, { color: colors.ink }]}>{statusLabel(h.toStatus).label}</Text>
-              <Text style={[text.caption, { color: colors.muted }]}>{formatOrderDate(h.changedAt)}{h.note ? ` · ${h.note}` : ''}</Text>
+      {/* What happened to the order, newest first, on a line of stops */}
+      <Card style={{ gap: 0, padding: 18 }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 18, lineHeight: 24, color: colors.ink, marginBottom: 14 }}>Tiến trình</Text>
+        {history.map((h, i) => {
+          const tone = statusTones[statusLabel(h.toStatus).tone];
+          return (
+            <View key={`${h.toStatus}-${h.changedAt}-${i}`} style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ alignItems: 'center', width: 18 }}>
+                <View style={{ width: 16, height: 16, borderRadius: 8, marginTop: 2, backgroundColor: i === 0 ? colors.cta : colors.white, borderWidth: i === 0 ? 0 : 2.5, borderColor: colors.line, boxShadow: i === 0 ? shadow.glow : undefined }} />
+                {i < history.length - 1 ? <View style={{ flex: 1, width: 2, minHeight: 18, backgroundColor: colors.line }} /> : null}
+              </View>
+              <View style={{ flex: 1, gap: 2, paddingBottom: i < history.length - 1 ? 16 : 0 }}>
+                <Text style={{ fontFamily: i === 0 ? fonts.heavy : fonts.semibold, fontSize: 15, lineHeight: 20, color: i === 0 ? tone.ink : colors.ink }}>{statusLabel(h.toStatus).label}</Text>
+                <Text style={[text.footnote, { color: colors.muted }, tabular]}>{formatOrderDate(h.changedAt)}</Text>
+                {h.note ? <Text style={[text.footnote, { color: colors.ink }]}>{h.note}</Text> : null}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </Card>
     </Screen>
   );

@@ -4,11 +4,11 @@ import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 
-import { Card, KeyValueList } from '@/components/common/Blocks';
+import { KeyValueList } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Chip } from '@/components/common/Chip';
 import { Icon } from '@/components/common/Icon';
-import { SlotPlate } from '@/components/common/SlotPlate';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
@@ -18,7 +18,8 @@ import { apiAssetUrl } from '@/core/api/asset-url';
 import { sideApi, SideApiError, type RentalApplication } from '@/core/api/side-api';
 import { statusLabel } from '@/core/constants/status-labels';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, statusTones, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, statusTones, tabular, text } from '@/theme';
+import { Pass, Plate } from '@/ui';
 import { formatVietnamDate } from '@/utils/format';
 import { AmenityRow, RentFigure, SlotStateChip } from '../components/SlotParts';
 import { applicationProgress, stopReached, type ApplicationStop } from '../application-progress';
@@ -38,6 +39,13 @@ const OUTCOME_WORDS: Record<string, string> = {
   APPROVED: 'Hợp đồng và giấy phép số đã được tạo tự động.',
   REJECTED: 'Bạn có thể chọn ô khác và nộp đơn mới.',
   WITHDRAWN: 'Bạn đã rút đơn này. Có thể nộp đơn mới.',
+};
+/** The band across the top of the form: the outcome's colour once decided, street orange while open. */
+const FORM_ACCENT: Record<string, string> = {
+  APPROVED: colors.leaf,
+  REJECTED: colors.danger,
+  WITHDRAWN: colors.muted,
+  MORE_INFORMATION_REQUIRED: colors.mango,
 };
 
 function useSlot(slotId: number | undefined) {
@@ -59,15 +67,32 @@ export function RentalApplicationsScreen() {
   const shown = filterApplications(all, filter).reverse();
 
   return (
-    <Screen onRefresh={() => void applications.refetch()} refreshing={applications.isRefetching} gap={12}>
+    <Screen onRefresh={() => void applications.refetch()} refreshing={applications.isRefetching} gap={14}>
       <Stack.Screen options={{ title: 'Đơn thuê ô' }} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {APPLICATION_FILTERS.map((f) => (
-          <Chip key={f.value} label={counts[f.value] ? `${f.label} · ${counts[f.value]}` : f.label} selected={filter === f.value} onPress={() => setFilter(f.value)} accessibilityRole="radio" />
-        ))}
+      <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {APPLICATION_FILTERS.map((f) => {
+          const on = filter === f.value;
+          const n = counts[f.value];
+          return (
+            <Chip
+              key={f.value}
+              label={f.label}
+              selected={on}
+              onPress={() => setFilter(f.value)}
+              accessibilityRole="radio"
+              leading={
+                n ? (
+                  <View style={{ minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 6, backgroundColor: on ? colors.white : colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={[{ fontFamily: fonts.code, fontSize: 15, color: colors.primary }, tabular]}>{n}</Text>
+                  </View>
+                ) : undefined
+              }
+            />
+          );
+        })}
       </View>
       {applications.isPending ? (
-        <ListSkeleton rows={3} height={150} />
+        <ListSkeleton rows={3} height={170} />
       ) : applications.isError ? (
         <ErrorState error={applications.error} onRetry={() => void applications.refetch()} />
       ) : shown.length === 0 ? (
@@ -88,30 +113,43 @@ function ApplicationCard({ app }: { app: RentalApplication }) {
   const slot = useSlot(app.slotId);
   const { label, tone } = statusLabel(app.applicationStatus);
   const stops = applicationProgress(app.applicationStatus, app.createdAt, app.reviewedAt);
+  const attention = needsMoreInformation(app.applicationStatus);
   return (
     <Pressable
       onPress={() => go(`/vendor/slots/rental-applications/${app.applicationId}`)}
       accessibilityRole="button"
       accessibilityLabel={`Đơn #${app.applicationId}, ô ${slot.data?.slotCode ?? app.slotId}, ${label}`}
-      style={({ pressed }) => ({ padding: 16, gap: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? '#FBFBFC' : colors.card, borderWidth: needsMoreInformation(app.applicationStatus) ? 2 : 0, borderColor: colors.mango })}
+      style={({ pressed }) => ({
+        borderRadius: radius.card,
+        borderCurve: 'continuous',
+        backgroundColor: colors.card,
+        boxShadow: shadow.card,
+        borderWidth: attention ? 2 : 0,
+        borderColor: colors.sticker,
+        overflow: 'hidden',
+        transform: [{ scale: pressed ? 0.985 : 1 }],
+      })}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <SlotPlate code={slot.data?.slotCode ?? `#${app.slotId}`} />
-        <Text style={[text.subhead, { flex: 1, color: colors.ink }]} numberOfLines={1}>
-          {slot.data?.zoneName ?? ' '}
+      <View style={{ height: 5, backgroundColor: FORM_ACCENT[app.applicationStatus] ?? colors.brand }} />
+      <View style={{ padding: 16, gap: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Plate code={slot.data?.slotCode ?? `#${app.slotId}`} />
+          <Text style={[text.headline, { flex: 1, color: colors.ink }]} numberOfLines={2}>
+            {slot.data?.zoneName ?? ' '}
+          </Text>
+          <StatusPill label={label} tone={tone} />
+        </View>
+        {stops ? <StopsLine stops={stops} compact /> : null}
+        <WardNote app={app} clamp />
+        <Text style={[text.caption, { color: colors.muted }, tabular]}>
+          Đơn #{app.applicationId}, nộp {formatVietnamDate(app.createdAt)}, thuê {app.requestedTermDays} ngày
         </Text>
-        <StatusPill label={label} tone={tone} />
       </View>
-      {stops ? <StopsLine stops={stops} compact /> : null}
-      <WardNote app={app} clamp />
-      <Text style={[text.caption, { color: colors.muted }, tabular]}>
-        Đơn #{app.applicationId} · nộp {formatVietnamDate(app.createdAt)} · {app.requestedTermDays} ngày
-      </Text>
     </Pressable>
   );
 }
 
-/** Sent → ward review → outcome, as three dots on a road; the reached part is painted. */
+/** Sent, ward review, outcome: three stops on a road; the reached part is painted green. */
 function StopsLine({ stops, compact }: { stops: ApplicationStop[]; compact?: boolean }) {
   const dot = (s: ApplicationStop) => {
     switch (s.state) {
@@ -119,41 +157,39 @@ function StopsLine({ stops, compact }: { stops: ApplicationStop[]; compact?: boo
       case 'approved':
         return { bg: colors.leaf, ink: colors.white, sf: 'checkmark', md: 'check' };
       case 'attention':
-        return { bg: colors.mango, ink: colors.onMango, sf: 'exclamationmark', md: 'priority_high' };
+        return { bg: colors.sticker, ink: colors.plate, sf: 'exclamationmark', md: 'priority_high' };
       case 'rejected':
         return { bg: colors.danger, ink: colors.white, sf: 'xmark', md: 'close' };
       case 'waiting':
       case 'reviewing':
-        return { bg: colors.brandTint, ink: colors.primary, sf: 'clock', md: 'schedule' };
+        return { bg: colors.cta, ink: colors.white, sf: 'clock', md: 'schedule' };
       case 'withdrawn':
         return { bg: colors.sunken, ink: colors.muted, sf: 'arrow.uturn.left', md: 'undo' };
       default:
         return { bg: colors.sunken, ink: colors.muted, sf: 'circle', md: 'radio_button_unchecked' };
     }
   };
+  const size = compact ? 28 : 36;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
       {stops.map((s, i) => {
         const d = dot(s);
         return (
-          <View key={s.label} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
-            <View style={{ height: compact ? 26 : 32, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}>
+          <View key={s.label} style={{ flex: 1, alignItems: 'center', gap: 6 }}>
+            <View style={{ height: size, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}>
               {i > 0 ? (
-                <View style={{ position: 'absolute', left: 0, right: '50%', height: 3, backgroundColor: stopReached(stops, i) ? colors.leaf : colors.line }} />
+                <View style={{ position: 'absolute', left: 0, right: '50%', height: 4, backgroundColor: stopReached(stops, i) ? colors.leaf : colors.line }} />
               ) : null}
               {i < stops.length - 1 ? (
-                <View style={{ position: 'absolute', left: '50%', right: 0, height: 3, backgroundColor: stopReached(stops, i + 1) ? colors.leaf : colors.line }} />
+                <View style={{ position: 'absolute', left: '50%', right: 0, height: 4, backgroundColor: stopReached(stops, i + 1) ? colors.leaf : colors.line }} />
               ) : null}
-              <View style={{ width: compact ? 26 : 32, height: compact ? 26 : 32, borderRadius: 16, backgroundColor: d.bg, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.card }}>
-                <Icon sf={d.sf} md={d.md} size={compact ? 11 : 14} color={d.ink} weight="bold" />
+              <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: d.bg, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.card }}>
+                <Icon sf={d.sf} md={d.md} size={compact ? 12 : 15} color={d.ink} weight="bold" />
               </View>
             </View>
             <Text style={[text.caption, { color: colors.ink, textAlign: 'center' }]}>{s.label}</Text>
-            {!compact && (s.note || s.date) ? (
-              <Text style={[text.caption, { color: colors.muted, textAlign: 'center', fontFamily: fonts.regular }]}>
-                {[s.note, s.date ? formatVietnamDate(s.date) : null].filter(Boolean).join(' · ')}
-              </Text>
-            ) : null}
+            {!compact && s.note ? <Text style={[text.caption, { color: colors.muted, textAlign: 'center', fontFamily: fonts.regular }]}>{s.note}</Text> : null}
+            {!compact && s.date ? <Text style={[text.caption, tabular, { color: colors.muted, textAlign: 'center', fontFamily: fonts.regular }]}>{formatVietnamDate(s.date)}</Text> : null}
           </View>
         );
       })}
@@ -181,8 +217,8 @@ function WardNote({ app, clamp }: { app: Pick<RentalApplication, 'applicationSta
   } else return null;
   const t = statusTones[tone];
   return (
-    <View style={{ flexDirection: 'row', gap: 10, padding: 12, borderRadius: 14, borderCurve: 'continuous', backgroundColor: t.wash }}>
-      <Icon sf={t.sf} md={t.md} size={17} color={t.ink} />
+    <View style={{ flexDirection: 'row', gap: 10, padding: 14, borderRadius: radius.control, borderCurve: 'continuous', backgroundColor: t.wash }}>
+      <Icon sf={t.sf} md={t.md} size={18} color={t.ink} style={{ marginTop: 1 }} />
       <Text style={[text.footnote, { flex: 1, color: t.ink }]} numberOfLines={clamp ? 3 : undefined}>
         <Text style={{ fontFamily: fonts.bold }}>{lead}</Text>
         {body}
@@ -191,7 +227,11 @@ function WardNote({ app, clamp }: { app: Pick<RentalApplication, 'applicationSta
   );
 }
 
-/** V15 Chi tiết đơn thuê: the application as its paper form, its three stops, the slot, and withdraw. */
+/**
+ * V15 Chi tiết đơn thuê, v5: the application as the paper form it is, a pass with the slot's plate
+ * large and the ward's stamp pressed on it (an empty dashed frame while it is still open), the
+ * details under the tear; then the three stops, the slot, and withdraw.
+ */
 export function RentalApplicationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const applicationId = Number(id);
@@ -220,7 +260,7 @@ export function RentalApplicationDetailScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Chi tiết đơn thuê' }} />
-        <ListSkeleton rows={1} height={260} />
+        <Skeleton height={300} radius={radius.pass} />
         <ListSkeleton rows={1} height={120} />
       </Screen>
     );
@@ -251,6 +291,7 @@ export function RentalApplicationDetailScreen() {
     <Screen
       onRefresh={() => void Promise.all([application.refetch(), slot.refetch()])}
       refreshing={application.isRefetching}
+      gap={22}
       footer={
         app.applicationStatus === 'APPROVED' ? (
           <Button label="Xem hợp đồng & giấy phép" size={56} icon={{ sf: 'signature', md: 'contract' }} onPress={() => go('/vendor/slots/contracts')} />
@@ -268,23 +309,31 @@ export function RentalApplicationDetailScreen() {
       }
     >
       <Stack.Screen options={{ title: `Đơn #${app.applicationId}` }} />
-      <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, overflow: 'hidden' }}>
-        <View style={{ height: 6, flexDirection: 'row' }}>
-          {Array.from({ length: 20 }, (_, i) => (
-            <View key={i} style={{ flex: 1, backgroundColor: i % 2 ? colors.white : colors.brand }} />
-          ))}
-        </View>
-        <View style={{ padding: 16, gap: 14 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-            <View style={{ flex: 1, gap: 6 }}>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 12, letterSpacing: 0.6, color: colors.muted }}>ĐƠN THUÊ Ô VỈA HÈ</Text>
-              <Text style={[text.title2, { color: colors.ink }]}>{s ? `Ô ${s.slotCode}` : `Ô #${app.slotId}`}</Text>
-              <StatusPill label={label} tone={tone} />
+      <Pass
+        accent={FORM_ACCENT[app.applicationStatus] ?? colors.brand}
+        head={
+          <View style={{ gap: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.muted }}>Đơn thuê ô vỉa hè</Text>
+                <View
+                  accessibilityLabel={`Ô ${s ? s.slotCode : `#${app.slotId}`}`}
+                  style={{ alignSelf: 'flex-start', paddingHorizontal: 12, minHeight: 56, justifyContent: 'center', borderRadius: radius.plate, backgroundColor: colors.plate, borderWidth: 3, borderColor: colors.white, boxShadow: shadow.card }}
+                >
+                  <Text maxFontSizeMultiplier={1.2} style={[sign.title, { color: colors.white, letterSpacing: 1 }, tabular]}>
+                    {s ? s.slotCode : `#${app.slotId}`}
+                  </Text>
+                </View>
+                <StatusPill label={label} tone={tone} />
+              </View>
+              <DecisionStamp status={app.applicationStatus} reviewedAt={app.reviewedAt} />
             </View>
-            <DecisionStamp status={app.applicationStatus} reviewedAt={app.reviewedAt} />
+            {OUTCOME_WORDS[app.applicationStatus] ? (
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 15.5, lineHeight: 22, color: colors.ink }}>{OUTCOME_WORDS[app.applicationStatus]}</Text>
+            ) : null}
           </View>
-          {OUTCOME_WORDS[app.applicationStatus] ? <Text style={[text.callout, { color: colors.ink }]}>{OUTCOME_WORDS[app.applicationStatus]}</Text> : null}
-          <WardNote app={app} />
+        }
+        stub={
           <KeyValueList
             rows={[
               { label: 'Mã đơn', value: `#${app.applicationId}`, mono: true },
@@ -294,42 +343,53 @@ export function RentalApplicationDetailScreen() {
               app.reviewedAt ? { label: 'Phường xem xét', value: formatVietnamDate(app.reviewedAt) } : null,
             ]}
           />
-        </View>
-      </View>
+        }
+      />
+
+      <WardNote app={app} />
 
       {stops ? (
-        <Card style={{ gap: 12 }}>
-          <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>Tiến trình</Text>
-          <StopsLine stops={stops} />
-        </Card>
+        <View style={{ gap: 14 }}>
+          <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 21, lineHeight: 27, color: colors.ink }}>Tiến trình</Text>
+          <View style={{ padding: 18, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
+            <StopsLine stops={stops} />
+          </View>
+        </View>
       ) : null}
 
       {s ? (
-        <Pressable onPress={() => go(`/vendor/slots/${s.slotId}`)} accessibilityRole="button" accessibilityLabel={`Xem ô ${s.slotCode}`}>
-          <Card style={{ gap: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.ink }}>Ô đăng ký thuê</Text>
-              <SlotStateChip state={slotDisplayState(s, now)} small />
-            </View>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ gap: 14 }}>
+          <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 21, lineHeight: 27, color: colors.ink }}>Ô đăng ký thuê</Text>
+          <Pressable
+            onPress={() => go(`/vendor/slots/${s.slotId}`)}
+            accessibilityRole="button"
+            accessibilityLabel={`Xem ô ${s.slotCode}`}
+            style={({ pressed }) => ({ flexDirection: 'row', gap: 14, padding: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card, transform: [{ scale: pressed ? 0.985 : 1 }] })}
+          >
+            <View style={{ width: 92, minHeight: 92, borderRadius: radius.photo, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
               {s.imageUrls[0] ? (
-                <Image source={{ uri: apiAssetUrl(s.imageUrls[0]) }} style={{ width: 84, height: 84, borderRadius: 14 }} contentFit="cover" />
-              ) : null}
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={[text.subhead, { color: colors.ink }]}>{s.zoneName}</Text>
-                <RentFigure slot={s} size={16} />
-                <Text style={[text.caption, { color: colors.muted }]}>
-                  {[formatSize(s.widthMeters, s.lengthMeters), formatHours(s.availableFrom, s.availableTo)].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
+                <Image source={{ uri: apiAssetUrl(s.imageUrls[0]) }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentFit="cover" />
+              ) : (
+                <Icon sf="square.dashed" md="crop_free" size={28} color={colors.primary} />
+              )}
+              <Plate code={s.slotCode} style={{ position: 'absolute', left: 6, bottom: 6 }} />
             </View>
-            <AmenityRow slot={s} compact />
-          </Card>
-        </Pressable>
+            <View style={{ flex: 1, gap: 6, paddingVertical: 2 }}>
+              <SlotStateChip state={slotDisplayState(s, now)} small />
+              <Text style={[text.subhead, { color: colors.ink }]} numberOfLines={2}>{s.zoneName}</Text>
+              <RentFigure slot={s} size={16} />
+              <Text style={[text.caption, tabular, { color: colors.muted }]}>
+                {[formatSize(s.widthMeters, s.lengthMeters), formatHours(s.availableFrom, s.availableTo)].filter(Boolean).join(', ')}
+              </Text>
+              <AmenityRow slot={s} compact />
+            </View>
+            <Icon sf="chevron.right" md="chevron_right" size={14} color={colors.muted} style={{ alignSelf: 'center' }} />
+          </Pressable>
+        </View>
       ) : null}
 
       {canWithdraw ? (
-        <View style={{ gap: 6, alignItems: 'center' }}>
+        <View style={{ gap: 8, alignItems: 'center' }}>
           <Button label="Rút đơn" variant="secondary" icon={{ sf: 'arrow.uturn.backward', md: 'undo' }} loading={withdraw.isPending} onPress={askWithdraw} style={{ alignSelf: 'stretch' }} />
           <Text style={[text.caption, { color: colors.muted }]}>Rút đơn không thể hoàn tác.</Text>
         </View>
@@ -346,7 +406,7 @@ function DecisionStamp({ status, reviewedAt }: { status: string; reviewedAt: str
     MORE_INFORMATION_REQUIRED: { text: 'CẦN BỔ SUNG', ink: colors.onMango, open: true },
     APPROVED: { text: 'ĐÃ DUYỆT', ink: colors.onLeaf, open: false },
     REJECTED: { text: 'TỪ CHỐI', ink: colors.onDanger, open: false },
-    WITHDRAWN: { text: 'ĐÃ RÚT', ink: '#2B3640', open: false },
+    WITHDRAWN: { text: 'ĐÃ RÚT', ink: statusTones.neutral.ink, open: false },
   };
   const w = words[status];
   if (!w) return null;
@@ -354,20 +414,20 @@ function DecisionStamp({ status, reviewedAt }: { status: string; reviewedAt: str
     <View
       importantForAccessibility="no-hide-descendants"
       style={{
-        transform: [{ rotate: '-8deg' }],
+        transform: [{ rotate: '-9deg' }],
         borderWidth: w.open ? 2 : 4,
         borderStyle: w.open ? 'dashed' : 'solid',
         borderColor: w.ink,
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
+        borderRadius: radius.sticker,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
         alignItems: 'center',
-        opacity: w.open ? 0.75 : 0.9,
-        marginTop: 8,
+        opacity: w.open ? 0.75 : 0.92,
+        marginTop: 18,
       }}
     >
-      <Text style={{ fontFamily: fonts.code, fontSize: 15, color: w.ink, letterSpacing: 0.5 }}>{w.text}</Text>
-      {!w.open && reviewedAt ? <Text style={[{ fontFamily: fonts.code, fontSize: 11, color: w.ink }, tabular]}>{formatVietnamDate(reviewedAt)}</Text> : null}
+      <Text maxFontSizeMultiplier={1.2} style={{ fontFamily: fonts.code, fontSize: 17, lineHeight: 21, color: w.ink, letterSpacing: 0.6 }}>{w.text}</Text>
+      {!w.open && reviewedAt ? <Text maxFontSizeMultiplier={1.2} style={[{ fontFamily: fonts.code, fontSize: 12, color: w.ink }, tabular]}>{formatVietnamDate(reviewedAt)}</Text> : null}
     </View>
   );
 }

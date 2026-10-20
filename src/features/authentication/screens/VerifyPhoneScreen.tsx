@@ -1,6 +1,6 @@
 import { Redirect, router, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
 import { Banner } from '@/components/feedback/Banner';
@@ -11,8 +11,7 @@ import { ROLE_HOME_ROUTE } from '@/core/auth/role-routes';
 import { formatPhone } from '@/core/utils/phone';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts } from '@/theme';
-import { AuthTitle, TextLink } from '../components/auth-parts';
+import { AuthTitle, PhonePlate, ResendSticker, TextLink } from '../components/auth-parts';
 import { usePendingAuthStore } from '../pending-auth-store';
 
 const RESEND_SECONDS = 60; // the backend cooldown (BR-61)
@@ -105,18 +104,14 @@ export function VerifyPhoneScreen() {
     >
       <AuthTitle
         title="Xác minh số điện thoại"
-        subtitle={`Nhập mã ${OTP_LENGTH} số vừa gửi tới ${formatPhone(phone)}.`}
+        subtitle={`Nhập mã ${OTP_LENGTH} số vừa gửi qua tin nhắn.`}
+        icon={{ sf: 'checkmark.shield.fill', md: 'verified_user' }}
       />
+      <PhonePlate phone={formatPhone(phone)} />
       {error ? <Banner tone="danger">{error}</Banner> : null}
       <OtpField value={code} onChange={setCode} onComplete={verify} error={!!error} autoFocus />
-      <View style={{ alignItems: 'center' }}>
-        {isRunning ? (
-          <Text style={{ fontFamily: fonts.medium, fontSize: 15, color: colors.muted }}>
-            Gửi lại mã sau {seconds} giây
-          </Text>
-        ) : (
-          <TextLink label="Gửi lại mã" onPress={resend} />
-        )}
+      <View style={{ alignItems: 'center', minHeight: 44, justifyContent: 'center' }}>
+        {isRunning ? <ResendSticker seconds={seconds} /> : <TextLink label="Gửi lại mã" onPress={resend} />}
       </View>
       <TextLink label="Sửa thông tin" onPress={() => router.back()} />
     </Screen>

@@ -5,8 +5,10 @@ import { sideApi, type DigitalPermit, type RentalContract } from '@/core/api/sid
 import { DigitalPermitScreen } from '@/features/digital-permits/screens/DigitalPermitScreen';
 
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), push: jest.fn() },
+  router: { back: jest.fn(), push: jest.fn(), canGoBack: () => true },
   Stack: { Screen: () => null },
+  // The screen paints under the status bar and asks for light icons while focused.
+  useFocusEffect: jest.fn(),
 }));
 // The QR drawing is an SVG; what matters here is the verdict and the code printed under it.
 jest.mock('@/components/common/PermitQr', () => ({ PermitQr: () => null }));

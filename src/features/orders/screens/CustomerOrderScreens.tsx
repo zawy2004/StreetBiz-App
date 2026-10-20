@@ -1,18 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Brightness from 'expo-brightness';
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, FlatList, Linking, Modal, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, Linking, Modal, Pressable, RefreshControl, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/common/Button';
-import { Chip } from '@/components/common/Chip';
 import { Card } from '@/components/common/Blocks';
 import { Icon } from '@/components/common/Icon';
 import { ListGroup, ListRow } from '@/components/common/ListGroup';
 import { PermitQr } from '@/components/common/PermitQr';
+import { Sheet } from '@/components/common/Sheet';
+import { SheetOption } from '@/components/common/SheetOption';
 import { Banner } from '@/components/feedback/Banner';
 import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
@@ -26,10 +28,12 @@ import { StatusPill } from '@/components/status/StatusPill';
 import { commerceApi, errorMessage } from '@/core/api';
 import { statusLabel } from '@/core/constants/status-labels';
 import { directionsUrl } from '@/features/buyer-discovery/discovery-format';
+import { storefrontPhotos } from '@/features/buyer-discovery/food-photos';
 import { detectPosition } from '@/features/buyer-discovery/geolocation';
 import { useNow } from '@/features/sidewalk-slots/useNow';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, shadow, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
+import { Pass } from '@/ui';
 import { formatVnd } from '@/utils/format';
 import { orderApi } from '../api/orderApi';
 import { haversineMeters, walkingMinutes } from '../pickup/pickup-range';
@@ -62,11 +66,26 @@ const TAB_STATUSES: Record<Tab, OrderStatus | readonly OrderStatus[] | undefined
   CLOSED: ['CANCELLED', 'REJECTED'],
 };
 const PAGE_SIZE = 10;
+const TAB_ICONS: Record<Tab, { sf: string; md: string }> = {
+  ALL: { sf: 'square.stack.fill', md: 'receipt_long' },
+  PENDING_PAYMENT: { sf: 'creditcard.fill', md: 'credit_card' },
+  PLACED: { sf: 'paperplane.fill', md: 'send' },
+  PROCESSING: { sf: 'flame.fill', md: 'local_fire_department' },
+  READY_FOR_PICKUP: { sf: 'bell.fill', md: 'notifications_active' },
+  COMPLETED: { sf: 'checkmark.circle.fill', md: 'check_circle' },
+  CLOSED: { sf: 'xmark.circle.fill', md: 'cancel' },
+};
 
-/** V-C11 Đơn hàng: the order in motion on top, the rest by day; filter by stage. */
+/**
+ * V-C11 Đơn hàng, v5 (screens/v5/buyer-rest.md): the large native title, one filter capsule
+ * that opens a sheet of stages (instead of a web strip of seven chips), then the orders by
+ * Vietnamese day as photo rows: the stall's photo, what was ordered, the code and total in
+ * sign figures; a ready order ringed in green, an unpaid one in mango.
+ */
 export function CustomerOrdersScreen() {
   const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<Tab>('ALL');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [page, setPage] = useState(1);
   const orders = useCustomerOrders({ status: TAB_STATUSES[tab], page, pageSize: PAGE_SIZE }, user?.role_code === 'CUSTOMER');
   const totalPages = orders.data?.totalPages ?? 0;
@@ -92,44 +111,73 @@ export function CustomerOrdersScreen() {
     rows.push({ kind: 'order', key: String(o.orderId), order: o });
   }
 
+  const current = TABS.find((t) => t.value === tab) ?? TABS[0]!;
+  const filtered = tab !== 'ALL';
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Stack.Screen options={{ title: 'Đơn hàng của tôi' }} />
+      <Stack.Screen options={{ title: 'Đơn hàng của tôi', headerLargeTitleEnabled: true }} />
       <FlatList
         data={orders.isPending ? [] : rows}
         keyExtractor={(r) => r.key}
-        contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 10, paddingBottom: 40 }}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 12, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={orders.isRefetching && !orders.isPending} onRefresh={() => void orders.refetch()} tintColor={colors.cta} colors={[colors.cta]} />}
         ListHeaderComponent={
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }} style={{ marginHorizontal: -16, marginBottom: 4 }}>
-            {TABS.map((t) => (
-              <Chip
-                key={t.value}
-                label={t.label}
-                selected={tab === t.value}
-                onPress={() => {
-                  setTab(t.value);
-                  setPage(1);
-                }}
-                accessibilityRole="radio"
-              />
-            ))}
-          </ScrollView>
+          <Pressable
+            onPress={() => setFilterOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Lọc đơn: ${current.label}. Chạm để đổi`}
+            style={({ pressed }) => ({
+              alignSelf: 'flex-start',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              minHeight: 44,
+              paddingLeft: 14,
+              paddingRight: 16,
+              marginBottom: 4,
+              borderRadius: radius.full,
+              backgroundColor: filtered ? colors.cta : pressed ? colors.brandTint : colors.card,
+              borderWidth: filtered ? 0 : 1.5,
+              borderColor: colors.line,
+              boxShadow: filtered ? shadow.glow : undefined,
+            })}
+          >
+            <Icon sf={TAB_ICONS[tab].sf} md={TAB_ICONS[tab].md} size={16} color={filtered ? colors.white : colors.primary} />
+            <Text style={{ fontFamily: fonts.heavy, fontSize: 15, color: filtered ? colors.white : colors.ink }}>{current.label}</Text>
+            <Icon sf="chevron.down" md="expand_more" size={13} color={filtered ? colors.white : colors.muted} weight="bold" />
+          </Pressable>
         }
         renderItem={({ item }) =>
           item.kind === 'day' ? (
-            <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.muted, marginTop: 6 }}>{item.label.toUpperCase()}</Text>
+            <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 16, lineHeight: 22, color: colors.ink, marginTop: 8 }}>{item.label}</Text>
           ) : (
             <OrderRow order={item.order} />
           )
         }
         ListEmptyComponent={
           orders.isPending ? (
-            <ListSkeleton rows={3} height={110} />
+            <OrderListSkeleton />
           ) : orders.isError ? (
             <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />
           ) : (
-            <StateView icon={{ sf: 'bag', md: 'shopping_bag' }} title={tab === 'ALL' ? 'Chưa có đơn nào' : 'Không có đơn trong mục này'} body="Đặt trước món ở Khám phá, đến quầy chỉ việc lấy." action={tab === 'ALL' ? { label: 'Khám phá món', onPress: () => router.navigate('/customer/explore' as Href) } : undefined} />
+            <StateView
+              icon={{ sf: 'bag', md: 'shopping_bag' }}
+              title={tab === 'ALL' ? 'Chưa có đơn nào' : 'Không có đơn trong mục này'}
+              body="Đặt trước món ở Khám phá, đến quầy chỉ việc lấy."
+              action={
+                tab === 'ALL'
+                  ? { label: 'Khám phá món', onPress: () => router.navigate('/customer/explore' as Href) }
+                  : {
+                      label: 'Xem tất cả đơn',
+                      onPress: () => {
+                        setTab('ALL');
+                        setPage(1);
+                      },
+                    }
+              }
+            />
           )
         }
         ListFooterComponent={
@@ -142,6 +190,59 @@ export function CustomerOrdersScreen() {
           ) : null
         }
       />
+      <Sheet visible={filterOpen} onClose={() => setFilterOpen(false)} title="Lọc đơn" subtitle="Chọn giai đoạn của đơn.">
+        {TABS.map((t, i) => (
+          <SheetOption
+            key={t.value}
+            title={t.label}
+            icon={TAB_ICONS[t.value]}
+            selected={tab === t.value}
+            last={i === TABS.length - 1}
+            onPress={() => {
+              setTab(t.value);
+              setPage(1);
+              setFilterOpen(false);
+            }}
+          />
+        ))}
+      </Sheet>
+    </View>
+  );
+}
+
+/** Same shapes as the photo rows. */
+function OrderListSkeleton() {
+  return (
+    <View style={{ gap: 12 }} accessibilityLabel="Đang tải đơn hàng">
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={{ flexDirection: 'row', gap: 12, padding: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card }}>
+          <Skeleton width={68} height={68} radius={radius.photo} />
+          <View style={{ flex: 1, gap: 8, justifyContent: 'center' }}>
+            <Skeleton width="60%" height={16} />
+            <Skeleton width="85%" height={12} />
+            <Skeleton width="40%" height={12} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** The stall's own photo, else an illustrative one for its name; a bag glyph if both fail. */
+function StorePhoto({ storefront, size, dim }: { storefront: Order['storefront']; size: number; dim?: boolean }) {
+  const photos = useMemo(
+    () => storefrontPhotos({ storefrontId: storefront.storefrontId, storefrontName: storefront.storefrontName, imageUrl: storefront.imageUrl }),
+    [storefront.storefrontId, storefront.storefrontName, storefront.imageUrl],
+  );
+  const [failed, setFailed] = useState(0);
+  const photo = photos[failed];
+  return (
+    <View style={{ width: size, height: size, borderRadius: radius.photo, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
+      {photo ? (
+        <Image source={photo.source} style={{ width: '100%', height: '100%', opacity: dim ? 0.55 : 1 }} contentFit="cover" transition={150} onError={() => setFailed((n) => n + 1)} accessibilityIgnoresInvertColors />
+      ) : (
+        <Icon sf="bag.fill" md="shopping_bag" size={22} color={colors.primary} />
+      )}
     </View>
   );
 }
@@ -151,29 +252,33 @@ function OrderRow({ order }: { order: Order }) {
   const live = !TERMINAL_ORDER_STATUSES.has(order.orderStatus);
   const ready = order.orderStatus === 'READY_FOR_PICKUP';
   const unpaid = order.orderStatus === 'PENDING_PAYMENT';
+  const hint = ready ? 'Mời bạn đến quầy lấy món' : unpaid ? 'Chưa thanh toán, chạm để tiếp tục' : live ? TRACKING_HEADLINES[order.orderStatus] : '';
   return (
     <Pressable
       onPress={() => go(unpaid ? `/customer/orders/${order.orderId}/payment` : `/customer/orders/${order.orderId}`)}
       accessibilityRole="button"
       accessibilityLabel={`Đơn ${order.orderCode} tại ${order.storefront.storefrontName}, ${s.label}`}
-      style={({ pressed }) => ({ padding: 14, gap: 8, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? '#FBFBFC' : colors.card, borderWidth: ready ? 2 : unpaid ? 1.5 : 0, borderColor: ready ? colors.leaf : colors.mango })}
+      style={({ pressed }) => ({ flexDirection: 'row', gap: 12, padding: 12, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.kerbPaint : colors.card, borderWidth: ready ? 2 : unpaid ? 1.5 : 0, borderColor: ready ? colors.leaf : colors.mango, boxShadow: shadow.card })}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: live ? colors.brandTint : colors.sunken, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon sf={ready ? 'bell.fill' : live ? 'flame.fill' : 'bag.fill'} md={ready ? 'notifications_active' : live ? 'local_fire_department' : 'shopping_bag'} size={18} color={live ? colors.primary : colors.muted} />
+      <StorePhoto storefront={order.storefront} size={68} dim={order.orderStatus === 'CANCELLED' || order.orderStatus === 'REJECTED'} />
+      <View style={{ flex: 1, gap: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ flex: 1, fontFamily: fonts.heavy, fontSize: 16, lineHeight: 21, color: colors.ink }} numberOfLines={1}>{order.storefront.storefrontName}</Text>
+          <StatusPill label={s.label} tone={s.tone} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[text.headline, { color: colors.ink }]} numberOfLines={1}>{order.storefront.storefrontName}</Text>
-          <Text style={[text.caption, { color: colors.muted }, tabular]}>#{order.orderCode} · {formatOrderTime(order.placedAt ?? order.createdAt)}</Text>
+        <Text style={[text.footnote, { color: colors.ink }]} numberOfLines={2}>{orderItemsSummary(order)}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
+          <Text style={[text.caption, { flexShrink: 1, color: colors.muted }, tabular]} numberOfLines={1}>
+            <Text style={{ fontFamily: fonts.code, fontSize: 13, color: colors.ink }}>#{order.orderCode}</Text>, {formatOrderTime(order.placedAt ?? order.createdAt)}
+          </Text>
+          <Text maxFontSizeMultiplier={1.4} style={[sign.price, { color: colors.ink }, tabular]}>{formatVnd(order.totalAmount)}</Text>
         </View>
-        <StatusPill label={s.label} tone={s.tone} />
-      </View>
-      <Text style={[text.footnote, { color: colors.ink }]} numberOfLines={2}>{orderItemsSummary(order)}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={[text.caption, { color: ready ? colors.onLeaf : unpaid ? colors.onMango : colors.muted, fontFamily: fonts.semibold }]}>
-          {ready ? 'Mời bạn đến quầy lấy món' : unpaid ? 'Chưa thanh toán · chạm để tiếp tục' : live ? TRACKING_HEADLINES[order.orderStatus] : ''}
-        </Text>
-        <Text style={[{ fontFamily: fonts.heavy, fontSize: 15, color: colors.ink }, tabular]}>{formatVnd(order.totalAmount)}</Text>
+        {hint ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: ready ? colors.leaf : unpaid ? colors.mango : colors.cta }} />
+            <Text style={[text.caption, { flex: 1, color: ready ? colors.onLeaf : unpaid ? colors.onMango : colors.primary }]}>{hint}</Text>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -188,39 +293,40 @@ function PickupPass({ order, open, setOpen }: { order: Order; open: boolean; set
   const code = useQuery({ queryKey: ['orders', 'customer', 'pickup-code', order.orderId, order.orderStatus], queryFn: () => orderApi.pickupCode(order.orderId), staleTime: 0, gcTime: 0 });
   const size = Math.min(210, width - 140);
   const ready = order.orderStatus === 'READY_FOR_PICKUP';
-  if (code.isPending) return <Skeleton height={size + 150} radius={radius.pass} />;
+  if (code.isPending) return <Skeleton height={size + 170} radius={radius.pass} />;
   if (code.isError) return <ErrorState title="Chưa lấy được mã nhận món" error={code.error} onRetry={() => void code.refetch()} />;
   return (
-    <View style={{ borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
-      <View style={{ alignItems: 'center', gap: 12, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 16 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 12, letterSpacing: 0.8, color: colors.muted }}>MÃ NHẬN MÓN</Text>
-          {ready ? <StatusPill label="Sẵn sàng" tone="ok" /> : null}
-        </View>
-        <Pressable
-          onPress={() => setOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Mã QR nhận món. Chạm để phóng to"
-          style={({ pressed }) => ({ padding: 12, borderRadius: 18, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, transform: [{ scale: pressed ? 0.98 : 1 }] })}
-        >
-          <PermitQr value={code.data.token} size={size} />
-        </Pressable>
-        <Text selectable accessibilityLabel={`Mã chữ ${code.data.shortCode.split('').join(' ')}`} style={[{ fontFamily: fonts.code, fontSize: 28, letterSpacing: 5, color: colors.ink }, tabular]}>
-          {code.data.shortCode}
-        </Text>
-      </View>
-      {/* The perforation of a ticket stub. */}
-      <View style={{ height: 20, justifyContent: 'center' }}>
-        <View style={{ marginHorizontal: 18, borderTopWidth: 1.5, borderStyle: 'dashed', borderColor: colors.line }} />
-        <View style={{ position: 'absolute', left: -10, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.bg }} />
-        <View style={{ position: 'absolute', right: -10, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.bg }} />
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 16 }}>
-        <Icon sf="hand.tap" md="touch_app" size={18} color={colors.primary} />
-        <Text style={[text.footnote, { flex: 1, color: colors.muted }]}>Đưa quán quét mã, hoặc đọc mã chữ. Chạm vào mã để phóng to, sáng tối đa.</Text>
-      </View>
+    <>
+      <Pass
+        accent={ready ? colors.leaf : colors.brand}
+        head={
+          <View style={{ alignItems: 'center', gap: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 15, color: colors.ink }}>Mã nhận món</Text>
+              {ready ? <StatusPill label="Sẵn sàng" tone="ok" /> : null}
+            </View>
+            <Pressable
+              onPress={() => setOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Mã QR nhận món. Chạm để phóng to"
+              style={({ pressed }) => ({ padding: 14, borderRadius: radius.photo, borderCurve: 'continuous', backgroundColor: colors.white, borderWidth: 2, borderColor: ready ? colors.leafTint : colors.brandTint, transform: [{ scale: pressed ? 0.98 : 1 }] })}
+            >
+              <PermitQr value={code.data.token} size={size} />
+            </Pressable>
+            <Text selectable maxFontSizeMultiplier={1.3} accessibilityLabel={`Mã chữ ${code.data.shortCode.split('').join(' ')}`} style={[sign.title, { letterSpacing: 6, color: colors.ink }, tabular]}>
+              {code.data.shortCode}
+            </Text>
+          </View>
+        }
+        stub={
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Icon sf="hand.tap" md="touch_app" size={18} color={colors.primary} />
+            <Text style={[text.footnote, { flex: 1, color: colors.muted }]}>Đưa quán quét mã, hoặc đọc mã chữ. Chạm vào mã để phóng to, sáng tối đa.</Text>
+          </View>
+        }
+      />
       {open ? <FullCode token={code.data.token} shortCode={code.data.shortCode} onClose={() => setOpen(false)} /> : null}
-    </View>
+    </>
   );
 }
 
@@ -245,7 +351,7 @@ function FullCode({ token, shortCode, onClose }: { token: string; shortCode: str
     <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', gap: 20, paddingTop: insets.top }}>
         <PermitQr value={token} size={Math.min(width - 48, 360)} />
-        <Text selectable style={[{ fontFamily: fonts.code, fontSize: 34, letterSpacing: 6, color: colors.ink }, tabular]}>
+        <Text selectable maxFontSizeMultiplier={1.3} style={[sign.figure, { letterSpacing: 6, color: colors.ink }, tabular]}>
           {shortCode}
         </Text>
         <Button label="Đóng" variant="secondary" onPress={onClose} style={{ paddingHorizontal: 28 }} />
@@ -314,7 +420,7 @@ function OrderDetailSkeleton() {
     <Screen gap={20}>
       <Stack.Screen options={{ title: 'Đơn hàng', headerRight: () => null }} />
       <Skeleton height={170} radius={radius.card} />
-      <Skeleton height={330} radius={radius.pass} />
+      <Skeleton height={380} radius={radius.pass} />
       <Skeleton height={72} radius={radius.card} />
       <Skeleton height={160} radius={radius.card} />
     </Screen>
@@ -473,7 +579,7 @@ export function CustomerOrderDetailScreen() {
               <Text style={[text.subhead, { color: est.isLate ? colors.onDanger : colors.ink }, tabular]}>
                 {est.isLate ? 'Lâu hơn thường lệ một chút. ' : ''}
                 {est.earliestReadyAt && est.latestReadyAt ? `Dự kiến xong ${formatOrderTime(est.earliestReadyAt)}–${formatOrderTime(est.latestReadyAt)}` : `Thường mất ${est.lowMinutes}–${est.highMinutes} phút`}
-                {t && t.ordersAhead > 0 ? ` · ${t.ordersAhead} đơn trước bạn` : ''}
+                {t && t.ordersAhead > 0 ? `, ${t.ordersAhead} đơn trước bạn` : ''}
               </Text>
             ) : null}
           </View>
@@ -503,8 +609,8 @@ export function CustomerOrderDetailScreen() {
             title={t?.arrivalAcknowledgedAt ? 'Quán đã thấy bạn đang đến' : sentAt ? `Đã báo quán lúc ${formatOrderTime(sentAt)}` : 'Sắp tới quầy?'}
             subtitle={t?.arrivalAcknowledgedAt ? `Lúc ${formatOrderTime(t.arrivalAcknowledgedAt)}` : sentAt ? 'Báo lại được sau 2 phút, tối đa 3 lần.' : 'Báo quán để món vừa xong khi bạn tới.'}
             icon={{ sf: 'figure.walk', md: 'directions_walk' }}
-            tint={colors.sign}
-            tileColor={colors.signTint}
+            tint={colors.primary}
+            tileColor={colors.brandTint}
             chevron={false}
           />
         ) : null}
@@ -515,7 +621,7 @@ export function CustomerOrderDetailScreen() {
         <StatusHeader
           tone={refund.tone === 'ok' ? 'ok' : refund.tone === 'danger' ? 'danger' : 'pending'}
           icon={{ sf: 'arrow.uturn.backward.circle.fill', md: 'currency_exchange' }}
-          title={`${refund.label}${d.refundAmount ? ` · ${formatVnd(d.refundAmount)}` : ''}`}
+          title={`${refund.label}${d.refundAmount ? `: ${formatVnd(d.refundAmount)}` : ''}`}
           detail={refund.message}
         />
       ) : null}
@@ -603,9 +709,10 @@ export function OrderReviewScreen() {
   return (
     <Screen footer={completed ? <Button label="Lưu đánh giá" size={56} loading={save.isPending} onPress={() => save.mutate()} /> : undefined}>
       <Stack.Screen options={{ title: 'Đánh giá' }} />
-      <View style={{ alignItems: 'center', gap: 6, paddingVertical: 8 }}>
-        <Text style={[text.caption, { color: colors.muted }]}>#{order.data.orderCode}</Text>
-        <Text style={[text.title2, { color: colors.ink, textAlign: 'center', fontFamily: fonts.heavy }]}>Món ở {order.data.storefront.storefrontName} thế nào?</Text>
+      <View style={{ alignItems: 'center', gap: 10, paddingVertical: 8 }}>
+        <StorePhoto storefront={order.data.storefront} size={88} />
+        <Text style={[sign.plate, { color: colors.muted }]}>#{order.data.orderCode}</Text>
+        <Text accessibilityRole="header" style={[text.title2, { color: colors.ink, textAlign: 'center' }]}>Món ở {order.data.storefront.storefrontName} thế nào?</Text>
       </View>
       {!completed ? (
         <Banner tone="neutral">Chỉ đánh giá được đơn đã hoàn tất.</Banner>
@@ -614,11 +721,13 @@ export function OrderReviewScreen() {
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }} accessibilityRole="adjustable" accessibilityValue={{ min: 1, max: 5, now: current }}>
             {[1, 2, 3, 4, 5].map((n) => (
               <Pressable key={n} onPress={() => setRating(n)} hitSlop={4} accessibilityRole="button" accessibilityLabel={`${n} sao`}>
-                <Icon sf={n <= current ? 'star.fill' : 'star'} md="star" size={42} color={n <= current ? colors.mango : colors.line} />
+                <Icon sf={n <= current ? 'star.fill' : 'star'} md="star" size={46} color={n <= current ? colors.mango : colors.line} />
               </Pressable>
             ))}
           </View>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.onMango, textAlign: 'center' }}>{RATING_WORDS[current - 1]}</Text>
+          <View style={{ alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 6, borderRadius: radius.sticker, borderCurve: 'continuous', backgroundColor: colors.sticker, transform: [{ rotate: '-3deg' }], boxShadow: '0 8px 16px -8px rgba(17, 28, 43, 0.45)' }}>
+            <Text maxFontSizeMultiplier={1.3} style={[sign.price, { fontSize: 24, lineHeight: 30, color: colors.plate }]}>{RATING_WORDS[current - 1]}</Text>
+          </View>
           <TextField label="Nhận xét" optional value={currentNote} onChangeText={setNote} multiline maxLength={MAX_REVIEW} placeholder="Món, phần ăn, cách phục vụ" hint={`${review.data ? 'Đang sửa đánh giá cũ. ' : ''}${currentNote.length}/${MAX_REVIEW} ký tự`} />
           {save.isError ? <Banner tone="danger">{errorMessage(save.error)}</Banner> : null}
         </>
@@ -684,9 +793,13 @@ export function OrderComplaintScreen() {
   return (
     <Screen footer={eligible && !open ? <Button label="Gửi khiếu nại" size={56} loading={submit.isPending} onPress={send} /> : undefined}>
       <Stack.Screen options={{ title: 'Khiếu nại' }} />
-      <Card style={{ gap: 4 }}>
-        <Text style={[text.caption, { color: colors.muted }]}>#{d.orderCode} · {d.storefront.storefrontName}</Text>
-        <Text style={[{ fontFamily: fonts.heavy, fontSize: 18, color: colors.ink }, tabular]}>{formatVnd(d.totalAmount)}</Text>
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <StorePhoto storefront={d.storefront} size={56} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text numberOfLines={1} style={{ fontFamily: fonts.heavy, fontSize: 16, lineHeight: 21, color: colors.ink }}>{d.storefront.storefrontName}</Text>
+          <Text style={[sign.plate, { fontSize: 14, color: colors.muted }]}>#{d.orderCode}</Text>
+        </View>
+        <Text maxFontSizeMultiplier={1.4} style={[sign.price, { fontSize: 20, lineHeight: 26, color: colors.ink }, tabular]}>{formatVnd(d.totalAmount)}</Text>
       </Card>
       {complaints.data.map((c) => (
         <Card key={c.complaintId} style={{ gap: 6 }}>

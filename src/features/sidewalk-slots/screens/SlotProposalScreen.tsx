@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, Stack, type Href } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { Chip } from '@/components/common/Chip';
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
+import { KerbStrip } from '@/components/common/KerbStrip';
 import { Banner } from '@/components/feedback/Banner';
+import { Skeleton } from '@/components/feedback/Skeleton';
 import { ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
@@ -21,7 +23,7 @@ import type { PickedFile } from '@/core/api/upload';
 import { vendorRegistrationApi } from '@/core/api/vendor-registration-api';
 import { useRegistrations } from '@/features/business-registrations/useRegistrations';
 import { detectPosition, LocateError } from '@/features/buyer-discovery/geolocation';
-import { colors, fonts, radius, tabular, text } from '@/theme';
+import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { DEFAULT_CENTER } from '../map-constants';
 
 // There is no zones-list endpoint: a zone shows up once it has a slot, so search city-wide.
@@ -36,10 +38,30 @@ const metres = (value: string) => {
   return value.trim() && Number.isFinite(n) && n > 0 ? n : null;
 };
 
+/** A part of the survey: heavy title, its field, the field's own error right under it. */
+function Part({ title, note, error, children }: { title: string; note?: string; error?: string; children: ReactNode }) {
+  return (
+    <View style={{ gap: 12 }}>
+      <View style={{ gap: 2 }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 19, lineHeight: 25, color: colors.ink }}>{title}</Text>
+        {note ? <Text style={[text.footnote, { color: colors.muted }]}>{note}</Text> : null}
+      </View>
+      {children}
+      {error ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Icon sf="exclamationmark.circle.fill" md="error" size={15} color={colors.danger} />
+          <Text style={[text.footnote, { flex: 1, color: colors.onDanger, fontFamily: fonts.semibold }]}>{error}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 /**
- * V16 Đề xuất ô mới (SIDE-11): a field survey of a spot not yet on the grid. The map sits on
- * top (tap to drive the stake, or use GPS), the form below: route, size, a photo of the spot.
- * The ward reviews it; nothing becomes a slot until it approves.
+ * V16 Đề xuất ô mới (SIDE-11), v5: a field survey of a spot not yet on the grid. The map runs
+ * full width on top with the orange stake (tap to drive it, or use GPS); below, the route, the
+ * spot's size drawn live as a bay on the pavement, and a photo of the spot. The ward reviews it;
+ * nothing becomes a slot until it approves.
  */
 export function SlotProposalScreen() {
   const queryClient = useQueryClient();
@@ -145,10 +167,12 @@ export function SlotProposalScreen() {
 
   if (isLoading) {
     return (
-      <Screen>
+      <Screen padded={false}>
         <Stack.Screen options={{ title: 'Đề xuất ô mới' }} />
-        <ListSkeleton rows={1} height={260} />
-        <ListSkeleton rows={3} height={64} />
+        <Skeleton height={270} radius={0} />
+        <View style={{ paddingHorizontal: 16, gap: 14 }}>
+          <ListSkeleton rows={3} height={72} />
+        </View>
       </Screen>
     );
   }
@@ -184,9 +208,10 @@ export function SlotProposalScreen() {
           }}
           style={{ height: 270 }}
         />
-        <View pointerEvents="box-none" style={{ position: 'absolute', left: 12, right: 12, bottom: 12, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
-          <View style={{ flexShrink: 1, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.94)' }}>
-            <Text style={[text.caption, { color: colors.ink }, tabular]}>
+        <View pointerEvents="box-none" style={{ position: 'absolute', left: 12, right: 12, bottom: 14, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
+          <View style={{ flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.full, backgroundColor: position ? colors.plate : 'rgba(255,255,255,0.96)', boxShadow: shadow.card }}>
+            <Icon sf={position ? 'mappin' : 'hand.tap.fill'} md={position ? 'location_on' : 'touch_app'} size={14} color={position ? colors.white : colors.primary} />
+            <Text style={[text.caption, { color: position ? colors.white : colors.ink }, tabular]}>
               {position ? `${position.latitude.toFixed(5)}, ${position.longitude.toFixed(5)}` : 'Chạm vào bản đồ để cắm cọc'}
             </Text>
           </View>
@@ -195,32 +220,42 @@ export function SlotProposalScreen() {
             disabled={locating}
             accessibilityRole="button"
             accessibilityLabel="Dùng vị trí hiện tại của tôi"
-            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: pressed ? colors.signTint : colors.white, opacity: locating ? 0.6 : 1, boxShadow: '0 4px 14px -6px rgba(17,28,43,0.35)' })}
+            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 16, borderRadius: radius.full, backgroundColor: pressed ? colors.brandTint : colors.white, opacity: locating ? 0.6 : 1, boxShadow: shadow.raised })}
           >
-            <Icon sf="location.fill" md="my_location" size={16} color={colors.sign} />
-            <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.sign }}>{locating ? 'Đang định vị…' : 'Vị trí của tôi'}</Text>
+            <Icon sf="location.fill" md="my_location" size={16} color={colors.primary} />
+            <Text style={{ fontFamily: fonts.heavy, fontSize: 13.5, color: colors.primary }}>{locating ? 'Đang định vị…' : 'Vị trí của tôi'}</Text>
           </Pressable>
         </View>
       </View>
-      <Screen footer={<Button label="Gửi đề xuất" size={56} icon={{ sf: 'paperplane.fill', md: 'send' }} loading={submit.isPending} onPress={send} />}>
+      <KerbStrip height={8} segment={24} />
+      <Screen gap={26} footer={<Button label="Gửi đề xuất" size={56} icon={{ sf: 'paperplane.fill', md: 'send' }} loading={submit.isPending} onPress={send} />}>
         {errors.position ? <Banner tone="warning">{errors.position}</Banner> : null}
-        <Banner tone="info" title="Phường xét đề xuất">
-          Vị trí chỉ thành ô cho thuê khi Phường duyệt. Bạn sẽ nhận thông báo kết quả.
-        </Banner>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.signTint, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon sf="building.columns.fill" md="account_balance" size={18} color={colors.sign} />
+          </View>
+          <Text style={[text.footnote, { flex: 1, color: colors.ink }]}>
+            <Text style={{ fontFamily: fonts.bold }}>Phường xét đề xuất. </Text>
+            Vị trí chỉ thành ô cho thuê khi Phường duyệt. Bạn sẽ nhận thông báo kết quả.
+          </Text>
+        </View>
 
-        <View style={{ gap: 8 }}>
-          <Text style={[text.subhead, { color: colors.ink }]}>Tuyến phố</Text>
+        <Part title="Tuyến phố" error={errors.zone}>
           {zonesQuery.isPending ? (
-            <ListSkeleton rows={1} height={40} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Skeleton width={120} height={40} radius={radius.full} />
+              <Skeleton width={150} height={40} radius={radius.full} />
+            </View>
           ) : zones.length === 0 ? (
             <Text style={[text.footnote, { color: colors.muted }]}>Chưa có tuyến nào mở trong thành phố.</Text>
           ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {zones.map((z) => (
                 <Chip
                   key={z.zoneId}
-                  label={z.zoneId === nearestZoneId && zoneId == null ? `${z.zoneName} · gần nhất` : z.zoneName}
+                  label={z.zoneId === nearestZoneId && zoneId == null ? `${z.zoneName}, gần nhất` : z.zoneName}
                   selected={z.zoneId === activeZoneId}
+                  icon={{ sf: 'signpost.right.fill', md: 'signpost' }}
                   onPress={() => {
                     setZoneId(z.zoneId);
                     setErrors((e) => ({ ...e, zone: undefined }));
@@ -230,10 +265,9 @@ export function SlotProposalScreen() {
               ))}
             </View>
           )}
-          {errors.zone ? <Text style={[text.footnote, { color: colors.onDanger }]}>{errors.zone}</Text> : null}
-        </View>
+        </Part>
 
-        <View style={{ gap: 8 }}>
+        <Part title="Kích thước" note="Không bắt buộc, đo bằng thước dây nếu có" error={errors.size}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
               <TextField label="Mặt tiền (m)" value={width} onChangeText={setWidth} keyboardType="decimal-pad" placeholder="1,5" optional />
@@ -242,15 +276,10 @@ export function SlotProposalScreen() {
               <TextField label="Chiều sâu (m)" value={length} onChangeText={setLength} keyboardType="decimal-pad" placeholder="2" optional />
             </View>
           </View>
-          {errors.size ? (
-            <Text style={[text.footnote, { color: colors.onDanger }]}>{errors.size}</Text>
-          ) : sizeW && sizeL ? (
-            <Text style={[text.footnote, { color: colors.muted }, tabular]}>Diện tích khoảng {(sizeW * sizeL).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} m²</Text>
-          ) : null}
-        </View>
+          {sizeW && sizeL && !errors.size ? <BayPreview width={sizeW} length={sizeL} /> : null}
+        </Part>
 
-        <View style={{ gap: 8 }}>
-          <Text style={[text.subhead, { color: colors.ink }]}>Ảnh hiện trạng</Text>
+        <Part title="Ảnh hiện trạng" error={errors.photo}>
           <Pressable
             onPress={async () => {
               const file = await picker.pick('Ảnh hiện trạng vị trí', false);
@@ -261,44 +290,71 @@ export function SlotProposalScreen() {
             }}
             accessibilityRole="button"
             accessibilityLabel={photo ? 'Đổi ảnh hiện trạng' : 'Chụp ảnh hiện trạng'}
-            style={{
-              height: 180,
+            style={({ pressed }) => ({
+              minHeight: 190,
               borderRadius: radius.card,
               borderCurve: 'continuous',
               overflow: 'hidden',
-              backgroundColor: photo ? colors.card : colors.kerbPaint,
+              backgroundColor: photo ? colors.card : pressed ? colors.brandTint : colors.kerbPaint,
               borderWidth: photo ? 0 : 2,
               borderStyle: 'dashed',
               borderColor: errors.photo ? colors.danger : colors.brandLight,
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 6,
-            }}
+              gap: 8,
+              padding: photo ? 0 : 16,
+            })}
           >
             {photo ? (
               <>
-                <Image source={{ uri: photo.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                <View style={{ position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: 'rgba(17,28,43,0.7)' }}>
-                  <Icon sf="arrow.triangle.2.circlepath.camera" md="flip_camera_ios" size={13} color={colors.white} />
-                  <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.white }}>Đổi ảnh</Text>
+                <Image source={{ uri: photo.uri }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentFit="cover" />
+                <View style={{ position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.full, paddingHorizontal: 12, minHeight: 36, backgroundColor: 'rgba(17,28,43,0.72)' }}>
+                  <Icon sf="arrow.triangle.2.circlepath.camera" md="flip_camera_ios" size={14} color={colors.white} />
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.white }}>Đổi ảnh</Text>
                 </View>
               </>
             ) : (
               <>
-                <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon sf="camera.fill" md="photo_camera" size={24} color={colors.primary} />
+                <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: colors.cta, alignItems: 'center', justifyContent: 'center', boxShadow: shadow.glow }}>
+                  <Icon sf="camera.fill" md="photo_camera" size={26} color={colors.white} />
                 </View>
-                <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.primary }}>Chụp ảnh vị trí</Text>
-                <Text style={[text.caption, { color: colors.muted }]}>Thấy rõ vỉa hè và lối đi chung</Text>
+                <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.primary }}>Chụp ảnh vị trí</Text>
+                <Text style={[text.footnote, { color: colors.muted }]}>Thấy rõ vỉa hè và lối đi chung</Text>
               </>
             )}
           </Pressable>
-          {errors.photo ? <Text style={[text.footnote, { color: colors.onDanger }]}>{errors.photo}</Text> : null}
-        </View>
+        </Part>
 
         {errors.form ? <Banner tone="danger">{errors.form}</Banner> : null}
       </Screen>
       {picker.sheet}
+    </View>
+  );
+}
+
+/** The proposed spot drawn on the pavement to its proportions, its area in sign figures. */
+function BayPreview({ width, length }: { width: number; length: number }) {
+  const scale = Math.min(140 / width, 72 / length);
+  const area = (width * length).toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+  return (
+    <View
+      accessible
+      accessibilityLabel={`Ô dự kiến, diện tích khoảng ${area} mét vuông`}
+      style={{ flexDirection: 'row', alignItems: 'stretch', borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.card, boxShadow: shadow.card }}
+    >
+      <View style={{ width: 172, backgroundColor: colors.kerbPaint, justifyContent: 'flex-end' }}>
+        <View style={{ alignItems: 'center', justifyContent: 'flex-end', paddingTop: 14, paddingBottom: 8 }}>
+          <View style={{ width: Math.max(28, width * scale), height: Math.max(24, length * scale), borderRadius: radius.plate, borderWidth: 2.5, borderStyle: 'dashed', borderColor: colors.cta, backgroundColor: colors.brandTint }} />
+        </View>
+        <KerbStrip height={7} segment={14} />
+        <View style={{ height: 14, backgroundColor: colors.line }} />
+      </View>
+      <View style={{ flex: 1, padding: 16, justifyContent: 'center', gap: 2 }}>
+        <Text maxFontSizeMultiplier={1.3} adjustsFontSizeToFit numberOfLines={1} style={[sign.title, { color: colors.ink }, tabular]}>
+          {area} m²
+        </Text>
+        <Text style={[text.footnote, { color: colors.muted }]}>Diện tích khoảng</Text>
+      </View>
     </View>
   );
 }

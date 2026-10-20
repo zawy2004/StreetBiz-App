@@ -16,6 +16,8 @@ export const colors = {
   primaryPressed: '#B83F08',
   brandTint: '#FFE8DB',
   mango: '#FFB703',
+  /** Price stickers and "new" tags: mango paper with ink figures. */
+  sticker: '#FFC93C',
   mangoTint: '#FFF4D1',
   onMango: '#6B4100',
   leaf: '#0B7F43',
@@ -29,7 +31,9 @@ export const colors = {
   plate: '#111C2B',
   ink: '#111C2B',
   muted: '#566173',
-  bg: '#F7F8FA',
+  bg: '#F6F7F9',
+  /** The buyer's white street canvas (photo-led screens sit on white, not grey). */
+  canvas: '#FFFFFF',
   card: '#FFFFFF',
   sunken: '#EEF1F4',
   line: '#E1E5EA',

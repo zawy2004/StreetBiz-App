@@ -14,8 +14,10 @@ import { Screen } from '@/components/layout/Screen';
 import { ResultView } from '@/components/native/ResultView';
 import { StatusHeader } from '@/components/native/StatusHeader';
 import { errorMessage } from '@/core/api';
-import { colors, fonts, text } from '@/theme';
+import { colors, fonts, radius, shadow, tabular, text } from '@/theme';
+import { Plate } from '@/ui';
 import { formatVietnamDateTime } from '@/utils/format';
+import { WardSeal } from '../components/ReviewParts';
 import { complianceApi } from '../ward-api';
 import { enrollmentKey, OPEN_REGISTRATION, type RegistrationDecisionKind } from './RegistrationReview';
 
@@ -56,6 +58,14 @@ const copy: Record<RegistrationDecisionKind, { title: string; field: string; pla
     done: 'Đã yêu cầu bổ sung',
     doneBody: 'Hồ sơ chờ người nộp gửi lại giấy tờ.',
   },
+};
+
+/** The seal each act wears: the ward's blue for its own checks, green to approve, red to refuse, mango to ask for more. */
+const SEAL: Record<RegistrationDecisionKind, { ink: string; icon: { sf: string; md: string } }> = {
+  IDENTITY: { ink: colors.sign, icon: { sf: 'person.text.rectangle.fill', md: 'badge' } },
+  APPROVE: { ink: colors.leaf, icon: { sf: 'checkmark.seal.fill', md: 'verified' } },
+  REJECT: { ink: colors.danger, icon: { sf: 'xmark.seal.fill', md: 'gpp_bad' } },
+  MORE_INFO: { ink: colors.onMango, icon: { sf: 'doc.badge.plus', md: 'note_add' } },
 };
 
 /** Ready-made openings an officer can insert and then edit; never sent on their own. */
@@ -137,7 +147,7 @@ export function RegistrationDecisionScreen() {
           tone={kind === 'APPROVE' ? 'ok' : kind === 'REJECT' ? 'danger' : 'pending'}
           icon={kind === 'REJECT' ? { sf: 'xmark', md: 'close' } : kind === 'MORE_INFO' ? { sf: 'arrow.uturn.left', md: 'undo' } : undefined}
           title={c.done!}
-          body={`${d.displayName || d.ownerName} · Hồ sơ #${d.id}. ${c.doneBody}`}
+          body={`${d.displayName || d.ownerName}, hồ sơ #${d.id}. ${c.doneBody}`}
           primary={{
             label: 'Về hộp duyệt',
             onPress: () => {
@@ -199,7 +209,7 @@ export function RegistrationDecisionScreen() {
         <Button
           label={c.submit}
           size={56}
-          variant={kind === 'REJECT' ? 'danger' : 'primary'}
+          variant={kind === 'REJECT' ? 'danger' : 'sign'}
           loading={busy}
           disabled={busy || blocked != null}
           onPress={() => void submit()}
@@ -207,12 +217,15 @@ export function RegistrationDecisionScreen() {
       }
     >
       {header}
-      <View style={{ gap: 2 }}>
-        <Text style={[text.title3, { color: colors.ink, fontFamily: fonts.bold }]}>{d.displayName || d.ownerName}</Text>
-        <Text style={[text.footnote, { color: colors.muted }]}>
-          Hồ sơ #{d.id} · {d.ownerName}
-          {d.idNumber ? ` · CCCD ${d.idNumber}` : ''}
-        </Text>
+      {/* The act about to be stamped on this dossier: the ward's seal in its colour, the file's plate */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 18, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
+        <WardSeal ink={SEAL[kind].ink} icon={SEAL[kind].icon} size={60} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <Plate code={`#${d.id}`} prefix="HỒ SƠ" />
+          <Text style={[text.title3, { color: colors.ink, fontFamily: fonts.heavy }]}>{d.displayName || d.ownerName}</Text>
+          {d.displayName && d.ownerName ? <Text style={[text.footnote, { color: colors.muted }]}>Chủ hộ {d.ownerName}</Text> : null}
+          {d.idNumber ? <Text style={[text.footnote, tabular, { color: colors.muted }]}>CCCD {d.idNumber}</Text> : null}
+        </View>
       </View>
 
       {blocked ? <StatusHeader tone="danger" icon={{ sf: 'lock.fill', md: 'lock' }} title={blocked} /> : null}
@@ -223,7 +236,7 @@ export function RegistrationDecisionScreen() {
         <StatusHeader
           tone="ok"
           title="Đã đối chiếu CCCD"
-          detail={[d.identityVerifiedByName, d.identityVerifiedAt ? formatVietnamDateTime(d.identityVerifiedAt) : null].filter(Boolean).join(' · ') || undefined}
+          detail={[d.identityVerifiedByName, d.identityVerifiedAt ? formatVietnamDateTime(d.identityVerifiedAt) : null].filter(Boolean).join(', ') || undefined}
         />
       ) : null}
 

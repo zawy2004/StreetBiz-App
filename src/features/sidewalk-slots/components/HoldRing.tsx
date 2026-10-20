@@ -6,14 +6,14 @@ import { HOLD_WARNING_SECONDS, holdFraction } from '../plan-labels';
 import { formatCountdown, secondsUntil } from '../slot-format';
 
 /**
- * The 15-minute hold as a ring that empties, with the time left inside. Orange while there
- * is time, deep red under two minutes (and the words say it too).
+ * The 15-minute hold as a ring that empties, the time left inside in sign figures. Orange on a
+ * peach track while there is time, deep red under two minutes (and the words say it too).
  */
 export function HoldRing({ heldAt, expiresAt, nowMs, size = 52 }: { heldAt: string; expiresAt: string; nowMs: number; size?: number }) {
   const seconds = secondsUntil(expiresAt, nowMs);
   const fraction = holdFraction(heldAt, expiresAt, nowMs);
   const ending = seconds <= HOLD_WARNING_SECONDS;
-  const stroke = 4.5;
+  const stroke = size > 48 ? 5 : 4.5;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const ink = ending ? colors.danger : colors.cta;
@@ -24,7 +24,7 @@ export function HoldRing({ heldAt, expiresAt, nowMs, size = 52 }: { heldAt: stri
       style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
     >
       <Svg width={size} height={size} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke={colors.sunken} strokeWidth={stroke} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={ending ? colors.dangerTint : colors.brandTint} strokeWidth={stroke} fill="none" />
         <Circle
           cx={size / 2}
           cy={size / 2}
@@ -37,7 +37,7 @@ export function HoldRing({ heldAt, expiresAt, nowMs, size = 52 }: { heldAt: stri
           strokeDashoffset={c * (1 - fraction)}
         />
       </Svg>
-      <Text style={[{ fontFamily: fonts.bold, fontSize: size > 48 ? 12 : 10.5, color: ending ? colors.onDanger : colors.ink }, tabular]}>
+      <Text maxFontSizeMultiplier={1.2} style={[{ fontFamily: fonts.code, fontSize: size > 48 ? 14 : 12.5, color: ending ? colors.onDanger : colors.ink }, tabular]}>
         {formatCountdown(seconds)}
       </Text>
     </View>

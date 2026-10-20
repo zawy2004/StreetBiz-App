@@ -20,12 +20,17 @@ type Props = {
   accessibilityHint?: string;
 };
 
-const look: Record<Variant, { bg: string; fg: string; border?: string }> = {
-  primary: { bg: colors.cta, fg: colors.white },
-  secondary: { bg: colors.card, fg: colors.ink, border: colors.line },
-  sign: { bg: colors.sign, fg: colors.white },
+/**
+ * Look v5 ("Biển hiệu phố"): the primary is a solid orange capsule with an orange glow (the
+ * one bright thing in thumb reach); secondary is orange-tinted paper with orange words, never
+ * a grey outline; `sign` is the civic blue for ward actions; `danger` only confirms a refusal.
+ */
+const look: Record<Variant, { bg: string; fg: string; border?: string; shadow?: string }> = {
+  primary: { bg: colors.cta, fg: colors.white, shadow: shadow.glow },
+  secondary: { bg: colors.brandTint, fg: colors.primary },
+  sign: { bg: colors.sign, fg: colors.white, shadow: '0 12px 26px -12px rgba(10, 95, 168, 0.55)' },
   /** The confirming button of a destructive decision (refuse, revoke), never a screen's everyday action. */
-  danger: { bg: colors.danger, fg: colors.white },
+  danger: { bg: colors.danger, fg: colors.white, shadow: '0 12px 26px -12px rgba(180, 35, 24, 0.5)' },
 };
 
 /** A capsule button: one primary per screen, a light haptic when it commits. */
@@ -58,14 +63,13 @@ export function Button({
           minHeight: size,
           paddingVertical: 8,
           borderRadius: size / 2,
+          borderCurve: 'continuous',
           backgroundColor: v.bg,
-          borderWidth: v.border ? 1 : 0,
-          borderColor: v.border,
           alignItems: 'center',
           justifyContent: 'center',
-          paddingHorizontal: 22,
+          paddingHorizontal: 24,
           opacity: disabled ? 0.45 : 1,
-          boxShadow: variant === 'secondary' ? undefined : shadow.card,
+          boxShadow: disabled ? undefined : v.shadow,
         },
         style,
       ]}
@@ -76,7 +80,7 @@ export function Button({
         ) : icon ? (
           <Icon sf={icon.sf} md={icon.md} size={size === 56 ? 20 : 18} color={v.fg} />
         ) : null}
-        <Text style={{ flexShrink: 1, textAlign: 'center', fontFamily: fonts.bold, fontSize: size === 56 ? 17 : 15.5, color: v.fg }}>
+        <Text style={{ flexShrink: 1, textAlign: 'center', fontFamily: fonts.heavy, fontSize: size === 56 ? 17 : 15.5, letterSpacing: 0.1, color: v.fg }}>
           {label}
         </Text>
       </View>

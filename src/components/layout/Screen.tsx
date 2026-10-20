@@ -99,9 +99,10 @@ export function Screen({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: colors.bg,
-            borderTopWidth: 1,
-            borderTopColor: colors.separator,
+            backgroundColor: colors.canvas,
+            borderTopLeftRadius: 22,
+            borderTopRightRadius: 22,
+            boxShadow: '0 -10px 28px -14px rgba(17, 28, 43, 0.22)',
           }}
         >
           <SafeAreaView edges={['bottom']} mode="padding">

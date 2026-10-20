@@ -1,7 +1,7 @@
 import { Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
-import { colors, fonts } from '@/theme';
+import { colors, fonts, radius } from '@/theme';
 
 /**
  * BR-42: everything an AI produced is labelled "[AI]" where it is shown. It is a suggestion;
@@ -35,7 +35,7 @@ export function AiTag({ label = 'Gợi ý', style }: { label?: string; style?: S
 export const aiPanel: ViewStyle = {
   padding: 14,
   gap: 8,
-  borderRadius: 16,
+  borderRadius: radius.card,
   borderCurve: 'continuous',
   backgroundColor: '#FFFAEB',
   borderWidth: 1,

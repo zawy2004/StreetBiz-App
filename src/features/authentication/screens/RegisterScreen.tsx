@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
+import { Icon } from '@/components/common/Icon';
 import { Sheet } from '@/components/common/Sheet';
 import { SheetOption } from '@/components/common/SheetOption';
 import { Banner } from '@/components/feedback/Banner';
@@ -13,10 +14,11 @@ import { isPasswordValid, passwordError } from '@/core/auth/password-policy';
 import { useWards } from '@/core/auth/useWards';
 import { phoneError, toLocalPhone } from '@/core/utils/phone';
 import { LEGAL_ROUTES } from '@/features/legal/legal-content';
-import { colors, fonts } from '@/theme';
+import { colors, fonts, radius } from '@/theme';
 import {
   AuthTitle,
   Checkbox,
+  FieldGroupTitle,
   go,
   PasswordChecklist,
   RoleCards,
@@ -99,11 +101,16 @@ export function RegisterScreen() {
 
   return (
     <Screen footer={<Button label="Tiếp tục" size={56} loading={busy} onPress={submit} />}>
-      <AuthTitle title="Tạo tài khoản" subtitle="Chọn vai trò để bắt đầu. Mất chưa tới một phút." />
+      <AuthTitle
+        title="Tạo tài khoản"
+        subtitle="Chọn vai trò để bắt đầu. Mất chưa tới một phút."
+        icon={{ sf: 'person.crop.circle.badge.plus', md: 'person_add' }}
+      />
       {error ? <Banner tone="danger">{error}</Banner> : null}
 
       <RoleCards value={role} onChange={setRole} />
 
+      <FieldGroupTitle title="Thông tin của bạn" />
       <TextField
         label="Họ và tên"
         icon={{ sf: 'person.fill', md: 'person' }}
@@ -140,18 +147,36 @@ export function RegisterScreen() {
       </View>
 
       <View style={{ gap: 6 }}>
-        <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
+        <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.ink }}>
           Phường/xã <Text style={{ fontFamily: fonts.regular, color: colors.muted }}>(không bắt buộc)</Text>
         </Text>
-        <Button
-          label={ward ? ward.unitName : wardsLoading ? 'Đang tải danh sách phường…' : 'Chọn phường nơi bạn ở'}
-          variant="secondary"
-          icon={{ sf: 'mappin.and.ellipse', md: 'location_on' }}
+        {/* A picker row like the fields around it: opens the ward sheet */}
+        <Pressable
           onPress={() => setWardSheet(true)}
           disabled={wardsLoading}
-        />
+          accessibilityRole="button"
+          accessibilityLabel={ward ? `Phường/xã: ${ward.unitName}. Đổi` : 'Chọn phường nơi bạn ở'}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            minHeight: 56,
+            paddingHorizontal: 16,
+            borderRadius: radius.control,
+            borderCurve: 'continuous',
+            backgroundColor: pressed ? colors.brandTint : colors.sunken,
+            opacity: wardsLoading ? 0.6 : 1,
+          })}
+        >
+          <Icon sf="mappin.and.ellipse" md="location_on" size={18} color={ward ? colors.primary : colors.muted} />
+          <Text numberOfLines={2} style={{ flex: 1, fontFamily: ward ? fonts.semibold : fonts.regular, fontSize: 16, color: ward ? colors.ink : colors.muted }}>
+            {ward ? ward.unitName : wardsLoading ? 'Đang tải danh sách phường…' : 'Chọn phường nơi bạn ở'}
+          </Text>
+          <Icon sf="chevron.down" md="expand_more" size={15} color={colors.muted} />
+        </Pressable>
       </View>
 
+      <FieldGroupTitle title="Mật khẩu" />
       <View style={{ gap: 10 }}>
         <PasswordField
           ref={passRef}
@@ -202,7 +227,7 @@ export function RegisterScreen() {
         </Text>
       </Checkbox>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <Text style={{ fontFamily: fonts.regular, fontSize: 15, color: colors.muted }}>Đã có tài khoản?</Text>
         <TextLink label="Đăng nhập" onPress={() => router.back()} />
       </View>

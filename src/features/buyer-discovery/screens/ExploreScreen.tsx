@@ -1,9 +1,10 @@
 import { router, Stack, type Href } from 'expo-router';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Keyboard, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
@@ -12,15 +13,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip } from '@/components/common/Chip';
 import { Icon } from '@/components/common/Icon';
 import { StateView } from '@/components/feedback/StateView';
-import type { MarketplaceMenuItem, StorefrontSummary } from '@/core/api/types';
-import { colors, easeOut, fonts, space, tabular } from '@/theme';
+import type { StorefrontSummary } from '@/core/api/types';
+import { colors, easeOut, fonts, tabular } from '@/theme';
+import { daypart, MEAL_WORD, Section, Signboard, useLightStatusBar } from '@/ui';
 import { AssistantButton } from '@/features/assistant/components/AssistantButton';
 import { cartCount, useAddToCart, useCart, useSetCartQuantity } from '@/features/cart/cart-api';
 import { ActiveOrderCard, CartBar, CartSheet } from '@/features/cart/components/cart-parts';
 import { useCustomerOrders } from '@/features/orders/hooks/useOrders';
 import { useAuthStore } from '@/store/auth-store';
 import { menuItemQuery, storefrontQuery } from '../discovery-filters';
-import { DishCard, DISH_WIDTH } from '../components/dish-parts';
+import { DishTile } from '../components/dish-parts';
 import {
   CartButton,
   LocationButton,
@@ -28,7 +30,6 @@ import {
   SearchSuggestions,
 } from '../components/explore-header';
 import { AreaSheet, SortSheet } from '../components/filter-sheets';
-import { HeroBanner } from '../components/hero-banner';
 import { CategoryRail, ExploreSkeleton, NearbyCard, StallRow } from '../components/stall-parts';
 import {
   useMarketplaceCategories,
@@ -59,20 +60,29 @@ function toRows(list: StorefrontSummary[]): Row[] {
   return rows;
 }
 
+/** Dishes shown in the grid before "Xem cả … món". */
+const DISH_PREVIEW = 6;
+/** Scrolled this far, the signboard is gone and the compact bar takes over. */
+const SIGN_GONE = 210;
+
 /**
- * M-C01 Khám phá — the buyer's home, built like a food marketplace:
- * - the pickup ward and the cart stay pinned at the top; a hairline appears once content
- *   scrolls under them;
- * - the search field is always in reach and suggests searches while focused;
- * - an order in progress comes first;
- * - then hand-swiped banners, categories, dishes to add straight to the cart, open stalls nearby;
+ * M-C01 Khám phá — the buyer's home, v5 "Biển hiệu phố" (screens/v5/buyer-discovery.md):
+ * - an orange shop sign runs under the status bar: where you pick up, the assistant and the
+ *   cart on top, the meal question in sign lettering, how many licensed stalls are open;
+ * - the search capsule lies across the sign's lower edge and suggests searches while focused;
+ * - an order in progress, then category discs, dishes as a two-column photo grid with mango
+ *   price stickers, open stalls as wide cards carrying their slot plates;
  * - every stall last, with its filters, open ones before closed;
- * - the cart floats at the bottom as soon as it has something in it.
+ * - once the sign scrolls away a compact orange bar keeps the pickup ward and the cart in reach;
+ *   the cart floats at the bottom as soon as it has something in it.
  */
 export function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const cardWidth = Math.min(300, Math.round(width * 0.72));
+  const cardWidth = Math.min(300, Math.round(width * 0.76));
+  const tileWidth = Math.floor((width - 40 - 14) / 2);
+  const reduceMotion = useReducedMotion();
+  useLightStatusBar();
 
   const filters = useDiscoveryStore((s) => s.filters);
   const position = useDiscoveryStore((s) => s.position);
@@ -99,7 +109,7 @@ export function ExploreScreen() {
 
   const text = query.trim() || undefined;
   const storefronts = useStorefronts(storefrontQuery(filters, position, query, sort));
-  // Dishes only from stalls open now: everything in this rail can be ordered this minute
+  // Dishes only from stalls open now: everything in this grid can be ordered this minute
   const dishes = useMenuItems(menuItemQuery({ ...filters, openNow: true }, query));
   const categories = useMarketplaceCategories();
   const areas = useServiceAreas();
@@ -110,23 +120,29 @@ export function ExploreScreen() {
       : (areas.data?.find((a) => a.wardId === wardId)?.wardName ?? 'Khu vực');
   const list = useMemo(() => storefronts.data ?? [], [storefronts.data]);
   const rows = useMemo(() => toRows(list), [list]);
+  const openCount = useMemo(() => list.filter((s) => s.isOpenNow).length, [list]);
   const nearbyOpen = useMemo(() => list.filter((s) => s.isOpenNow).slice(0, 5), [list]);
   const dishList = useMemo(() => dishes.data ?? [], [dishes.data]);
   const dishNames = useMemo(
     () => [...new Set(dishList.map((d) => d.itemName))].slice(0, 6),
     [dishList],
   );
+  const [allDishes, setAllDishes] = useState(false);
+  const shownDishes = allDishes ? dishList : dishList.slice(0, DISH_PREVIEW);
   const [sheet, setSheet] = useState<'area' | 'sort' | 'cart' | null>(null);
   const [searching, setSearching] = useState(false);
 
-  // Hairline under the pinned bar once content scrolls beneath it (UI thread, no re-render)
-  const scrolled = useSharedValue(0);
+  // The compact bar slides in once the signboard has scrolled away (UI thread, no re-render)
+  const past = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => {
-    scrolled.set(e.contentOffset.y > 4 ? 1 : 0);
+    past.set(e.contentOffset.y > SIGN_GONE ? 1 : 0);
   });
-  const hairline = useAnimatedStyle(() => ({
-    opacity: withTiming(scrolled.get(), { duration: 160, easing: easeOut }),
-  }));
+  // Hidden, the bar sits fully above the screen so it never takes the sign's taps.
+  const barHeight = insets.top + 64;
+  const barStyle = useAnimatedStyle(() => {
+    const v = reduceMotion ? past.get() : withTiming(past.get(), { duration: 200, easing: easeOut });
+    return { opacity: v, transform: [{ translateY: (v - 1) * barHeight }] };
+  });
 
   const openStall = useCallback((storefrontId: number) => {
     router.push(`/customer/explore/stores/${storefrontId}` as Href);
@@ -134,6 +150,7 @@ export function ExploreScreen() {
   const openDish = useCallback((menuItemId: number) => {
     router.push(`/customer/explore/items/${menuItemId}` as Href);
   }, []);
+  const openMap = () => router.push('/customer/explore/map' as Href);
 
   const runSearch = (q: string) => {
     setQuery(q);
@@ -142,16 +159,39 @@ export function ExploreScreen() {
   };
 
   const showSuggestions = searching && !text;
+  const count = cartCount(cart);
 
   const header = (
-    <View style={{ gap: 20, paddingTop: 4, paddingBottom: 4 }}>
-      <SearchField
-        value={query}
-        onChange={setQuery}
-        focused={searching}
-        onFocus={() => setSearching(true)}
-        onBlur={() => setSearching(false)}
-        onSubmit={() => remember(query)}
+    <View style={{ gap: 26, paddingBottom: 4 }}>
+      <Signboard
+        top={
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <LocationButton wardName={wardName} onPress={() => setSheet('area')} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <AssistantButton tone="onSign" />
+              <CartButton count={count} onPress={() => setSheet('cart')} />
+            </View>
+          </View>
+        }
+        line1={MEAL_WORD[daypart()]}
+        line2="ăn gì?"
+        caption={
+          storefronts.isSuccess
+            ? openCount
+              ? `${openCount} quán có phép đang mở. Đặt trước, tới quầy là có món.`
+              : 'Các quán đang nghỉ. Xem giờ mở và đặt trước cho bữa sau.'
+            : 'Quán vỉa hè có phép của phường. Đặt trước, tới quầy là có món.'
+        }
+        overlap={
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            focused={searching}
+            onFocus={() => setSearching(true)}
+            onBlur={() => setSearching(false)}
+            onSubmit={() => remember(query)}
+          />
+        }
       />
 
       {showSuggestions ? (
@@ -165,13 +205,6 @@ export function ExploreScreen() {
 
       {order ? <ActiveOrderCard order={order} /> : null}
 
-      {!text && !searching ? (
-        <HeroBanner
-          onMap={() => router.push('/customer/explore/map' as Href)}
-          onScan={() => router.navigate('/customer/scan' as Href)}
-        />
-      ) : null}
-
       <CategoryRail
         categories={categories.data ?? []}
         selected={categoryId}
@@ -180,97 +213,76 @@ export function ExploreScreen() {
 
       {dishList.length ? (
         <Section
-          title={text ? 'Món khớp tìm kiếm' : 'Món ngon đang bán'}
-          note={text ? undefined : 'Bấm + để thêm vào giỏ, tới quầy là có món.'}
+          title={text ? 'Món khớp tìm kiếm' : 'Món đang bán'}
+          note={text ? undefined : 'Chạm + là vào giỏ, tới quầy là có món.'}
         >
-          <FlatList
-            horizontal
-            data={dishList}
-            keyExtractor={(m) => String(m.menuItemId)}
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={DISH_WIDTH + 12}
-            decelerationRate="fast"
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: space.md, gap: 12 }}
-            renderItem={({ item }: { item: MarketplaceMenuItem }) => (
-              <DishCard
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 20, paddingHorizontal: 20 }}>
+            {shownDishes.map((item) => (
+              <DishTile
+                key={item.menuItemId}
                 item={item}
+                width={tileWidth}
                 quantity={qtyById.get(item.menuItemId) ?? 0}
                 onAdd={() => addToCart(item)}
                 onQuantity={(n) => setQty.mutate({ menuItemId: item.menuItemId, quantity: n })}
                 onOpen={() => openDish(item.menuItemId)}
               />
-            )}
-          />
+            ))}
+          </View>
+          {dishList.length > DISH_PREVIEW ? (
+            <Pressable
+              onPress={() => setAllDishes((v) => !v)}
+              accessibilityRole="button"
+              style={({ pressed }) => ({
+                marginHorizontal: 20,
+                minHeight: 48,
+                borderRadius: 24,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 6,
+                backgroundColor: pressed ? colors.brandTint : colors.kerbPaint,
+                borderWidth: 1.5,
+                borderColor: colors.brandTint,
+              })}
+            >
+              <Text style={[{ fontFamily: fonts.heavy, fontSize: 15, color: colors.primary }, tabular]}>
+                {allDishes ? 'Thu gọn' : `Xem cả ${dishList.length} món`}
+              </Text>
+              <Icon sf={allDishes ? 'chevron.up' : 'chevron.down'} md={allDishes ? 'expand_less' : 'expand_more'} size={14} color={colors.primary} />
+            </Pressable>
+          ) : null}
         </Section>
       ) : null}
 
       {!text && nearbyOpen.length > 0 ? (
-        <Section
-          title="Quán đang mở gần bạn"
-          action={
-            <Pressable
-              onPress={() => router.push('/customer/explore/map' as Href)}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Xem các quán trên bản đồ"
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-            >
-              <Icon sf="map.fill" md="map" size={14} color={colors.primary} />
-              <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.primary }}>
-                Bản đồ
-              </Text>
-            </Pressable>
-          }
-        >
+        <Section title="Đang mở cửa" note={`${openCount}/${list.length} quán`} action={{ label: 'Bản đồ', onPress: openMap }}>
           <FlatList
             horizontal
             data={nearbyOpen}
             keyExtractor={(s) => String(s.storefrontId)}
             showsHorizontalScrollIndicator={false}
-            snapToInterval={cardWidth + 12}
+            snapToInterval={cardWidth + 14}
             decelerationRate="fast"
-            contentContainerStyle={{ paddingHorizontal: space.md, gap: 12, paddingBottom: 10 }}
+            contentContainerStyle={{ paddingHorizontal: 20, gap: 14, paddingBottom: 14 }}
             renderItem={({ item }) => (
-              <NearbyCard
-                stall={item}
-                width={cardWidth}
-                onPress={() => openStall(item.storefrontId)}
-              />
+              <NearbyCard stall={item} width={cardWidth} onPress={() => openStall(item.storefrontId)} />
             )}
           />
         </Section>
       ) : null}
 
       {/* Every stall, with the filters that act on this list right above it */}
-      <View style={{ gap: 12 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: space.md,
-            gap: 8,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-            <Text
-              style={{ fontFamily: fonts.heavy, fontSize: 19, lineHeight: 25, color: colors.ink }}
-            >
-              {text ? 'Quán khớp tìm kiếm' : 'Tất cả quán'}
-            </Text>
-            {storefronts.isSuccess ? (
-              <Text
-                style={[{ fontFamily: fonts.semibold, fontSize: 15, color: colors.muted }, tabular]}
-              >
-                {list.length}
-              </Text>
-            ) : null}
-          </View>
+      <View style={{ gap: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: 20 }}>
+          <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 21, lineHeight: 27, color: colors.ink }}>
+            {text ? 'Quán khớp tìm kiếm' : 'Tất cả quán'}
+          </Text>
+          {storefronts.isSuccess ? (
+            <Text style={[{ fontFamily: fonts.bold, fontSize: 15, color: colors.muted }, tabular]}>{list.length}</Text>
+          ) : null}
         </View>
-        <View
-          style={{ flexDirection: 'row', gap: 8, paddingHorizontal: space.md, flexWrap: 'wrap' }}
-        >
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 20, flexWrap: 'wrap' }}>
           <Chip
             label="Đang mở"
             selected={openNow}
@@ -281,9 +293,7 @@ export function ExploreScreen() {
                 {openNow ? (
                   <Icon sf="checkmark" md="check" size={14} color={colors.white} weight="bold" />
                 ) : (
-                  <View
-                    style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.leaf }}
-                  />
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.leaf }} />
                 )}
               </View>
             }
@@ -333,21 +343,9 @@ export function ExploreScreen() {
       />
       {text ? (
         // Never a dead end: suggest the categories that do have stalls
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            gap: 8,
-            paddingHorizontal: space.md,
-          }}
-        >
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, paddingHorizontal: 20 }}>
           {(categories.data ?? []).slice(0, 6).map((c) => (
-            <Chip
-              key={c.categoryId}
-              label={c.categoryName}
-              onPress={() => runSearch(c.categoryName)}
-            />
+            <Chip key={c.categoryId} label={c.categoryName} onPress={() => runSearch(c.categoryName)} />
           ))}
         </View>
       ) : null}
@@ -355,43 +353,8 @@ export function ExploreScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
       <Stack.Screen options={{ headerShown: false }} />
-
-      {/* Pinned top bar: where you pick up, and the cart */}
-      <View
-        style={{
-          paddingTop: insets.top + 8,
-          paddingBottom: 10,
-          paddingHorizontal: space.md,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: colors.bg,
-          zIndex: 1,
-        }}
-      >
-        <LocationButton wardName={wardName} onPress={() => setSheet('area')} />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <AssistantButton />
-          <CartButton count={cartCount(cart)} onPress={() => setSheet('cart')} />
-        </View>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            {
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: 1,
-              backgroundColor: colors.separator,
-              boxShadow: '0 4px 10px rgba(17, 28, 43, 0.06)',
-            },
-            hairline,
-          ]}
-        />
-      </View>
 
       <Animated.FlatList
         data={storefronts.isSuccess ? rows : []}
@@ -401,36 +364,21 @@ export function ExploreScreen() {
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        contentContainerStyle={{ paddingBottom: cart?.items.length ? 104 : 28 }}
+        contentContainerStyle={{ paddingBottom: cart?.items.length ? 112 : 32 }}
         ListHeaderComponent={header}
         renderItem={({ item }: { item: Row }) =>
           item.kind === 'closed' ? (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 8,
-                paddingHorizontal: space.md,
-                paddingTop: 22,
-                paddingBottom: 4,
-              }}
-            >
-              <Icon sf="moon.zzz.fill" md="bedtime" size={15} color={colors.muted} />
-              <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.muted }}>
-                Đang đóng cửa · {item.count}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 4 }}>
+              <Icon sf="moon.zzz.fill" md="bedtime" size={16} color={colors.muted} />
+              <Text style={[{ fontFamily: fonts.heavy, fontSize: 15.5, color: colors.muted }, tabular]}>
+                Đang đóng cửa, {item.count} quán
               </Text>
             </View>
           ) : (
             <View>
               <StallRow stall={item.stall} onPress={() => openStall(item.stall.storefrontId)} />
               {item.divider ? (
-                <View
-                  style={{
-                    height: 1,
-                    marginLeft: space.md + 84 + 14,
-                    backgroundColor: colors.separator,
-                  }}
-                />
+                <View style={{ height: 1, marginLeft: 20 + 88 + 14, backgroundColor: colors.separator }} />
               ) : null}
             </View>
           )
@@ -443,6 +391,35 @@ export function ExploreScreen() {
         }}
       />
 
+      {/* Compact sign: the pickup ward and the cart, once the big sign has scrolled away */}
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            paddingTop: insets.top + 4,
+            paddingBottom: 8,
+            paddingHorizontal: 20,
+            backgroundColor: colors.brand,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 8px 20px -12px rgba(207, 74, 11, 0.6)',
+          },
+          barStyle,
+        ]}
+      >
+        <BarContent
+          wardName={wardName}
+          count={count}
+          onArea={() => setSheet('area')}
+          onCart={() => setSheet('cart')}
+        />
+      </Animated.View>
+
       <CartBar cart={cart} onPress={() => setSheet('cart')} />
 
       <AreaSheet visible={sheet === 'area'} onClose={() => setSheet(null)} />
@@ -452,50 +429,21 @@ export function ExploreScreen() {
   );
 }
 
-function Section({
-  title,
-  note,
-  action,
-  children,
+function BarContent({
+  wardName,
+  count,
+  onArea,
+  onCart,
 }: {
-  title: string;
-  note?: string;
-  action?: ReactNode;
-  children: ReactNode;
+  wardName: string;
+  count: number;
+  onArea: () => void;
+  onCart: () => void;
 }) {
   return (
-    <View style={{ gap: 12 }}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          paddingHorizontal: space.md,
-          gap: 12,
-        }}
-      >
-        <View style={{ flex: 1, gap: 1 }}>
-          <Text
-            style={{ fontFamily: fonts.heavy, fontSize: 19, lineHeight: 25, color: colors.ink }}
-          >
-            {title}
-          </Text>
-          {note ? (
-            <Text
-              style={{
-                fontFamily: fonts.regular,
-                fontSize: 13,
-                lineHeight: 18,
-                color: colors.muted,
-              }}
-            >
-              {note}
-            </Text>
-          ) : null}
-        </View>
-        {action}
-      </View>
-      {children}
-    </View>
+    <>
+      <LocationButton wardName={wardName} onPress={onArea} />
+      <CartButton count={count} onPress={onCart} />
+    </>
   );
 }

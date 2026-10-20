@@ -2,13 +2,13 @@ import { router, Stack, type Href } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
-import { Icon } from '@/components/common/Icon';
 import { ListGroup, ListRow } from '@/components/common/ListGroup';
 import { Screen } from '@/components/layout/Screen';
 import { AccountScreen } from '@/features/account-management/AccountScreens';
 import { LEGAL_ROUTES } from '@/features/legal/legal-content';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, fonts, radius, text } from '@/theme';
+import { colors, radius, shadow, text } from '@/theme';
+import { PhotoTile } from '@/ui';
 
 const go = (href: string) => router.push(href as Href);
 
@@ -17,20 +17,23 @@ export default function AccountTab() {
   const user = useAuthStore((s) => s.user);
   if (!user) {
     return (
-      <Screen>
+      <Screen gap={22}>
         <Stack.Screen options={{ title: 'Tài khoản' }} />
-        <View style={{ padding: 20, gap: 12, alignItems: 'center', borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.brandTint }}>
-          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon sf="person.crop.circle.fill" md="account_circle" size={36} color={colors.primary} />
+        {/* The invitation: the street in a photo, one line, the two ways in */}
+        <View style={{ borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card, padding: 10, gap: 16 }}>
+          <PhotoTile source={require('@/assets/images/hero/hanoi-street-960.webp')} illustrative style={{ height: 168 }} />
+          <View style={{ paddingHorizontal: 10, gap: 6 }}>
+            <Text accessibilityRole="header" style={[text.title2, { color: colors.ink }]}>Đặt trước món vỉa hè có phép</Text>
+            <Text style={[text.callout, { color: colors.muted }]}>Đăng nhập để đặt món, lấy mã nhận món và theo dõi đơn.</Text>
           </View>
-          <Text style={[text.title3, { color: colors.ink, fontFamily: fonts.heavy, textAlign: 'center' }]}>Đặt trước món vỉa hè có phép</Text>
-          <Text style={[text.footnote, { color: colors.ink, textAlign: 'center' }]}>Đăng nhập để đặt món, lấy mã nhận món và theo dõi đơn.</Text>
-          <Button label="Đăng nhập" size={56} onPress={() => go('/auth/sign-in')} style={{ alignSelf: 'stretch' }} />
-          <Button label="Tạo tài khoản" variant="secondary" onPress={() => go('/auth/register')} style={{ alignSelf: 'stretch' }} />
+          <View style={{ paddingHorizontal: 10, paddingBottom: 10, gap: 10 }}>
+            <Button label="Đăng nhập" size={56} onPress={() => go('/auth/sign-in')} />
+            <Button label="Tạo tài khoản" variant="secondary" onPress={() => go('/auth/register')} />
+          </View>
         </View>
         <ListGroup title="Pháp lý">
-          <ListRow title="Điều khoản sử dụng" icon={{ sf: 'doc.text', md: 'description' }} onPress={() => go(LEGAL_ROUTES.terms)} />
-          <ListRow title="Chính sách bảo mật" icon={{ sf: 'hand.raised.fill', md: 'privacy_tip' }} onPress={() => go(LEGAL_ROUTES.privacy)} />
+          <ListRow title="Điều khoản sử dụng" icon={{ sf: 'doc.text', md: 'description' }} tint={colors.sign} tileColor={colors.signTint} onPress={() => go(LEGAL_ROUTES.terms)} />
+          <ListRow title="Chính sách bảo mật" icon={{ sf: 'hand.raised.fill', md: 'privacy_tip' }} tint={colors.sign} tileColor={colors.signTint} onPress={() => go(LEGAL_ROUTES.privacy)} />
         </ListGroup>
       </Screen>
     );

@@ -7,7 +7,7 @@ export type SegmentOption<T extends string> = { key: T; label: string; count?: n
 
 /**
  * The platform's own segmented control (UISegmentedControl on iOS, Material 3 segmented
- * buttons on Android) for 2–4 peer choices. A count rides in the label ("Chờ duyệt · 3"),
+ * buttons on Android) for 2–4 peer choices. A count rides in the label ("Chờ duyệt (3)"),
  * since native segments carry text only. More than four options belong in a menu or sheet.
  */
 export function SegmentedControl<T extends string>({
@@ -22,7 +22,7 @@ export function SegmentedControl<T extends string>({
   onChange: (key: T) => void;
   disabled?: boolean;
 }) {
-  const labels = options.map((o) => (o.count ? `${o.label} · ${o.count > 99 ? '99+' : o.count}` : o.label));
+  const labels = options.map((o) => (o.count ? `${o.label} (${o.count > 99 ? '99+' : o.count})` : o.label));
   return (
     <NativeSegmentedControl
       values={labels}
