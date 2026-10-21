@@ -6,11 +6,7 @@
     "orientation": "default",
     "scheme": "streetbiz",
     "userInterfaceStyle": "automatic",
-    "platforms": [
-      "android",
-      "ios",
-      "web"
-    ],
+    "platforms": ["android", "ios", "web"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.streetbiz.app"
@@ -22,11 +18,7 @@
       "bundler": "metro",
       "output": "static"
     },
-    "plugins": [
-      "expo-router",
-      "expo-font",
-      "expo-image"
-    ],
+    "plugins": ["expo-router"],
     "experiments": {
       "typedRoutes": true
     }
