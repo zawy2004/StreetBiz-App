@@ -17,11 +17,11 @@ import { useLightStatusBar } from '@/ui';
 import { AuthSignboard, go, LegalLinks, TextLink } from '../components/auth-parts';
 
 /** The seeded demo accounts (StreetBiz-BE `docs/database.md`), offered on development builds only, as on the web. */
+// Quản trị nền tảng (PLATFORM_ADMIN) is web-only, so it is not offered here (see role-routes.ts).
 const DEMO: { role: RoleCode; label: string; phone: string }[] = [
   { role: 'CUSTOMER', label: 'Người mua', phone: '0905000201' },
   { role: 'VENDOR', label: 'Hộ kinh doanh', phone: '0905000101' },
   { role: 'WARD_AUTHORITY', label: 'Cán bộ Phường', phone: '0983000001' },
-  { role: 'PLATFORM_ADMIN', label: 'Quản trị viên', phone: '0900000001' },
 ];
 const DEMO_PASSWORD = 'Password123!';
 

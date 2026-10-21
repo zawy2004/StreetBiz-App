@@ -12,6 +12,7 @@ import {
   type RegisterPayload,
 } from '@/core/api';
 import { hydrateTokens } from '@/core/api/token-storage';
+import { isWebOnlyRole, WEB_ONLY_SIGN_IN_MESSAGE } from '@/core/auth/role-routes';
 import type { RoleCode } from '@/core/types/role';
 
 /**
@@ -51,12 +52,18 @@ function persistUser(user: AppUser | null) {
 }
 
 function applyAuthResult(result: AuthResult): AppUser {
+  const user = toAppUser(result.user);
+  // The phone app holds no web-only session: undo the sign-in and tell the caller why.
+  if (isWebOnlyRole(user.role_code)) {
+    clearTokens();
+    persistUser(null);
+    throw new Error(WEB_ONLY_SIGN_IN_MESSAGE);
+  }
   setTokens({
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
     accessTokenExpiresAtUtc: result.accessTokenExpiresAtUtc,
   });
-  const user = toAppUser(result.user);
   persistUser(user);
   return user;
 }
@@ -93,8 +100,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       user = null;
     }
     // A profile without tokens would look signed in while every call fails: drop it.
-    if (user && !tokens) {
+    // A web-only role (platform admin) has no area on the phone: drop it too.
+    if (user && (!tokens || isWebOnlyRole(user.role_code))) {
       user = null;
+      clearTokens();
       persistUser(null);
     }
     set({ user, ready: true });

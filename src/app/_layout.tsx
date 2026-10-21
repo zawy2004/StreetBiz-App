@@ -78,9 +78,14 @@ export default function RootLayout() {
                   <Stack.Screen name="decision/registration/[id]" options={{ headerShown: true, presentation: 'modal', animation: Platform.OS === 'android' ? 'slide_from_bottom' : 'default' }} />
                 </Stack.Protected>
 
-                <Stack.Protected guard={role === 'PLATFORM_ADMIN'}>
-                  <Stack.Screen name="platform" />
-                </Stack.Protected>
+                {/*
+                  Quản trị nền tảng is web-only on this release: the platform/ area stays in the
+                  repo but is not mounted, and the auth layer refuses a PLATFORM_ADMIN session
+                  (see core/auth/role-routes.ts). To bring it back, restore this guard.
+                  <Stack.Protected guard={role === 'PLATFORM_ADMIN'}>
+                    <Stack.Screen name="platform" />
+                  </Stack.Protected>
+                */}
 
                 <Stack.Protected guard={role === 'CUSTOMER' || role === 'VENDOR'}>
                   <Stack.Screen name="chat/[conversationId]" options={{ headerShown: true, title: '' }} />
