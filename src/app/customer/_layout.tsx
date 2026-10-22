@@ -1,43 +1,42 @@
-import { Tabs } from 'expo-router';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { useCanChat, useChatUnreadCount } from '@/features/chat/hooks/useChat';
 import { useChatInboxFeed } from '@/features/chat/realtime/useChatRealtime';
-import { tabIcon, tabLabel, tabScreenOptions } from '@/ui';
+import { tabBarLook } from '@/ui';
 
 /**
  * Người mua (và khách): Khám phá, Quét QR, Đơn hàng, Tin nhắn, Tài khoản — đúng 5 tab như web.
- * A bottom tab bar on every platform (see src/ui/bottom-tabs.tsx); labels always shown.
+ * The platform's own tab bar (Material on Android, iOS tab bar), labels always shown,
+ * tabs never slide, at most five (the web's longer lists are folded in, see master prompt v3 §8).
  */
 export default function CustomerTabs() {
   const canChat = useCanChat();
   useChatInboxFeed(canChat);
   const unread = useChatUnreadCount().data ?? 0;
   return (
-    <Tabs screenOptions={tabScreenOptions}>
-      <Tabs.Screen
-        name="explore"
-        options={{ tabBarLabel: tabLabel('Khám phá'), tabBarIcon: tabIcon('safari', 'safari.fill', 'explore') }}
-      />
-      <Tabs.Screen
-        name="scan"
-        options={{ tabBarLabel: tabLabel('Quét QR'), tabBarIcon: tabIcon('qrcode.viewfinder', 'qrcode.viewfinder', 'qr_code_scanner') }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{ tabBarLabel: tabLabel('Đơn hàng'), tabBarIcon: tabIcon('bag', 'bag.fill', 'receipt_long') }}
-      />
-      <Tabs.Screen
-        name="chat"
-        options={{
-          tabBarLabel: tabLabel('Tin nhắn'),
-          tabBarIcon: tabIcon('bubble.left.and.bubble.right', 'bubble.left.and.bubble.right.fill', 'chat'),
-          tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
-        }}
-      />
-      <Tabs.Screen
-        name="account"
-        options={{ tabBarLabel: tabLabel('Tài khoản'), tabBarIcon: tabIcon('person.crop.circle', 'person.crop.circle.fill', 'account_circle') }}
-      />
-    </Tabs>
+    <NativeTabs {...tabBarLook} minimizeBehavior="onScrollDown">
+      <NativeTabs.Trigger name="explore" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'safari', selected: 'safari.fill' }} md="explore" />
+        <NativeTabs.Trigger.Label>Khám phá</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="scan" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf="qrcode.viewfinder" md="qr_code_scanner" />
+        <NativeTabs.Trigger.Label>Quét QR</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="orders" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'bag', selected: 'bag.fill' }} md="receipt_long" />
+        <NativeTabs.Trigger.Label>Đơn hàng</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="chat" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} md="chat" />
+        <NativeTabs.Trigger.Label>Tin nhắn</NativeTabs.Trigger.Label>
+        {/* Only mounted with a count: Android draws hidden={true} as a "0" badge. */}
+        {unread > 0 ? <NativeTabs.Trigger.Badge>{unread > 99 ? '99+' : String(unread)}</NativeTabs.Trigger.Badge> : null}
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="account" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'person.crop.circle', selected: 'person.crop.circle.fill' }} md="account_circle" />
+        <NativeTabs.Trigger.Label>Tài khoản</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }

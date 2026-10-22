@@ -1,44 +1,43 @@
-import { Tabs } from 'expo-router';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { useCanChat } from '@/features/chat/hooks/useChat';
 import { useChatInboxFeed } from '@/features/chat/realtime/useChatRealtime';
 import { useVendorOrderAlerts } from '@/features/orders/alerts/useVendorOrderAlerts';
-import { tabIcon, tabLabel, tabScreenOptions } from '@/ui';
+import { tabBarLook } from '@/ui';
 
 /**
  * Hộ kinh doanh: Trang chủ, Ô thuê, Đơn hàng, Tài chính, Tài khoản. Tin nhắn và Cửa hàng mở từ Trang chủ (web có 6 tab).
- * A bottom tab bar on every platform (see src/ui/bottom-tabs.tsx); labels always shown.
+ * The platform's own tab bar (Material on Android, iOS tab bar), labels always shown,
+ * tabs never slide, at most five (the web's longer lists are folded in, see master prompt v3 §8).
  */
 export default function VendorTabs() {
   const newOrders = useVendorOrderAlerts();
   // Buyers' messages, live on every vendor screen (the unread count shows on Trang chủ).
   useChatInboxFeed(useCanChat());
   return (
-    <Tabs screenOptions={tabScreenOptions}>
-      <Tabs.Screen
-        name="home"
-        options={{ tabBarLabel: tabLabel('Trang chủ'), tabBarIcon: tabIcon('house', 'house.fill', 'home') }}
-      />
-      <Tabs.Screen
-        name="slots"
-        options={{ tabBarLabel: tabLabel('Ô thuê'), tabBarIcon: tabIcon('square.grid.3x3', 'square.grid.3x3.fill', 'grid_view') }}
-      />
-      <Tabs.Screen
-        name="orders"
-        options={{
-          tabBarLabel: tabLabel('Đơn hàng'),
-          tabBarIcon: tabIcon('bag', 'bag.fill', 'receipt_long'),
-          tabBarBadge: newOrders > 0 ? (newOrders > 99 ? '99+' : newOrders) : undefined,
-        }}
-      />
-      <Tabs.Screen
-        name="finance"
-        options={{ tabBarLabel: tabLabel('Tài chính'), tabBarIcon: tabIcon('banknote', 'banknote.fill', 'payments') }}
-      />
-      <Tabs.Screen
-        name="account"
-        options={{ tabBarLabel: tabLabel('Tài khoản'), tabBarIcon: tabIcon('person.crop.circle', 'person.crop.circle.fill', 'account_circle') }}
-      />
-    </Tabs>
+    <NativeTabs {...tabBarLook} minimizeBehavior="onScrollDown">
+      <NativeTabs.Trigger name="home" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
+        <NativeTabs.Trigger.Label>Trang chủ</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="slots" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'square.grid.3x3', selected: 'square.grid.3x3.fill' }} md="grid_view" />
+        <NativeTabs.Trigger.Label>Ô thuê</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="orders" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'bag', selected: 'bag.fill' }} md="receipt_long" />
+        <NativeTabs.Trigger.Label>Đơn hàng</NativeTabs.Trigger.Label>
+        {/* Only mounted with a count: Android draws hidden={true} as a "0" badge. */}
+        {newOrders > 0 ? <NativeTabs.Trigger.Badge>{newOrders > 99 ? '99+' : String(newOrders)}</NativeTabs.Trigger.Badge> : null}
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="finance" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'banknote', selected: 'banknote.fill' }} md="payments" />
+        <NativeTabs.Trigger.Label>Tài chính</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="account" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'person.crop.circle', selected: 'person.crop.circle.fill' }} md="account_circle" />
+        <NativeTabs.Trigger.Label>Tài khoản</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }

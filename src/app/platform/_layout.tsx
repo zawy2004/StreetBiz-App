@@ -1,35 +1,35 @@
-import { Tabs } from 'expo-router';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
-import { tabIcon, tabLabel, tabScreenOptions } from '@/ui';
+import { tabBarLook } from '@/ui';
 
 /**
  * Quản trị nền tảng: Tổng quan, Tài khoản, Danh mục, Kiểm duyệt, Cá nhân.
- * Web-only on this release (not mounted — see src/app/_layout.tsx), kept in sync with the other
- * roles' bottom tab bar (see src/ui/bottom-tabs.tsx) for when it is restored.
+ * The platform's own tab bar (Material on Android, iOS tab bar), labels always shown,
+ * tabs never slide, at most five (the web's longer lists are folded in, see master prompt v3 §8).
  */
 export default function PlatformTabs() {
   return (
-    <Tabs screenOptions={tabScreenOptions}>
-      <Tabs.Screen
-        name="dashboard"
-        options={{ tabBarLabel: tabLabel('Tổng quan'), tabBarIcon: tabIcon('chart.bar', 'chart.bar.fill', 'insights') }}
-      />
-      <Tabs.Screen
-        name="accounts"
-        options={{ tabBarLabel: tabLabel('Tài khoản'), tabBarIcon: tabIcon('person.2', 'person.2.fill', 'group') }}
-      />
-      <Tabs.Screen
-        name="categories"
-        options={{ tabBarLabel: tabLabel('Danh mục'), tabBarIcon: tabIcon('list.bullet.rectangle', 'list.bullet.rectangle.fill', 'category') }}
-      />
-      <Tabs.Screen
-        name="moderation"
-        options={{ tabBarLabel: tabLabel('Kiểm duyệt'), tabBarIcon: tabIcon('checkmark.shield', 'checkmark.shield.fill', 'shield') }}
-      />
-      <Tabs.Screen
-        name="me"
-        options={{ tabBarLabel: tabLabel('Cá nhân'), tabBarIcon: tabIcon('person.crop.circle', 'person.crop.circle.fill', 'account_circle') }}
-      />
-    </Tabs>
+    <NativeTabs {...tabBarLook} minimizeBehavior="onScrollDown">
+      <NativeTabs.Trigger name="dashboard" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} md="insights" />
+        <NativeTabs.Trigger.Label>Tổng quan</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="accounts" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'person.2', selected: 'person.2.fill' }} md="group" />
+        <NativeTabs.Trigger.Label>Tài khoản</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="categories" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'list.bullet.rectangle', selected: 'list.bullet.rectangle.fill' }} md="category" />
+        <NativeTabs.Trigger.Label>Danh mục</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="moderation" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'checkmark.shield', selected: 'checkmark.shield.fill' }} md="shield" />
+        <NativeTabs.Trigger.Label>Kiểm duyệt</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="me" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'person.crop.circle', selected: 'person.crop.circle.fill' }} md="account_circle" />
+        <NativeTabs.Trigger.Label>Cá nhân</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }

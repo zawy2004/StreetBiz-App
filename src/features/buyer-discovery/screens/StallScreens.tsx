@@ -1,13 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, Stack, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Linking,
   Pressable,
   ScrollView,
+  StatusBar,
   Text,
   useWindowDimensions,
   View,
@@ -35,7 +36,7 @@ import { CART_KEY, askToSignIn, cartCount, useAddToCart, useCart, useSetCartQuan
 import { CartBar, CartSheet, QtyStepper } from '@/features/cart/components/cart-parts';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
-import { Plate, PriceSticker, Section, useStatusBarStyle } from '@/ui';
+import { Plate, PriceSticker, Section } from '@/ui';
 import { formatVnd } from '@/utils/format';
 import { LicensedBadge, Rating } from '../components/stall-parts';
 import { useMenuItem, useStorefrontDetail } from '../discovery-api';
@@ -64,8 +65,12 @@ function useCartChrome() {
 function useHeroHeader(heroHeight: number, title: string) {
   const insets = useSafeAreaInsets();
   const [solid, setSolid] = useState(false);
-  // Guarded against react-native-web, which has no StatusBar stack API (see src/ui/status-bar.ts).
-  useStatusBarStyle(solid ? 'dark-content' : 'light-content');
+  useFocusEffect(
+    useCallback(() => {
+      const entry = StatusBar.pushStackEntry({ barStyle: solid ? 'dark-content' : 'light-content', animated: true });
+      return () => StatusBar.popStackEntry(entry);
+    }, [solid]),
+  );
   // Flips once when the photo passes under the header, never per pixel.
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = e.nativeEvent.contentOffset.y > heroHeight - insets.top - 64;

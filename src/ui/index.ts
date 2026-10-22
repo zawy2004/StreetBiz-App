@@ -2,6 +2,5 @@
 export { Signboard } from './Signboard';
 export { BigNumber, FloatingBar, IllustrativeTag, Pass, PhotoCircle, PhotoTile, Plate, PriceSticker, RoundButton, SearchPill, Section } from './parts';
 export { daypart, MEAL_WORD, type Daypart } from './daypart';
-export { useLightStatusBar, useStatusBarStyle } from './status-bar';
+export { useLightStatusBar } from './status-bar';
 export { tabBarLook } from './tab-bar';
-export { tabScreenOptions, tabIcon, tabLabel } from './bottom-tabs';

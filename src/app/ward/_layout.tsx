@@ -1,34 +1,35 @@
-import { Tabs } from 'expo-router';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
-import { tabIcon, tabLabel, tabScreenOptions } from '@/ui';
+import { tabBarLook } from '@/ui';
 
 /**
  * Cán bộ Phường: Tổng quan, Hộp duyệt, Tuần tra, Lưới ô, Thêm (thu phí, giá và khung giờ, báo cáo, tài khoản; web có 7 tab).
- * A bottom tab bar on every platform (see src/ui/bottom-tabs.tsx); labels always shown.
+ * The platform's own tab bar (Material on Android, iOS tab bar), labels always shown,
+ * tabs never slide, at most five (the web's longer lists are folded in, see master prompt v3 §8).
  */
 export default function WardTabs() {
   return (
-    <Tabs screenOptions={tabScreenOptions}>
-      <Tabs.Screen
-        name="dashboard"
-        options={{ tabBarLabel: tabLabel('Tổng quan'), tabBarIcon: tabIcon('chart.bar', 'chart.bar.fill', 'insights') }}
-      />
-      <Tabs.Screen
-        name="inbox"
-        options={{ tabBarLabel: tabLabel('Hộp duyệt'), tabBarIcon: tabIcon('tray.full', 'tray.full.fill', 'inbox') }}
-      />
-      <Tabs.Screen
-        name="patrol"
-        options={{ tabBarLabel: tabLabel('Tuần tra'), tabBarIcon: tabIcon('qrcode.viewfinder', 'qrcode.viewfinder', 'qr_code_scanner') }}
-      />
-      <Tabs.Screen
-        name="slots"
-        options={{ tabBarLabel: tabLabel('Lưới ô'), tabBarIcon: tabIcon('square.grid.3x3', 'square.grid.3x3.fill', 'grid_view') }}
-      />
-      <Tabs.Screen
-        name="more"
-        options={{ tabBarLabel: tabLabel('Thêm'), tabBarIcon: tabIcon('ellipsis.circle', 'ellipsis.circle.fill', 'more_horiz') }}
-      />
-    </Tabs>
+    <NativeTabs {...tabBarLook} minimizeBehavior="onScrollDown">
+      <NativeTabs.Trigger name="dashboard" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} md="insights" />
+        <NativeTabs.Trigger.Label>Tổng quan</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="inbox" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'tray.full', selected: 'tray.full.fill' }} md="inbox" />
+        <NativeTabs.Trigger.Label>Hộp duyệt</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="patrol" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf="qrcode.viewfinder" md="qr_code_scanner" />
+        <NativeTabs.Trigger.Label>Tuần tra</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="slots" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'square.grid.3x3', selected: 'square.grid.3x3.fill' }} md="grid_view" />
+        <NativeTabs.Trigger.Label>Lưới ô</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="more" labelVisibilityMode="labeled">
+        <NativeTabs.Trigger.Icon sf={{ default: 'ellipsis.circle', selected: 'ellipsis.circle.fill' }} md="more_horiz" />
+        <NativeTabs.Trigger.Label>Thêm</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }
