@@ -1,7 +1,16 @@
-import type { StatusTone } from '@/theme';
+import type { StatusTone } from '@/theme/colors';
 
+/**
+ * Maps backend status codes (see StreetBiz-BE docs/database-reverse-engineering.md
+ * — registration_status, application_status, slot_status, permit_status,
+ * contract_status, renewal_status, change_status, transfer_status,
+ * penalty_status, item_status, order_status, report_status, transaction_status)
+ * to a short Vietnamese label and one of the 3 status tones.
+ */
 export const STATUS_LABELS: Record<string, { label: string; tone: StatusTone }> = {
   DRAFT: { label: 'Nháp', tone: 'neutral' },
+  // PENDING is a live backend status, not a leftover: rental applications, slot
+  // proposals, renewals, transfers and orders all use it.
   PENDING: { label: 'Chờ duyệt', tone: 'pending' },
   SUBMITTED: { label: 'Đã nộp', tone: 'pending' },
   UNDER_REVIEW: { label: 'Đang xét', tone: 'pending' },
@@ -35,6 +44,9 @@ export const STATUS_LABELS: Record<string, { label: string; tone: StatusTone }> 
   WITHDRAWN: { label: 'Đã rút', tone: 'neutral' },
   FAILED: { label: 'Thất bại', tone: 'danger' },
   SUCCESS: { label: 'Thanh toán thành công', tone: 'ok' },
+  // A payment received for something already paid: the ward pays it back.
+  REFUND_REQUIRED: { label: 'Chờ hoàn tiền', tone: 'pending' },
+  REFUNDED: { label: 'Đã hoàn tiền', tone: 'ok' },
   CLOSED: { label: 'Đã đóng', tone: 'neutral' },
   PAUSED: { label: 'Tạm dừng', tone: 'pending' },
   SOLD_OUT: { label: 'Hết món', tone: 'danger' },
@@ -44,9 +56,13 @@ export const STATUS_LABELS: Record<string, { label: string; tone: StatusTone }> 
   VISIBLE: { label: 'Đang hiển thị', tone: 'ok' },
   MISSING: { label: 'Không còn tồn tại', tone: 'danger' },
   ARCHIVED: { label: 'Đã lưu trữ', tone: 'neutral' },
+  // ATTP file sent on by the ward to the food-safety department.
   FORWARDED: { label: 'Đã chuyển cục', tone: 'pending' },
+  // A recorded violation still waiting for the sanction decision (WARD-12/13).
   PENDING_SANCTION: { label: 'Chờ xử phạt', tone: 'pending' },
-  SANCTIONED: { label: 'Đã xử phạt', tone: 'danger' },
+  SANCTIONED: { label: 'Đã ra quyết định', tone: 'ok' },
+  INACTIVE: { label: 'Ngừng hoạt động', tone: 'neutral' },
+  LOCKED: { label: 'Đã khoá', tone: 'danger' },
 };
 
 export function statusLabel(code: string) {

@@ -1,102 +1,54 @@
-export type ColorTokens = {
-  primary: string;
-  primaryPressed: string;
-  onPrimary: string;
-
-  indigo: string;
-  onIndigo: string;
-
-  secondary: string;
-  secondaryBg: string;
-  onSecondary: string;
-
-  tertiary: string;
-  tertiaryBg: string;
-  onTertiary: string;
-
-  error: string;
-  errorBg: string;
-  onError: string;
-
-  bg: string;
-  card: string;
-  sunken: string;
-  border: string;
-  borderStrong: string;
-  muted: string;
-  text: string;
-  scrim: string;
-};
-
-export const lightColors: ColorTokens = {
-  primary: '#E4441F',
-  primaryPressed: '#C93512',
-  onPrimary: '#FFFFFF',
-
-  indigo: '#1D2939',
-  onIndigo: '#FFFFFF',
-
-  secondary: '#F5A000',
-  secondaryBg: '#FEF6E7',
-  onSecondary: '#8A5300',
-
-  tertiary: '#0B8A4B',
-  tertiaryBg: '#E8F5EE',
-  onTertiary: '#06351D',
-
-  error: '#D92D20',
-  errorBg: '#FDF2F1',
-  onError: '#7A150D',
-
-  bg: '#F4F4F2',
+/**
+ * Colour tokens, same values as StreetBiz-FE `src/index.css` (light theme).
+ * The ground is always light; only text, slot plates and QR codes are dark.
+ *
+ * Vivid orange leads, in three strengths:
+ * - `brand` #FF6A1F: large fills with no small text (banner, rings, dots, the permit band)
+ * - `cta` #EE5500: filled buttons, chips and the cart bar, with bold white labels (3.5:1)
+ * - `primary` #CF4A0B: orange text and prices, readable in sunlight (4.5:1)
+ */
+export const colors = {
+  brand: '#FF6A1F',
+  brandLight: '#FF8A3D',
+  cta: '#EE5500',
+  ctaPressed: '#D64C00',
+  primary: '#CF4A0B',
+  primaryPressed: '#B83F08',
+  brandTint: '#FFE8DB',
+  mango: '#FFB703',
+  /** Price stickers and "new" tags: mango paper with ink figures. */
+  sticker: '#FFC93C',
+  mangoTint: '#FFF4D1',
+  onMango: '#6B4100',
+  leaf: '#0B7F43',
+  leafTint: '#E6F6EC',
+  onLeaf: '#0B5D33',
+  danger: '#B42318',
+  dangerTint: '#FDEBEA',
+  onDanger: '#8F1717',
+  sign: '#0A5FA8',
+  signTint: '#E5F0FA',
+  plate: '#111C2B',
+  ink: '#111C2B',
+  muted: '#566173',
+  bg: '#F6F7F9',
+  /** The buyer's white street canvas (photo-led screens sit on white, not grey). */
+  canvas: '#FFFFFF',
   card: '#FFFFFF',
-  sunken: '#F0F1F3',
-  border: '#E2E4E8',
-  borderStrong: '#D0D3D9',
-  muted: '#676C75',
-  text: '#1D2939',
-  scrim: 'rgba(29, 41, 57, 0.48)',
-};
+  sunken: '#EEF1F4',
+  line: '#E1E5EA',
+  kerbPaint: '#FFF8F2',
+  separator: 'rgba(17, 28, 43, 0.10)',
+  pressed: 'rgba(17, 28, 43, 0.05)',
+  white: '#FFFFFF',
+} as const;
 
-export const darkColors: ColorTokens = {
-  primary: '#F2552F',
-  primaryPressed: '#D9431F',
-  onPrimary: '#FFFFFF',
+/** Verdicts read at arm's length in sunlight: pale wash of the tone, words in the tone, every pair ≥ 7:1 (web `verdict-tones.ts`). */
+export const statusTones = {
+  ok: { wash: '#E6F6EC', ink: '#0B5D33', sf: 'checkmark.seal.fill', md: 'verified' },
+  pending: { wash: '#FFF3D1', ink: '#6B4100', sf: 'clock.fill', md: 'schedule' },
+  danger: { wash: '#FDEBEA', ink: '#8F1717', sf: 'xmark.octagon.fill', md: 'block' },
+  neutral: { wash: '#EEF1F4', ink: '#2B3640', sf: 'info.circle.fill', md: 'info' },
+} as const;
 
-  indigo: '#DDE3EC',
-  onIndigo: '#12161C',
-
-  secondary: '#FFB23F',
-  secondaryBg: '#33260F',
-  onSecondary: '#FFD08A',
-
-  tertiary: '#3CCB7F',
-  tertiaryBg: '#12301F',
-  onTertiary: '#D6F5E4',
-
-  error: '#FF6B5E',
-  errorBg: '#3A1714',
-  onError: '#FFB4AB',
-
-  bg: '#0F1113',
-  card: '#181B1F',
-  sunken: '#1F2328',
-  border: '#2B3036',
-  borderStrong: '#3A4048',
-  muted: '#9AA2AC',
-  text: '#ECEEF1',
-  scrim: 'rgba(0, 0, 0, 0.6)',
-};
-
-export type StatusTone = 'ok' | 'pending' | 'danger' | 'neutral';
-
-export type ToneColors = { fg: string; bg: string; dot: string };
-
-export function statusTones(c: ColorTokens): Record<StatusTone, ToneColors> {
-  return {
-    ok: { fg: c.tertiary, bg: c.tertiaryBg, dot: c.tertiary },
-    pending: { fg: c.onSecondary, bg: c.secondaryBg, dot: c.secondary },
-    danger: { fg: c.onError, bg: c.errorBg, dot: c.error },
-    neutral: { fg: c.muted, bg: c.sunken, dot: c.muted },
-  };
-}
+export type StatusTone = keyof typeof statusTones;

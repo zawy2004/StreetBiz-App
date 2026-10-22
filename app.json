@@ -25,19 +25,7 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-splash-screen",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "StreetBiz cần camera để quét mã QR giấy phép."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "StreetBiz dùng vị trí để tìm quán và ô vỉa hè gần bạn."
-        }
-      ]
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true

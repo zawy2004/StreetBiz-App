@@ -1,40 +1,53 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { View } from 'react-native';
 
-import { spacing, useTheme } from '@/theme';
+import { ApiError, errorMessage } from '@/core/api';
+import { radius } from '@/theme';
+import { Skeleton } from './Skeleton';
+import { StateView } from './StateView';
 
-import { AppText } from '../common/AppText';
-import { Button } from '../common/Button';
-import { Icon, type IconName } from '../common/Icon';
-
-export function EmptyState({ icon = 'tray-remove', title, description }: { icon?: IconName; title: string; description?: string }) {
+/**
+ * A failed read, said for what it is: offline (retry), gone or not allowed (no retry, since
+ * trying again cannot help; back instead), or a server fault (retry). The server's own words
+ * are the body.
+ */
+export function ErrorState({
+  title,
+  error,
+  onRetry,
+}: {
+  title?: string;
+  error: unknown;
+  onRetry?: () => void;
+}) {
+  const status = error instanceof ApiError ? error.status : undefined;
+  const gone = status === 404 || status === 403;
+  const offline = status === 0 || (error instanceof ApiError && error.code === 'network_error');
+  const back = router.canGoBack() ? { label: 'Quay lại', onPress: () => router.back() } : undefined;
   return (
-    <View style={styles.box}>
-      <Icon name={icon} size={40} color="muted" />
-      <AppText variant="headline" align="center">{title}</AppText>
-      {description ? <AppText color="muted" align="center">{description}</AppText> : null}
-    </View>
+    <StateView
+      tone={gone ? 'neutral' : 'danger'}
+      icon={
+        offline
+          ? { sf: 'wifi.exclamationmark', md: 'wifi_off' }
+          : gone
+            ? { sf: status === 403 ? 'lock' : 'doc.text.magnifyingglass', md: status === 403 ? 'lock' : 'search_off' }
+            : { sf: 'exclamationmark.triangle', md: 'error' }
+      }
+      title={title ?? (offline ? 'Không có kết nối mạng' : status === 404 ? 'Không tìm thấy' : status === 403 ? 'Không có quyền xem' : 'Không tải được dữ liệu')}
+      body={errorMessage(error)}
+      action={gone ? back : onRetry ? { label: 'Thử lại', onPress: onRetry } : undefined}
+    />
   );
 }
 
-export function ErrorState({ message = 'Có lỗi xảy ra.', onRetry }: { message?: string; onRetry?: () => void }) {
+/** Placeholder cards shaped like the list that is loading. */
+export function ListSkeleton({ rows = 4, height = 76 }: { rows?: number; height?: number }) {
   return (
-    <View style={styles.box}>
-      <Icon name="alert-circle-outline" size={40} color="error" />
-      <AppText align="center">{message}</AppText>
-      {onRetry ? <Button label="Thử lại" variant="outline" fullWidth={false} onPress={onRetry} /> : null}
+    <View style={{ gap: 10 }} accessibilityLabel="Đang tải">
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton key={i} height={height} radius={radius.card} />
+      ))}
     </View>
   );
 }
-
-export function LoadingState() {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.box}>
-      <ActivityIndicator color={colors.primary} />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  box: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xxl },
-});
