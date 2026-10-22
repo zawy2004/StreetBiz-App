@@ -4,7 +4,7 @@ import type { ApiRegistration, FeeItemDto, PenaltyListDto } from '@/core/api';
 export const PAYABLE_FEE = new Set(['PENDING', 'OVERDUE']);
 export const PAYABLE_PENALTY = new Set(['UNPAID', 'PENDING']);
 
-export type TodoKind = 'registration' | 'fee' | 'penalty';
+export type TodoKind = 'registration' | 'slots' | 'fee' | 'penalty';
 
 export type Todo = {
   key: string;
@@ -24,14 +24,29 @@ export type Todo = {
 };
 
 /**
+ * After approval, the free slots near where the registration said the vendor sells -- counted
+ * when the home screen loads, never stored (a slot may have been rented meanwhile). The vendor
+ * still picks a slot and applies through the normal flow (BR-16).
+ */
+export type SlotsNearApproval = {
+  registrationId: number;
+  displayName: string;
+  /** Free slots within the search radius; 0 when the registration has no position. */
+  count: number;
+  /** The nearest free slot, to open the slot workspace on its street. */
+  nearest: { zoneId: number; slotId: number; zoneName: string } | null;
+};
+
+/**
  * Today's todos, in the order the home screen has always listed them:
- * registrations needing more information, then payable fees, then payable
- * penalties, each group in API order. Titles are unchanged.
+ * registrations needing more information, then (once approved and with no slot yet) the free
+ * slots nearby, then payable fees, then payable penalties, each group in API order.
  */
 export function buildTodos(
   registrations: ApiRegistration[],
   feeItems: FeeItemDto[],
   penalties: PenaltyListDto[],
+  slotsNear: SlotsNearApproval | null = null,
 ): Todo[] {
   return [
     ...registrations
@@ -47,6 +62,21 @@ export function buildTodos(
         note: r.reviewDecisionReason,
         overdue: false,
       })),
+    ...(slotsNear
+      ? [
+          {
+            key: `slots-${slotsNear.registrationId}`,
+            kind: 'slots' as const,
+            title: slotsNear.count > 0 ? `Hồ sơ đã duyệt — có ${slotsNear.count} ô trống gần chỗ bạn bán` : 'Hồ sơ đã duyệt — chọn ô vỉa hè để xin thuê',
+            path: slotsNear.nearest ? `/vendor/slots?zone=${slotsNear.nearest.zoneId}&slot=${slotsNear.nearest.slotId}` : '/vendor/slots',
+            amount: null,
+            date: null,
+            slotCode: null,
+            note: slotsNear.nearest ? `Gần nhất: ${slotsNear.nearest.zoneName}. Chọn ô rồi xin thuê.` : 'Chọn ô rồi xin thuê.',
+            overdue: false,
+          },
+        ]
+      : []),
     ...feeItems
       .filter((f) => PAYABLE_FEE.has(f.itemStatus))
       .map<Todo>((f) => ({

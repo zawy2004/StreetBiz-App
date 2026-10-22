@@ -13,6 +13,7 @@ import { errorMessage, vendorRegistrationApi, type ApiEvidenceType } from '@/cor
 import type { PickedFile } from '@/core/api/upload';
 import { colors, fonts, radius, shadow, sign, text } from '@/theme';
 import { EVIDENCE_LABELS, evidenceFileProblem, useNewRegistrationStore } from '../new-registration-store';
+import { VoiceReturnBanner } from '../voice/VoiceEntry';
 
 /** The registration flow is a modal stack above the vendor's tabs (`src/app/register-business`). */
 export const FLOW = '/register-business';
@@ -75,6 +76,7 @@ export function WizardStep({
       <Stack.Screen options={{ title: editing ? 'Cập nhật hồ sơ' : 'Đăng ký kinh doanh', headerLeft: first ? closeButton : undefined, headerRight: first ? undefined : closeButton }} />
       <StepProgress step={ORDER.indexOf(step) + 1} total={ORDER.length} title={STEP_NAMES[step]} hint={hint} />
       {editing ? <StatusHeader tone="neutral" icon={{ sf: 'pencil', md: 'edit' }} title={`Đang cập nhật hồ sơ ${name}`} detail="Gửi lại sẽ chuyển phường xét lần nữa." /> : null}
+      <VoiceReturnBanner />
       {children}
     </Screen>
   );

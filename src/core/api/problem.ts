@@ -23,7 +23,8 @@ export type ApiErrorCode =
   | 'bad_request'
   | 'server_error'
   | 'network_error'
-  | 'timeout';
+  | 'timeout'
+  | 'ai_unavailable';
 
 const FALLBACK_MESSAGES: Record<ApiErrorCode, string> = {
   validation_error: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.',
@@ -41,6 +42,9 @@ const FALLBACK_MESSAGES: Record<ApiErrorCode, string> = {
   server_error: 'Hệ thống đang bận. Vui lòng thử lại sau.',
   network_error: 'Không kết nối được máy chủ. Kiểm tra kết nối mạng và thử lại.',
   timeout: 'Máy chủ xử lý quá lâu nên đã dừng chờ. Vui lòng thử lại sau ít phút.',
+  // 503 from an AI-backed endpoint (speech-to-text and every model are down or out of quota):
+  // the caller falls back to manual entry.
+  ai_unavailable: 'Trợ lý AI đang bận. Bạn có thể điền tiếp bằng tay.',
 };
 
 /** Normalized error every API call rejects with, so screens never touch axios types. */
