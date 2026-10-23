@@ -2,6 +2,7 @@ import {
   ASSIST_FIELDS,
   QUESTION_KEYS,
   TAP_CONFIRMED_FIELDS,
+  type AssistChoice,
   type AssistDraft,
   type AssistField,
   type AssistFieldProposal,
@@ -357,4 +358,34 @@ export function formatHours(hours: string | null | undefined): string {
   if (!match) return '';
   const from = `${Number(match[1])}:${match[2]}`;
   return match[3] ? `${from} – ${Number(match[3])}:${match[4]}` : `từ ${from}`;
+}
+
+/** Lower case, no accents, đ → d, single spaces: "Phường Hòa Cường" → "phuong hoa cuong". */
+export function foldVietnamese(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The ward question lists every phường, xã and đặc khu (94 in Đà Nẵng): find the ones the vendor
+ * types, accents optional ("hoa cuong", "Hòa Cường"), matching the start of a word -- names that
+ * start with it first ("an" finds An Hải before Hội An, and never Hòa Vang).
+ */
+export function searchWardChoices(choices: AssistChoice[], query: string, limit = 8): AssistChoice[] {
+  const q = foldVietnamese(query).replace(/^(phuong|xa|dac khu) /, '');
+  if (!q) return [];
+  return choices
+    .map((choice) => {
+      const name = foldVietnamese(choice.label).replace(/^(phuong|xa|dac khu) /, '');
+      return { choice, rank: name.startsWith(q) ? 0 : ` ${name}`.includes(` ${q}`) ? 1 : -1 };
+    })
+    .filter((s) => s.rank >= 0)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, limit)
+    .map((s) => s.choice);
 }

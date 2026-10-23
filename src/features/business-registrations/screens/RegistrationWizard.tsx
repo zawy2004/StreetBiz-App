@@ -11,10 +11,10 @@ import { Icon } from '@/components/common/Icon';
 import { ListGroup, ListRow } from '@/components/common/ListGroup';
 import { PressableScale } from '@/components/common/PressableScale';
 import { Sheet } from '@/components/common/Sheet';
-import { SheetOption } from '@/components/common/SheetOption';
 import { showToast } from '@/components/feedback/Toast';
 import { DateField } from '@/components/forms/DateField';
 import { TextField } from '@/components/forms/TextField';
+import { WardPickerList } from '@/components/forms/WardPickerList';
 import { ResultView } from '@/components/native/ResultView';
 import { SegmentedControl } from '@/components/native/SegmentedControl';
 import { StatusHeader } from '@/components/native/StatusHeader';
@@ -275,21 +275,16 @@ export function RegistrationDetailsStep() {
       </ListGroup>
 
       <Sheet visible={wardSheet} onClose={() => setWardSheet(false)} title="Phường/xã quản lý" subtitle="Hồ sơ tới cán bộ phường này xét duyệt.">
-        {wards.map((w, i) => (
-          <SheetOption
-            key={w.unitId}
-            title={w.unitName}
-            subtitle={w.parentName ?? undefined}
-            icon={{ sf: 'building.columns.fill', md: 'account_balance' }}
-            selected={w.unitId === draft.wardUnitId}
-            last={i === wards.length - 1}
-            onPress={() => {
-              draft.setField('wardUnitId', w.unitId);
-              setErrors((e) => ({ ...e, ward: undefined }));
-              setWardSheet(false);
-            }}
-          />
-        ))}
+        <WardPickerList
+          wards={wards}
+          selectedId={draft.wardUnitId}
+          icon={{ sf: 'building.columns.fill', md: 'account_balance' }}
+          onPick={(w) => {
+            draft.setField('wardUnitId', w.unitId);
+            setErrors((e) => ({ ...e, ward: undefined }));
+            setWardSheet(false);
+          }}
+        />
       </Sheet>
     </WizardStep>
   );

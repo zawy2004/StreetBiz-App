@@ -102,6 +102,11 @@ export type AssistQuestion = {
   choices: AssistChoice[];
   field: AssistField | null;
   skippable: boolean;
+  /**
+   * How many of the first `choices` are the assistant's guesses. The ward question lists every
+   * ward (guesses first): show those as buttons and let the vendor search the rest.
+   */
+  suggestedCount?: number;
 };
 
 export type AssistWardOption = {

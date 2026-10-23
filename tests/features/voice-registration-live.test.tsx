@@ -126,6 +126,32 @@ describe('interview turn while talking', () => {
     expect(p.reader.speak).not.toHaveBeenCalled();
   });
 
+  it('the ward question shows the guesses as buttons and finds any other ward by name', async () => {
+    const ward: AssistQuestion = {
+      key: 'WARD',
+      text: 'Chỗ đó thuộc phường, xã nào ạ? Trợ lý đoán là:',
+      input: 'CHOICE',
+      choices: [
+        { value: '10', label: 'Phường Hải Châu' },
+        { value: '101', label: 'Phường Hòa Cường' },
+        { value: '11', label: 'Phường Thanh Khê' },
+        { value: '120', label: 'Xã Hòa Vang' },
+      ],
+      field: null,
+      skippable: false,
+      suggestedCount: 2,
+    };
+    const p = props({ question: ward, live: false });
+    await render(<InterviewTurn {...p} />);
+    expect(screen.getByText('Phường Hải Châu')).toBeTruthy();
+    expect(screen.getByText('Phường Hòa Cường')).toBeTruthy();
+    expect(screen.queryByText('Xã Hòa Vang')).toBeNull();
+
+    await fireEvent.changeText(screen.getByLabelText('Không phải? Tìm phường, xã khác'), 'hoa vang');
+    await fireEvent.press(screen.getByText('Xã Hòa Vang'));
+    expect(p.onChoice).toHaveBeenCalledWith('120');
+  });
+
   it('"Gõ thay" sends the typed answer into the conversation', async () => {
     const p = props({ typing: true });
     await render(<InterviewTurn {...p} />);

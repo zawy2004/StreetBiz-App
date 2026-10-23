@@ -10,7 +10,7 @@ import { TextField } from '@/components/forms/TextField';
 import { LeafletMap } from '@/components/map/LeafletMap';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { formatVnd } from '@/utils/format';
-import { formatHours, formatStartDate, isConfirmed } from './interview-state';
+import { formatHours, formatStartDate, isConfirmed, searchWardChoices } from './interview-state';
 import { useClipRecorder } from './useClipRecorder';
 import type { useReadAloud } from './useReadAloud';
 import type { AssistAudio, AssistDraft, AssistQuestion, AssistSlotPreview } from './voice-registration.types';
@@ -104,6 +104,7 @@ export function InterviewTurn(props: InterviewProps) {
 function Answer(props: InterviewProps) {
   const { question, busy } = props;
   if (question.input === 'MAP') return <PinConfirm {...props} />;
+  if (question.key === 'WARD') return <WardAnswer {...props} />;
   if (question.input === 'CHOICE' || question.input === 'CONFIRM') {
     const confirm = question.input === 'CONFIRM';
     return (
@@ -129,6 +130,50 @@ function Answer(props: InterviewProps) {
   if (question.input === 'MANUAL') return <ManualAnswer {...props} />;
   if (props.live) return <LiveVoiceAnswer {...props} />;
   return <VoiceAnswer {...props} />;
+}
+
+/**
+ * The ward: the assistant's guesses as buttons, and a search over every phường, xã and đặc khu
+ * (94 in Đà Nẵng since 1/7/2025) for when the guess is wrong or there is none.
+ */
+function WardAnswer({ question, busy, onChoice }: InterviewProps) {
+  const suggested = question.choices.slice(0, question.suggestedCount ?? 0);
+  const [query, setQuery] = useState('');
+  const matches = searchWardChoices(question.choices, query, 6);
+  const pick = (c: { value: string; label: string }) => (
+    <Button
+      key={c.value}
+      label={c.label}
+      size={56}
+      variant="secondary"
+      disabled={busy}
+      onPress={() => {
+        void Haptics.selectionAsync();
+        onChoice(c.value);
+      }}
+    />
+  );
+
+  return (
+    <View style={{ gap: 10 }}>
+      {suggested.map(pick)}
+      <TextField
+        label={suggested.length > 0 ? 'Không phải? Tìm phường, xã khác' : 'Tìm phường, xã'}
+        value={query}
+        onChangeText={setQuery}
+        placeholder="VD: Hải Châu, Hòa Vang"
+        autoCorrect={false}
+        returnKeyType="search"
+      />
+      {query.trim() ? (
+        matches.length > 0 ? (
+          matches.map(pick)
+        ) : (
+          <Text style={[text.footnote, { color: colors.muted }]}>Không thấy “{query.trim()}”. Thử gõ tên khác, không cần dấu.</Text>
+        )
+      ) : null}
+    </View>
+  );
 }
 
 /** Live conversation: the microphone is already open, so the answer is simply spoken (or typed). */
@@ -361,7 +406,7 @@ function GrowingFile({ draft, location, wardName }: Pick<InterviewProps, 'draft'
     { key: 'vendorType', label: 'Cách bán', value: draft.vendorType ? (draft.vendorType === 'FIXED_STOREFRONT' ? 'Cửa hàng cố định' : 'Xe đẩy, gánh, bán rong') : null },
     { key: 'hours', label: 'Giờ bán', value: formatHours(draft.hours) || null },
     { key: 'location', label: 'Chỗ bán', value: draft.locationSkipped ? 'Chọn sau' : (location?.label ?? draft.locationText ?? null), pending: !draft.locationConfirmed && !draft.locationSkipped && draft.latitude != null },
-    { key: 'ward', label: 'Phường', value: wardName(draft.wardUnitId) },
+    { key: 'ward', label: 'Phường/xã', value: wardName(draft.wardUnitId) },
     ...(draft.vendorType === 'FIXED_STOREFRONT' ? [{ key: 'declaredAddress', label: 'Địa chỉ', value: draft.declaredAddress ?? null }] : []),
     { key: 'capitalAmount', label: 'Vốn', value: draft.capitalAmount != null ? formatVnd(draft.capitalAmount) : null, pending: draft.capitalAmount != null && waiting('capitalAmount') },
     { key: 'laborCount', label: 'Số người', value: draft.laborCount != null ? `${draft.laborCount} người` : null, pending: draft.laborCount != null && waiting('laborCount') },
