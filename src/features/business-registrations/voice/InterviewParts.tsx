@@ -32,6 +32,8 @@ export type InterviewProps = {
   onTypingChange: (typing: boolean) => void;
   reader: ReturnType<typeof useReadAloud>;
   autoRead: boolean;
+  /** The live conversation is running: the assistant speaks the question and the microphone is open. */
+  live?: boolean;
   onVoice: (clip: AssistAudio) => void;
   onText: (text: string) => void;
   onChoice: (value: string) => void;
@@ -47,13 +49,15 @@ export type InterviewProps = {
  * what the assistant heard, and the registration filling up underneath.
  */
 export function InterviewTurn(props: InterviewProps) {
-  const { question, reader, autoRead } = props;
+  const { question, reader, autoRead, live } = props;
+  // Read each new question once -- only with a Vietnamese voice (it may be found after the first
+  // question); in the live conversation the assistant speaks.
   const lastRead = useRef('');
   useEffect(() => {
-    if (!autoRead || lastRead.current === question.text) return;
+    if (live || !autoRead || !reader.supported || lastRead.current === question.text) return;
     lastRead.current = question.text;
     reader.speak(question.text);
-  }, [autoRead, question.text, reader]);
+  }, [autoRead, live, question.text, reader]);
 
   return (
     <View style={{ gap: 20 }}>
@@ -62,19 +66,21 @@ export function InterviewTurn(props: InterviewProps) {
           <Text accessibilityRole="header" accessibilityLiveRegion="polite" style={{ flex: 1, fontFamily: fonts.heavy, fontSize: 24, lineHeight: 31, letterSpacing: -0.2, color: colors.ink }}>
             {question.text}
           </Text>
-          <Pressable
-            onPress={() => (reader.speaking ? reader.stop() : reader.speak(question.text))}
-            accessibilityRole="button"
-            accessibilityLabel={reader.speaking ? 'Dừng đọc' : 'Đọc lại câu hỏi'}
-            hitSlop={8}
-            style={({ pressed }) => ({ width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? colors.sticker : colors.mangoTint })}
-          >
-            <Icon sf={reader.speaking ? 'stop.fill' : 'speaker.wave.2.fill'} md={reader.speaking ? 'stop' : 'volume_up'} size={22} color={colors.onMango} />
-          </Pressable>
+          {reader.supported && !live ? (
+            <Pressable
+              onPress={() => (reader.speaking ? reader.stop() : reader.speak(question.text))}
+              accessibilityRole="button"
+              accessibilityLabel={reader.speaking ? 'Dừng đọc' : 'Đọc lại câu hỏi'}
+              hitSlop={8}
+              style={({ pressed }) => ({ width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? colors.sticker : colors.mangoTint })}
+            >
+              <Icon sf={reader.speaking ? 'stop.fill' : 'speaker.wave.2.fill'} md={reader.speaking ? 'stop' : 'volume_up'} size={22} color={colors.onMango} />
+            </Pressable>
+          ) : null}
         </View>
         {/* Keyed by the question: a new question starts with an empty box and a fresh pin. */}
         <Answer key={question.key} {...props} />
-        {props.transcript ? (
+        {props.transcript && !live ? (
           <View style={{ padding: 12, borderRadius: radius.control, backgroundColor: colors.sunken }}>
             <Text style={[text.footnote, { color: colors.muted }]}>Trợ lý nghe được</Text>
             <Text style={[text.callout, { color: colors.ink }]}>“{props.transcript}”</Text>
@@ -121,7 +127,47 @@ function Answer(props: InterviewProps) {
     );
   }
   if (question.input === 'MANUAL') return <ManualAnswer {...props} />;
+  if (props.live) return <LiveVoiceAnswer {...props} />;
   return <VoiceAnswer {...props} />;
+}
+
+/** Live conversation: the microphone is already open, so the answer is simply spoken (or typed). */
+function LiveVoiceAnswer(props: InterviewProps) {
+  const typing = props.typing || !props.voiceConsent;
+  const [text_, setText] = useState('');
+  return (
+    <View style={{ gap: 12 }}>
+      {typing ? (
+        <View style={{ gap: 12 }}>
+          <TextField label="Gõ câu trả lời" value={text_} onChangeText={setText} placeholder={TYPED_EXAMPLES[props.question.key] ?? TYPED_EXAMPLES.OPENING} multiline maxLength={500} />
+          <Button
+            label="Gửi"
+            loading={props.busy}
+            disabled={!text_.trim() || props.busy}
+            onPress={() => {
+              props.onText(text_);
+              setText('');
+            }}
+          />
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: radius.control, backgroundColor: colors.brandTint }}>
+          <Icon sf="mic.fill" md="mic" size={20} color={colors.primary} />
+          <Text style={[text.headline, { flex: 1, color: colors.ink }]}>Cứ nói câu trả lời — trợ lý đang nghe.</Text>
+        </View>
+      )}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+        {props.voiceConsent ? (
+          <LinkButton
+            label={typing ? 'Nói thay' : 'Gõ thay'}
+            icon={typing ? { sf: 'mic', md: 'mic' } : { sf: 'keyboard', md: 'keyboard' }}
+            onPress={() => props.onTypingChange(!typing)}
+          />
+        ) : null}
+        {props.question.skippable ? <LinkButton label="Bỏ qua" disabled={props.busy} onPress={props.onSkip} /> : null}
+      </View>
+    </View>
+  );
 }
 
 /** The microphone: tap to talk, tap again to send; "Gõ thay" types the same answer. */

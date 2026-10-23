@@ -25,11 +25,14 @@ import { REGISTRATIONS_KEY, useRegistrations } from '../useRegistrations';
 import { buildCardGroups, missingRows, speakableGroup, type CardGroup, type CardRow, type EditTarget } from './confirm-card-model';
 import { answerChoice, baseQuestionKey, cardFieldOf, confirmPin, greeting, skipQuestion, SOURCE_LABELS, suggestDisplayName, typedAnswer, type CardField, type FieldSource } from './interview-state';
 import { InterviewTurn } from './InterviewParts';
+import { fallbackNotice } from './live-interview';
+import { LivePanel, LiveStart } from './LiveConversation';
 import { discardClip } from './useClipRecorder';
+import { canTalkLive, useLiveInterview } from './useLiveInterview';
 import { useReadAloud } from './useReadAloud';
 import { cardValues, copyInterviewToWizard, editedFields, fileAssistedRegistration } from './voice-filing';
 import { voiceRegistrationApi } from './voice-registration-api';
-import type { AssistAudio, AssistDraft } from './voice-registration.types';
+import type { AssistAudio, AssistDraft, AssistTurnResult } from './voice-registration.types';
 import { useVoiceSessionStore, type VoicePhase } from './voice-session-store';
 
 const STEPS: { phases: VoicePhase[]; title: string }[] = [
@@ -193,55 +196,104 @@ function InterviewStep() {
   const [error, setError] = useState<string>();
   const [autoRead, setAutoRead] = useState(true);
   const [typing, setTyping] = useState(false);
+  // X01 v2: talk continuously when this Expo Go can stream the microphone; tap-to-talk is the fallback.
+  const [liveCapable] = useState(canTalkLive);
+  const [mode, setMode] = useState<'live' | 'turn'>(() => (session.voiceConsent && liveCapable ? 'live' : 'turn'));
+  const [liveNotice, setLiveNotice] = useState<string>();
   const scroll = useRef<ScrollView>(null);
   const inFlight = useRef(false);
 
   const wardName = useCallback((unitId: number | null | undefined) => wards.find((w) => w.unitId === unitId)?.unitName ?? null, [wards]);
 
-  const send = useCallback(async (draft: AssistDraft, answer?: { text?: string; audio?: AssistAudio }) => {
-    // One turn at a time: a double tap must not spend two calls of the vendor's rate limit.
-    if (inFlight.current) return;
-    inFlight.current = true;
-    const s = useVoiceSessionStore.getState();
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await voiceRegistrationApi.turn({ questionKey: baseQuestionKey(s.question), draft, text: answer?.text, audio: answer?.audio, voiceConsent: s.voiceConsent });
-      s.applyTurn(result, !!answer);
-      if (answer) void Haptics.notificationAsync(result.proposals.length ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
-      scroll.current?.scrollTo({ y: 0, animated: true });
-      if (result.done) {
-        const now = useVoiceSessionStore.getState();
-        if (!now.displayName) now.setDisplayName(suggestDisplayName(result.draft.businessLine, now.draft.salutation ?? 'bạn', now.kyc?.fullName));
-        now.setPhase('photos');
-      }
-    } catch (err) {
-      if (err instanceof ApiError && (err.code === 'ai_unavailable' || err.status === 503)) setAiDown(true);
-      else if (err instanceof ApiError && err.status === 429) setError('Bạn thao tác hơi nhanh. Chờ một chút rồi thử lại, hoặc điền tiếp bằng tay.');
-      else setError(errorMessage(err));
-    } finally {
-      // The recording was only needed for this one request.
-      discardClip(answer?.audio);
-      inFlight.current = false;
-      setBusy(false);
-    }
+  /** The planner has nothing left to ask: name the shop and move on to the photo. */
+  const finishInterview = useCallback((result: AssistTurnResult) => {
+    const now = useVoiceSessionStore.getState();
+    if (!now.displayName) now.setDisplayName(suggestDisplayName(result.draft.businessLine, now.draft.salutation ?? 'bạn', now.kyc?.fullName));
+    now.setPhase('photos');
   }, []);
 
-  // First question (and after the app dropped it). Deferred a tick so a remount cancels it
-  // instead of asking twice.
+  // Done while talking: let the assistant finish its last sentence before the screen moves on,
+  // but never wait long for it.
+  const finishing = useRef<{ result: AssistTurnResult; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const finishTalking = useCallback(() => {
+    const pending = finishing.current;
+    if (!pending) return;
+    finishing.current = null;
+    clearTimeout(pending.timer);
+    finishInterview(pending.result);
+  }, [finishInterview]);
+  useEffect(() => () => clearTimeout(finishing.current?.timer), []);
+
+  const live = useLiveInterview({
+    onAssist: (result, cause) => {
+      useVoiceSessionStore.getState().applyTurn(result, cause === 'voice');
+      if (cause === 'voice') void Haptics.notificationAsync(result.proposals.length ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
+      scroll.current?.scrollTo({ y: 0, animated: true });
+      if (result.done && !finishing.current) finishing.current = { result, timer: setTimeout(finishTalking, 8000) };
+    },
+    onTurnComplete: finishTalking,
+    onStopped: (reason, message) => {
+      if (finishing.current) {
+        finishTalking();
+        return;
+      }
+      // A finished interview has left this screen; anything else carries on with tap-to-talk.
+      if (useVoiceSessionStore.getState().phase !== 'interview') return;
+      setMode('turn');
+      setLiveNotice(message ?? fallbackNotice(reason));
+    },
+  });
+  const talking = mode === 'live' && live.active;
+
+  const send = useCallback(
+    async (draft: AssistDraft, answer?: { text?: string; audio?: AssistAudio }) => {
+      // One turn at a time: a double tap must not spend two calls of the vendor's rate limit.
+      if (inFlight.current) return;
+      inFlight.current = true;
+      const s = useVoiceSessionStore.getState();
+      setBusy(true);
+      setError(undefined);
+      try {
+        const result = await voiceRegistrationApi.turn({ questionKey: baseQuestionKey(s.question), draft, text: answer?.text, audio: answer?.audio, voiceConsent: s.voiceConsent });
+        s.applyTurn(result, !!answer);
+        if (answer) void Haptics.notificationAsync(result.proposals.length ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
+        scroll.current?.scrollTo({ y: 0, animated: true });
+        if (result.done) finishInterview(result);
+      } catch (err) {
+        if (err instanceof ApiError && (err.code === 'ai_unavailable' || err.status === 503)) setAiDown(true);
+        else if (err instanceof ApiError && err.status === 429) setError('Bạn thao tác hơi nhanh. Chờ một chút rồi thử lại, hoặc điền tiếp bằng tay.');
+        else setError(errorMessage(err));
+      } finally {
+        // The recording was only needed for this one request.
+        discardClip(answer?.audio);
+        inFlight.current = false;
+        setBusy(false);
+      }
+    },
+    [finishInterview],
+  );
+
+  // First question in tap-to-talk (and after the app dropped it). Deferred a tick so a remount
+  // cancels it instead of asking twice. The live conversation gets its first question when it starts.
   useEffect(() => {
-    if (session.question || error || aiDown) return;
+    if (mode !== 'turn' || session.question || error || aiDown) return;
     const timer = setTimeout(() => void send(useVoiceSessionStore.getState().draft), 0);
     return () => clearTimeout(timer);
-  }, [session.question, error, aiDown, send]);
+  }, [mode, session.question, error, aiDown, send]);
 
   const toWizard = () => {
     copyInterviewToWizard();
     returnToStep('type');
   };
+  const startLive = () => {
+    reader.stop();
+    setLiveNotice(undefined);
+    void live.start(session.draft, session.voiceConsent);
+  };
   const afterTap = (draft: AssistDraft, sources?: Partial<Record<CardField, FieldSource>>) => {
     session.setDraft(draft, sources);
-    void send(draft);
+    if (talking) live.sendDraft(draft);
+    else void send(draft);
   };
   const question = session.question;
 
@@ -250,21 +302,43 @@ function InterviewStep() {
       <Progress phase="interview" />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <AiTag label="Bạn đang nói chuyện với trợ lý AI" />
-        <Pressable
-          onPress={() => {
-            reader.stop();
-            setAutoRead((v) => !v);
-          }}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: autoRead }}
-          accessibilityLabel="Tự đọc câu hỏi"
-          hitSlop={8}
-          style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6 }}
-        >
-          <Icon sf={autoRead ? 'speaker.wave.2.fill' : 'speaker.slash.fill'} md={autoRead ? 'volume_up' : 'volume_off'} size={16} color={colors.primary} />
-          <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>{autoRead ? 'Đang đọc to' : 'Đọc to: tắt'}</Text>
-        </Pressable>
+        {mode === 'turn' && liveCapable && session.voiceConsent ? (
+          <Pressable
+            onPress={() => {
+              setLiveNotice(undefined);
+              setMode('live');
+            }}
+            accessibilityRole="button"
+            hitSlop={8}
+            style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+          >
+            <Icon sf="waveform" md="graphic_eq" size={16} color={colors.primary} />
+            <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>Trò chuyện</Text>
+          </Pressable>
+        ) : null}
+        {mode === 'turn' && reader.supported ? (
+          <Pressable
+            onPress={() => {
+              reader.stop();
+              setAutoRead((v) => !v);
+            }}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: autoRead }}
+            accessibilityLabel="Tự đọc câu hỏi"
+            hitSlop={8}
+            style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+          >
+            <Icon sf={autoRead ? 'speaker.wave.2.fill' : 'speaker.slash.fill'} md={autoRead ? 'volume_up' : 'volume_off'} size={16} color={colors.primary} />
+            <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>{autoRead ? 'Đang đọc to' : 'Đọc to: tắt'}</Text>
+          </Pressable>
+        ) : null}
       </View>
+
+      {liveNotice ? (
+        <View accessibilityRole="alert" style={{ padding: 14, borderRadius: radius.control, backgroundColor: colors.mangoTint }}>
+          <Text style={[text.footnote, { color: colors.onMango, fontFamily: fonts.semibold }]}>{liveNotice}</Text>
+        </View>
+      ) : null}
 
       {error ? (
         <View accessibilityRole="alert" style={{ gap: 10, padding: 14, borderRadius: radius.control, backgroundColor: colors.dangerTint }}>
@@ -273,11 +347,16 @@ function InterviewStep() {
         </View>
       ) : null}
 
-      {question ? (
+      {mode === 'live' && !live.active ? <LiveStart question={question?.text ?? null} onStart={startLive} onTapToTalk={() => setMode('turn')} /> : null}
+      {talking ? (
+        <LivePanel status={live.status} captions={live.captions} notice={live.notice} muted={live.muted} onMute={live.setMuted} onInterrupt={live.interrupt} onStop={live.end} />
+      ) : null}
+
+      {question && (mode === 'turn' || talking) ? (
         <InterviewTurn
           question={question}
           draft={session.draft}
-          busy={busy}
+          busy={talking ? live.pending : busy}
           transcript={session.transcript}
           warnings={session.warnings}
           location={session.location}
@@ -289,8 +368,12 @@ function InterviewStep() {
           onTypingChange={setTyping}
           reader={reader}
           autoRead={autoRead}
+          live={talking}
           onVoice={(audio) => void send(session.draft, { audio })}
-          onText={(t) => void send(session.draft, { text: t })}
+          onText={(t) => {
+            if (talking) live.sendText(t);
+            else void send(session.draft, { text: t });
+          }}
           onChoice={(value) => {
             const field = question.input === 'CONFIRM' ? null : cardFieldOf(question.field);
             afterTap(answerChoice(session.draft, question, value), field ? { [field]: 'CHOSEN' } : undefined);
@@ -306,14 +389,14 @@ function InterviewStep() {
           onSkip={() => afterTap(skipQuestion(session.draft, question))}
           onWizard={toWizard}
         />
-      ) : aiDown ? (
+      ) : mode === 'turn' && aiDown ? (
         <View style={{ gap: 12, padding: 16, borderRadius: radius.control, backgroundColor: colors.mangoTint }}>
           <Text style={[text.subhead, { color: colors.onMango }]}>Trợ lý AI đang bận. Bạn điền tiếp bằng tay nhé.</Text>
           <Button label="Điền tiếp bằng tay" onPress={toWizard} />
         </View>
-      ) : (
+      ) : mode === 'turn' ? (
         <View style={{ height: 220, borderRadius: radius.pass, backgroundColor: colors.sunken }} accessibilityLabel="Đang chuẩn bị câu hỏi" />
-      )}
+      ) : null}
 
       <Pressable onPress={toWizard} accessibilityRole="button" style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.primary }}>Điền từng bước thay vì nói</Text>

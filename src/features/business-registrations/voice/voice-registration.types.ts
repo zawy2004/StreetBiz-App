@@ -165,3 +165,29 @@ export type AssistConfirmation = {
   registrationId: number;
   confirmedAt: string;
 };
+
+/** X01 v2: a single-use ticket for the live conversation (Gemini Live behind the server). */
+export type AssistLiveTicket = {
+  sessionId: string;
+  ticket: string;
+  expiresAt: string;
+  maxSeconds: number;
+  inputSampleRate: number;
+  outputSampleRate: number;
+  /** "/hubs/registration-voice/{sessionId}", beside /api on the same host. */
+  streamPath: string;
+};
+
+/**
+ * JSON messages of the live stream. Audio comes as binary frames: [uint32 generation, little
+ * endian][PCM16 mono at outputSampleRate].
+ */
+export type LiveServerEvent =
+  | { type: 'ready'; sessionId: string; maxSeconds: number }
+  | { type: 'state'; state: string; generation?: number }
+  | { type: 'assist'; version: number; cause: 'voice' | 'screen'; result: AssistTurnResult }
+  | { type: 'input_transcript' | 'output_transcript'; text: string; generation: number }
+  | { type: 'interrupted' | 'turn_complete'; generation: number }
+  | { type: 'warning'; code: string; secondsLeft?: number; message?: string }
+  | { type: 'error'; code: string; message: string }
+  | { type: 'ended'; reason: string };

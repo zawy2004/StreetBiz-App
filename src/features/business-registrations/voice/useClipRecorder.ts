@@ -13,7 +13,7 @@ import type { AssistAudio } from './voice-registration.types';
 
 export type ClipRecorderState = 'idle' | 'requesting' | 'recording' | 'error';
 
-/** Mono AAC in an .m4a: ~240 KB for 30 s, well inside the server's 2 MB clip limit. */
+/** Mono AAC in an .m4a: ~480 KB for 60 s, well inside the server's 4 MB clip limit. */
 const OPTIONS: RecordingOptions = {
   extension: '.m4a',
   sampleRate: 44100,
@@ -43,7 +43,7 @@ export function discardClip(clip: AssistAudio | null | undefined) {
  * Records one answer with the phone's microphone: tap to start, tap to stop, or it stops by itself
  * at `maxSeconds`. The clip goes to `onClip` as a multipart file part (null when too short).
  */
-export function useClipRecorder(onClip: (clip: AssistAudio | null) => void, maxSeconds = 30) {
+export function useClipRecorder(onClip: (clip: AssistAudio | null) => void, maxSeconds = 60) {
   const recorder = useAudioRecorder(OPTIONS);
   const [state, setState] = useState<ClipRecorderState>('idle');
   const [error, setError] = useState<string>();

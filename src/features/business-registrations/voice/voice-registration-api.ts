@@ -5,6 +5,7 @@ import type {
   AssistConfirmation,
   AssistConfirmationRequest,
   AssistDraft,
+  AssistLiveTicket,
   AssistTurnResult,
   QuestionKey,
 } from './voice-registration.types';
@@ -41,6 +42,13 @@ export const voiceRegistrationApi = {
     }
     return apiUpload<AssistTurnResult>('/vendor/registrations/assist/turn', form);
   },
+
+  /**
+   * X01 v2: a ticket for the live conversation. 503 `voice_unavailable`, 429 `voice_daily_limit`
+   * / `voice_busy` and 409 `voice_active` all mean "use tap-to-talk (`turn`) instead".
+   */
+  startLive: (draft: AssistDraft, voiceConsent: boolean) =>
+    apiPost<AssistLiveTicket>('/vendor/registrations/assist/live', { draft, voiceConsent }),
 
   /** After filing: the vendor accepted the assistant's draft. Idempotent per registration. */
   confirm: (registrationId: number, body: AssistConfirmationRequest) =>
