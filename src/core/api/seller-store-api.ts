@@ -25,6 +25,10 @@ export type SellerMenuItem = {
   requiresFoodSafety: boolean;
   foodSafetyStatus: DishFoodSafetyStatus;
   foodSafetyExpiresOn: string | null;
+  /** English name for the price board, typed by the vendor (optional). */
+  nameEn: string | null;
+  /** What one price buys ("ổ", "ly", "kg"…), as posted on the price board. */
+  priceUnit: string;
 };
 /** The stall's dishes plus how many it may sell at once. */
 export type SellerMenu = { items: SellerMenuItem[]; maxItems: number };
@@ -36,7 +40,59 @@ export type MenuInput = {
   availabilityStatus: string;
   /** From `uploadMenuImage`; required for a new dish, omit to keep the current photo. */
   imageUrl?: string | null;
+  /** Required, 1–30 characters (Luật Giá 2023 Điều 29: a posted price names its unit); 422 without it. */
+  priceUnit: string;
+  /** Optional, at most 180 characters. */
+  nameEn?: string | null;
 };
+/** One dish as the price board shows it. */
+export type PriceBoardItem = {
+  menuItemId: number;
+  name: string;
+  nameEn: string | null;
+  priceUnit: string;
+  unitPrice: number;
+};
+export type PriceChangeKind = 'CREATED' | 'UPDATED' | 'ARCHIVED' | 'RESTORED';
+/** One append-only row of the stall's price history: the whole dish as it stood after a change. */
+export type PriceHistoryEntry = {
+  priceHistoryId: number;
+  menuItemId: number;
+  name: string;
+  nameEn: string | null;
+  priceUnit: string;
+  unitPrice: number;
+  /** The dish's price on its previous row; null for its first row. */
+  previousUnitPrice: number | null;
+  isListed: boolean;
+  changeKind: PriceChangeKind;
+  changedAt: string;
+  /** The vendor's own name, or "Quản trị viên" for a moderator's hide/restore. */
+  changedByName: string;
+};
+/**
+ * BUY-06: the stall's price board as the vendor manages it. `version` is "Bản số N"; `qrUrl` is
+ * what the printed board's QR encodes (`/q/{token}?v=N`) and `printUrl` the public A5 page. Both
+ * are null without a live permit or without the server's public base URL.
+ */
+export type SellerPriceBoard = {
+  storefrontId: number;
+  storefrontName: string;
+  slotCode: string | null;
+  version: number;
+  updatedAt: string | null;
+  qrUrl: string | null;
+  printUrl: string | null;
+  items: PriceBoardItem[];
+  /** The 50 latest changes, newest first. */
+  history: PriceHistoryEntry[];
+  /**
+   * One paper board per slot the business holds with a live permit: same prices, each with that
+   * slot's own signed QR. `qrUrl`/`printUrl` above are the first of these (the storefront's slot).
+   */
+  boards: PriceBoardPermit[];
+};
+export type PriceBoardPermit = { permitId: number; contractId: number; slotCode: string; qrUrl: string | null; printUrl: string | null };
 export type SellerCategory = { categoryId: number; name: string; requiresFoodSafety: boolean };
 export type RentalChoice = {
   contractId: number;
@@ -68,6 +124,7 @@ export const sellerStoreApi = {
       : apiPut<SellerMenuItem>(`/seller/storefronts/${storeId}/menu-items/${id}`, input),
   archiveItem: (storeId: number, id: number) =>
     apiDelete<void>(`/seller/storefronts/${storeId}/menu-items/${id}`),
+  priceBoard: (storeId: number) => apiGet<SellerPriceBoard>(`/seller/storefronts/${storeId}/price-board`),
   contracts: () => apiGet<RentalChoice[]>('/vendor/rental-contracts?status=ACTIVE'),
   applications: () => apiGet<ApplicationChoice[]>('/vendor/rental-applications'),
 };

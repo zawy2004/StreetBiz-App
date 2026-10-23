@@ -22,13 +22,19 @@ import type { NotificationItem } from './notifications-api';
  *   ZONE_*_CHANGED            PricingZone                    price, fees or hours of the vendor's zone
  *   FOOD_SAFETY               food-safety                    food-safety application reviewed
  *   CONTENT_MODERATION        ReportedContent                the vendor's menu item or storefront was hidden
+ *   VENDOR_REPORT_AGAINST_YOU VendorReport                   a buyer reported the stall (never who); the
+ *                                                            report itself is the ward's, so it opens the
+ *                                                            stall's price board and history
+ *   VENDOR_REPORT_RESOLVED    VendorReport                   the ward closed a report about the stall
  * CUSTOMER
  *   ORDER                     ORDER / OrderArrivalAck        payment, accepted, ready, completed, cancelled
  *   ORDER_COMPLAINT           Complaint                      complaint resolved
  *   CONTENT_MODERATION        ReportedContent                the customer's report closed, or their review hidden
+ *   VENDOR_REPORT_RESOLVED    VendorReport                   the ward closed the buyer's report (outcome, refund)
  * WARD_AUTHORITY
  *   WARD_REVIEW               REGISTRATION                   a filing waits for review (demo seed only;
  *                                                            no BE workflow notifies the ward yet)
+ *   VENDOR_REPORT_NEW         VendorReport                   a citizen report about a stall of the ward
  * EVERY ROLE (PLATFORM_ADMIN receives only this)
  *   SECURITY_ALERT            UserAccount                    sign-in from a new device, password changed
  *
@@ -56,8 +62,11 @@ export function notificationTarget(item: NotificationItem, role: RoleCode | unde
 
   if (item.type === 'SECURITY_ALERT') return '/account/sessions';
 
+  const aboutReport = entity === 'VendorReport' || item.type.startsWith('VENDOR_REPORT_');
+
   if (role === 'WARD_AUTHORITY') {
     if (entity === 'BusinessRegistration' && id) return `/ward/inbox/registrations/${id}`;
+    if (aboutReport) return entity === 'VendorReport' && id ? `/ward/inbox/reports/${id}` : '/ward/inbox/reports';
     if (item.type === 'WARD_REVIEW') return '/ward/inbox';
     return null;
   }
@@ -65,10 +74,15 @@ export function notificationTarget(item: NotificationItem, role: RoleCode | unde
   if (role === 'CUSTOMER') {
     if ((entity === 'ORDER' || entity === 'OrderArrivalAck') && id) return `/customer/orders/${id}`;
     if (item.type === 'ORDER_COMPLAINT' || item.type === 'ORDER') return '/customer/orders';
+    if (aboutReport) return entity === 'VendorReport' && id ? `/customer/account/reports/${id}` : '/customer/account/reports';
     return null;
   }
 
   if (role !== 'VENDOR') return null;
+
+  // The vendor never opens the report (it is the ward's, and the reporter stays unnamed): the
+  // stall's price board and its history are where the vendor checks and, if due, refunds.
+  if (aboutReport) return '/vendor/home/store/prices';
 
   switch (entity) {
     case 'ORDER':
@@ -155,6 +169,11 @@ export function notificationVisual(item: NotificationItem): { icon: { sf: string
       return { icon: { sf: 'fork.knife', md: 'restaurant' }, tone: 'primary' };
     case 'CONTENT_MODERATION':
       return { icon: { sf: 'flag.fill', md: 'flag' }, tone: 'neutral' };
+    case 'VENDOR_REPORT_NEW':
+    case 'VENDOR_REPORT_AGAINST_YOU':
+      return { icon: { sf: 'exclamationmark.bubble.fill', md: 'feedback' }, tone: 'warning' };
+    case 'VENDOR_REPORT_RESOLVED':
+      return { icon: { sf: 'checkmark.bubble.fill', md: 'mark_chat_read' }, tone: 'primary' };
     case 'SECURITY_ALERT':
       return { icon: { sf: 'lock.fill', md: 'lock' }, tone: 'error' };
     default:

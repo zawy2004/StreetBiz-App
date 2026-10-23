@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 
@@ -11,6 +11,7 @@ import {
   type CommerceCart,
   type MarketplaceMenuItem,
 } from '@/core/api';
+import { signInHref } from '@/features/authentication/sign-in-return';
 import { useAuthStore } from '@/store/auth-store';
 
 /**
@@ -32,11 +33,14 @@ export function useCart() {
 export const cartCount = (cart: CommerceCart | null | undefined) =>
   cart?.items.reduce((n, i) => n + i.quantity, 0) ?? 0;
 
-/** Sends a guest to sign in, explaining why (the web's "Đăng nhập để đặt món"). */
-export function askToSignIn(reason = 'Đăng nhập để thêm món vào giỏ và đặt trước.') {
+/**
+ * Sends a guest to sign in, explaining why (the web's "Đăng nhập để đặt món"). With `comeBack`, a
+ * buyer returns to this screen afterwards, with what they had typed (the complaint form).
+ */
+export function askToSignIn(reason = 'Đăng nhập để thêm món vào giỏ và đặt trước.', comeBack = false) {
   Alert.alert('Cần đăng nhập', reason, [
     { text: 'Để sau', style: 'cancel' },
-    { text: 'Đăng nhập', onPress: () => router.push('/auth/sign-in') },
+    { text: 'Đăng nhập', onPress: () => router.push(signInHref(comeBack) as Href) },
   ]);
 }
 

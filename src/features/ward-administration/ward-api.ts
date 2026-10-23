@@ -586,6 +586,10 @@ export const complianceApi = {
     containmentMeasures?: string;
     explanationRequired?: boolean;
     explanationMethod?: string;
+    /** WARD-19: the citizen report this record is raised from. It must be PENDING, of this ward and
+     * about the same vendor or slot; the report then closes (VIOLATION_RECORDED) in the same
+     * transaction. One record per report. */
+    sourceReportId?: number;
   }) => apiPost<WardViolationDetail>('/ward/violations', request),
   /** Điều 61 Luật XLVPHC: records the violator's giải trình before a sanction may issue. */
   recordExplanation: (id: number, content: string) =>
@@ -675,6 +679,8 @@ export const violationTypeLabels: Record<string, string> = {
   STREET_VENDING_RESTRICTED: 'Bán hàng rong tại tuyến phố cấm',
   HYGIENE_LITTERING: 'Vứt rác, mất vệ sinh vỉa hè',
   OBSTRUCT_PUBLIC_ORDER: 'Cản trở an ninh trật tự công cộng',
+  PRICE_NOT_POSTED: 'Không niêm yết giá',
+  PRICE_ABOVE_POSTED: 'Bán cao hơn giá niêm yết',
 };
 
 export const caseLabels: Record<CaseKind, string> = {

@@ -24,8 +24,9 @@ import type { PickedFile } from '@/core/api/upload';
 import { formatDay } from '@/features/food-safety/format';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { PriceSticker } from '@/ui';
-import { formatVnd } from '@/utils/format';
+import { formatVietnamDateTime, formatVnd } from '@/utils/format';
 import { buyerVisibility } from '../menu-view';
+import { COMMON_UNITS, historyLine, NAME_EN_MAX, PRICE_UNIT_MAX, priceWithUnit } from '../price-board-view';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_PRICE = 50_000_000;
@@ -78,7 +79,7 @@ function MenuTile({
       <View style={{ paddingTop: 8 }}>
         <PressableScale
           onPress={onEdit}
-          accessibilityLabel={`Sửa món ${item.name}, ${sold ? 'đang hết món' : formatVnd(item.unitPrice)}`}
+          accessibilityLabel={`Sửa món ${item.name}, ${sold ? 'đang hết món' : `${formatVnd(item.unitPrice)} một ${item.priceUnit}`}`}
           style={{ width, aspectRatio: 1, borderRadius: radius.photo, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: item.imageUrl ? colors.sunken : colors.kerbPaint }}
         >
           {item.imageUrl ? (
@@ -100,7 +101,7 @@ function MenuTile({
           </View>
         </PressableScale>
         <PriceSticker
-          value={sold ? 'Hết món' : formatVnd(item.unitPrice)}
+          value={sold ? 'Hết món' : `${formatVnd(item.unitPrice)}/${item.priceUnit}`}
           tilt={-4}
           style={[{ position: 'absolute', top: 0, left: 8 }, sold ? { backgroundColor: colors.sunken } : null]}
         />
@@ -151,6 +152,9 @@ export function MenuScreen() {
         description: item.description,
         unitPrice: item.unitPrice,
         availabilityStatus: item.availabilityStatus === 'AVAILABLE' ? 'SOLD_OUT' : 'AVAILABLE',
+        // The API refuses a dish without its unit; the switch keeps both as they are.
+        priceUnit: item.priceUnit,
+        nameEn: item.nameEn,
       }),
     onMutate: (item) => setSwitching(item.menuItemId),
     onSettled: () => setSwitching(null),
@@ -279,6 +283,23 @@ export function MenuScreen() {
         </Pressable>
       )}
 
+      {/* The paper price board the law asks for, its QR and its history */}
+      <Pressable
+        onPress={() => go(`/vendor/home/store/prices?storefrontId=${storeId}`)}
+        accessibilityRole="button"
+        accessibilityLabel="Bảng giá và lịch sử giá. In bảng giá treo tại quầy"
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: pressed ? colors.sunken : colors.card, boxShadow: shadow.card })}
+      >
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.mangoTint, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon sf="tag.fill" md="sell" size={17} color={colors.onMango} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}>Bảng giá & lịch sử giá</Text>
+          <Text style={[text.footnote, { color: colors.muted }]}>In bảng giá có mã QR, treo tại quầy</Text>
+        </View>
+        <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
+      </Pressable>
+
       {items.length === 0 ? (
         <StateView icon={{ sf: 'fork.knife', md: 'restaurant' }} title="Chưa có món nào" body="Thêm món có ảnh thật của quán để khách nhận ra ngay." />
       ) : (
@@ -299,7 +320,11 @@ export function MenuScreen() {
   );
 }
 
-/** Add or edit one dish: a real photo (required for a new dish), name, price, category, description. */
+/**
+ * Add or edit one dish: a real photo (required for a new dish), name, price and the unit it is for
+ * (required: a posted price names its unit), an English name for visitors (optional), category,
+ * description; for a dish already on the board, its latest price changes.
+ */
 export function DishEditScreen() {
   const { storefrontId, id } = useLocalSearchParams<{ storefrontId?: string; id?: string }>();
   const cache = useQueryClient();
@@ -307,16 +332,21 @@ export function DishEditScreen() {
   const editing = id && id !== 'new' ? menu.data?.items.find((i) => i.menuItemId === Number(id)) : undefined;
   const isNew = !id || id === 'new';
   const picker = useFilePicker();
-  const [draft, setDraft] = useState<{ name: string; price: string; description: string; categoryId: number | null } | null>(null);
+  const [draft, setDraft] = useState<{ name: string; nameEn: string; price: string; unit: string; description: string; categoryId: number | null } | null>(null);
   const values = draft ?? {
     name: editing?.name ?? '',
+    nameEn: editing?.nameEn ?? '',
     price: editing ? String(editing.unitPrice) : '',
+    unit: editing?.priceUnit ?? '',
     description: editing?.description ?? '',
     categoryId: editing?.categoryId ?? null,
   };
   const set = (patch: Partial<typeof values>) => setDraft({ ...values, ...patch });
   const [photo, setPhoto] = useState<PickedFile | null>(null);
-  const [errors, setErrors] = useState<{ name?: string; price?: string; photo?: string; category?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; price?: string; unit?: string; photo?: string; category?: string }>({});
+  // This dish's latest changes, from the same board the price-history screen reads.
+  const board = useQuery({ queryKey: ['commerce', 'price-board', storeId], queryFn: () => sellerStoreApi.priceBoard(storeId!), enabled: Boolean(storeId && editing) });
+  const dishHistory = editing ? (board.data?.history ?? []).filter((h) => h.menuItemId === editing.menuItemId).slice(0, 3) : [];
   const categoryId = values.categoryId ?? categories.data?.[0]?.categoryId ?? null;
   const category = categories.data?.find((c) => c.categoryId === categoryId);
 
@@ -329,6 +359,8 @@ export function DishEditScreen() {
         description: values.description.trim() || null,
         unitPrice: Number(values.price),
         availabilityStatus: editing?.availabilityStatus ?? 'AVAILABLE',
+        priceUnit: values.unit.trim(),
+        nameEn: values.nameEn.trim() || null,
         ...(imageUrl ? { imageUrl } : {}),
       };
       return sellerStoreApi.saveItem(storeId!, editing?.menuItemId ?? null, input);
@@ -372,6 +404,8 @@ export function DishEditScreen() {
     const next: typeof errors = {};
     if (!values.name.trim()) next.name = 'Nhập tên món.';
     if (!Number.isSafeInteger(amount) || amount <= 0 || amount > MAX_PRICE) next.price = 'Giá là số nguyên, từ 1 đến 50.000.000 đ.';
+    if (!values.unit.trim()) next.unit = 'Nhập đơn vị tính, ví dụ ổ, ly, tô.';
+    else if (values.unit.trim().length > PRICE_UNIT_MAX) next.unit = `Đơn vị tính tối đa ${PRICE_UNIT_MAX} ký tự.`;
     if (!categoryId) next.category = 'Chọn danh mục.';
     if (isNew && !photo) next.photo = 'Món mới cần ảnh thật của quán.';
     setErrors(next);
@@ -421,20 +455,50 @@ export function DishEditScreen() {
             )}
           </Pressable>
           {values.price && typedPrice > 0 ? (
-            <PriceSticker value={formatVnd(typedPrice)} tilt={-4} style={{ position: 'absolute', left: 16, bottom: 0 }} />
+            <PriceSticker value={values.unit.trim() ? `${formatVnd(typedPrice)}/${values.unit.trim()}` : formatVnd(typedPrice)} tilt={-4} style={{ position: 'absolute', left: 16, bottom: 0 }} />
           ) : null}
         </View>
         {errors.photo ? <Text style={[text.footnote, { color: colors.onDanger }]}>{errors.photo}</Text> : null}
         <TextField label="Tên món" value={values.name} onChangeText={(v) => { set({ name: v }); setErrors((e) => ({ ...e, name: undefined })); }} error={errors.name} placeholder="VD: Bún chả Hà Nội" maxLength={120} />
+        <TextField label="Tên tiếng Anh" optional value={values.nameEn} onChangeText={(v) => set({ nameEn: v })} placeholder="VD: Grilled pork with noodles" hint="Hiện dưới tên món trên bảng giá, cho khách nước ngoài." maxLength={NAME_EN_MAX} />
         <TextField
           label="Giá"
           value={values.price}
           onChangeText={(v) => { set({ price: v.replace(/[^0-9]/g, '') }); setErrors((e) => ({ ...e, price: undefined })); }}
           keyboardType="number-pad"
           error={errors.price}
-          hint={values.price && Number(values.price) > 0 ? formatVnd(Number(values.price)) : undefined}
+          hint={values.price && Number(values.price) > 0 ? (values.unit.trim() ? priceWithUnit(Number(values.price), values.unit.trim()) : formatVnd(Number(values.price))) : undefined}
           trailing={<Text style={{ fontFamily: fonts.semibold, color: colors.muted }}>đ</Text>}
         />
+        <View style={{ gap: 10 }}>
+          <TextField
+            label="Đơn vị tính"
+            value={values.unit}
+            onChangeText={(v) => {
+              set({ unit: v });
+              setErrors((e) => ({ ...e, unit: undefined }));
+            }}
+            error={errors.unit}
+            placeholder="VD: ổ, ly, tô, kg"
+            hint="Bắt buộc: giá niêm yết ghi rõ cho một đơn vị nào."
+            maxLength={PRICE_UNIT_MAX}
+            autoCapitalize="none"
+          />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {COMMON_UNITS.map((u) => (
+              <Chip
+                key={u}
+                label={u}
+                selected={values.unit.trim() === u}
+                accessibilityRole="radio"
+                onPress={() => {
+                  set({ unit: u });
+                  setErrors((e) => ({ ...e, unit: undefined }));
+                }}
+              />
+            ))}
+          </View>
+        </View>
         <View style={{ gap: 10 }}>
           <Text style={[text.subhead, { color: colors.ink }]}>Danh mục</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -448,6 +512,30 @@ export function DishEditScreen() {
           ) : null}
         </View>
         <TextField label="Mô tả món" optional value={values.description} onChangeText={(v) => set({ description: v })} multiline placeholder="Thành phần, khẩu vị, phần ăn" maxLength={500} />
+        {editing && dishHistory.length > 0 ? (
+          <View style={{ gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 17, color: colors.ink }}>Lịch sử giá món này</Text>
+              <Pressable onPress={() => go(`/vendor/home/store/prices?storefrontId=${storeId}`)} accessibilityRole="button" hitSlop={8} style={{ minHeight: 44, justifyContent: 'center' }}>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 14.5, color: colors.primary }}>Xem tất cả</Text>
+              </Pressable>
+            </View>
+            <View style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.card, boxShadow: shadow.card }}>
+              {dishHistory.map((h, i) => {
+                const line = historyLine(h);
+                return (
+                  <View key={h.priceHistoryId} accessible style={{ paddingHorizontal: 14, paddingVertical: 12, gap: 2, borderTopWidth: i ? 1 : 0, borderTopColor: colors.separator }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                      <Text style={{ flexShrink: 1, fontFamily: fonts.bold, fontSize: 14.5, color: colors.ink }}>{line.title}</Text>
+                      <Text style={[text.caption, tabular, { color: colors.muted }]}>{formatVietnamDateTime(h.changedAt)}</Text>
+                    </View>
+                    <Text style={[text.footnote, tabular, { color: colors.ink }]}>{line.price}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
         {save.isError ? <Banner tone="danger">{errorMessage(save.error)}</Banner> : null}
         {editing ? (
           <Pressable
