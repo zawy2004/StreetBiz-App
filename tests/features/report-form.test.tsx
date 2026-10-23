@@ -147,6 +147,15 @@ describe('complaint form: "Bị tính cao hơn giá niêm yết" (BUY-07)', () =
     expect(api.verifyPermit).not.toHaveBeenCalled();
   });
 
+  it('is about the stall and slot on the scanned QR, not the other slot the public profile shows', async () => {
+    api.verifyPermit.mockResolvedValue({ ...board, displayName: 'Xôi Cô Hoa', slotCode: 'HC-03' });
+    mockParams = { vendorId: '9', type: 'PRICE_NOT_POSTED', permitId: '5', slotId: '7', qr: TOKEN };
+    await renderForm();
+    expect(await screen.findByText('Xôi Cô Hoa', {}, { timeout: 15000 })).toBeTruthy();
+    expect(screen.getByText('HC-03')).toBeTruthy();
+    expect(screen.queryByText('Bánh mì Cô Hoa')).toBeNull();
+  });
+
   it('a guest is asked to sign in and comes back to this form afterwards', async () => {
     useAuthStore.setState({ user: null });
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);

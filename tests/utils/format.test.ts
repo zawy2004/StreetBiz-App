@@ -1,5 +1,6 @@
 import { fold } from '@/features/buyer-discovery/food-photos';
 import {
+  formatDueDay,
   contractProgress,
   formatDate,
   formatDistance,
@@ -35,5 +36,14 @@ describe('format (ported from the web)', () => {
   it('folds Vietnamese text without String.normalize', () => {
     expect(fold('Bánh mì Phượng Hàn')).toBe('banh mi phuong han');
     expect(fold('Đồ uống')).toBe('do uong');
+  });
+});
+
+describe('formatDueDay', () => {
+  it('names the day a due instant closes: the server sends the next midnight in Việt Nam', () => {
+    // 2026-11-03T17:00:00Z is 00:00 on 04/11 in Việt Nam, the end of 03/11.
+    expect(formatDueDay('2026-11-03T17:00:00Z')).toBe('hết ngày 03/11/2026');
+    expect(formatDueDay('2026-11-03T16:59:59Z')).toBe('hết ngày 03/11/2026');
+    expect(formatDueDay(null)).toBe('');
   });
 });

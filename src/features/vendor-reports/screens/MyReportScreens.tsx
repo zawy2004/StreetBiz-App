@@ -17,7 +17,7 @@ import { CityFeedbackLinks } from '@/features/vendor-map/components/PriceBoardPa
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { Plate } from '@/ui';
-import { formatVietnamDateTime, formatVnd } from '@/utils/format';
+import { formatDueDay, formatVietnamDateTime, formatVnd } from '@/utils/format';
 import { REPORT_TYPE_ICONS, reportStatusLabel, reportTypeLabel } from '../report-view';
 
 const go = (href: string) => router.push(href as Href);
@@ -26,7 +26,7 @@ const typeIcon = (type: string) => REPORT_TYPE_ICONS[type as VendorReportType] ?
 
 /** One line on where a report stands: the due time while it waits, the outcome once closed. */
 function standing(r: MyVendorReport): string {
-  if (r.status === 'PENDING') return r.dueAt ? `${r.isOverdue ? 'Quá hạn từ' : 'Hạn xử lý'} ${formatVietnamDateTime(r.dueAt)}` : 'Đang chờ phường xem';
+  if (r.status === 'PENDING') return r.dueAt ? `${r.isOverdue ? 'Quá hạn, hạn là' : 'Hạn xử lý:'} ${formatDueDay(r.dueAt)}` : 'Đang chờ phường xem';
   if (r.refundAmount) return `Được hoàn ${formatVnd(r.refundAmount)}`;
   return r.reviewedAt ? `Đóng lúc ${formatVietnamDateTime(r.reviewedAt)}` : 'Đã đóng';
 }

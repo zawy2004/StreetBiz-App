@@ -87,6 +87,17 @@ export function formatVietnamDate(iso: string | null | undefined): string {
   return formatVietnamDateTime(iso).slice(0, 10);
 }
 
+/**
+ * "hết ngày 03/11/2026" for a handling due time. The server sends the end of the due day as the
+ * next midnight (00:00 Việt Nam, exclusive), so the day shown is the one that instant closes.
+ */
+export function formatDueDay(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  return `hết ngày ${formatVietnamDate(new Date(ms - 1).toISOString())}`;
+}
+
 /** "1,2 tr" / "350k" for tight spaces; the full figure goes in the accessibility label. */
 export function formatShortMoney(amount: number): string {
   if (amount >= 1_000_000) return `${(amount / 1_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tr`;

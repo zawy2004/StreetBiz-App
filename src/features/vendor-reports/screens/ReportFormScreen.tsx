@@ -25,7 +25,7 @@ import { communityApi, CommunityApiError, type PriceBoardItem, type VendorReport
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { Plate } from '@/ui';
-import { formatVietnamDateTime, formatVnd } from '@/utils/format';
+import { formatDueDay, formatVnd } from '@/utils/format';
 import {
   appendPhrase,
   isReportType,
@@ -83,17 +83,23 @@ export function VendorReportScreen() {
   const [timeOpen, setTimeOpen] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
 
-  // The board for an overcharge: a fresh, live answer for this screen only, dropped when it closes.
+  // The scanned permit, asked again live for this screen only and dropped when it closes: the board
+  // an overcharge is judged against, and which stall and slot the report is about.
   const board = useQuery({
     queryKey: ['community', 'report-board', params.qr],
     queryFn: () => communityApi.verifyPermit(params.qr!),
-    enabled: Boolean(params.qr) && type === 'OVERCHARGE',
+    enabled: Boolean(params.qr),
     staleTime: 0,
     gcTime: 0,
     retry: false,
   });
   const sameVendor = board.data?.vendorId != null && String(board.data.vendorId) === String(vendorId);
   const items: PriceBoardItem[] = board.data?.isValid && sameVendor ? (board.data.priceBoard?.items ?? []) : [];
+  // From a scan the report is about that stall and slot; for a business with several slots that
+  // is not necessarily the one its public profile shows.
+  const subject = sameVendor && board.data?.displayName
+    ? { name: board.data.displayName, slotCode: board.data.slotCode }
+    : profile.data ? { name: profile.data.displayName, slotCode: profile.data.slotCode } : null;
   const item = items.find((i) => i.menuItemId === itemId);
   const chargedAmount = wholeNumber(charged);
   const math = overchargeMath(item?.unitPrice, quantity, chargedAmount);
@@ -117,7 +123,7 @@ export function VendorReportScreen() {
     },
     onSuccess: (receipt) => {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast(receipt.dueAt ? `Đã gửi phản ánh #${receipt.reportId}. Hạn xử lý ${formatVietnamDateTime(receipt.dueAt)}` : `Đã gửi phản ánh #${receipt.reportId} tới Phường`);
+      showToast(receipt.dueAt ? `Đã gửi phản ánh #${receipt.reportId}. Hạn xử lý: ${formatDueDay(receipt.dueAt)}` : `Đã gửi phản ánh #${receipt.reportId} tới Phường`);
       router.back();
     },
   });
@@ -142,8 +148,8 @@ export function VendorReportScreen() {
           </View>
           <View style={{ height: 1, backgroundColor: colors.separator }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Text style={[text.headline, { flex: 1, color: colors.ink }]}>{profile.data?.displayName ?? 'Hộ kinh doanh'}</Text>
-            {profile.data ? <Plate code={profile.data.slotCode} /> : null}
+            <Text style={[text.headline, { flex: 1, color: colors.ink }]}>{subject?.name ?? 'Hộ kinh doanh'}</Text>
+            {subject?.slotCode ? <Plate code={subject.slotCode} /> : null}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Icon sf="eye.slash.fill" md="visibility_off" size={13} color={colors.muted} />

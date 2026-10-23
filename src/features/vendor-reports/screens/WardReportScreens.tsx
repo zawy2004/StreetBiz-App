@@ -23,7 +23,7 @@ import type { VendorReportType } from '@/features/vendor-map/community-api';
 import { AiSuggestionCard } from '@/features/ward-administration/components/ReviewParts';
 import { colors, fonts, radius, shadow, sign, tabular, text, type StatusTone } from '@/theme';
 import { Pass, Plate } from '@/ui';
-import { formatVietnamDateTime, formatVnd } from '@/utils/format';
+import { formatDueDay, formatVietnamDateTime, formatVnd } from '@/utils/format';
 import { NOTE_MAX, REPORT_TYPE_ICONS, reportStatusLabel, reportTypeLabel, resolveErrors, type ResolveChoice } from '../report-view';
 import { WARD_REPORTS_PAGE_SIZE, wardReportKeys, wardReportsApi, type PermitPrecheck, type WardReportFilter, type WardReportStatus, type WardVendorReport, type WardVendorReportSummary } from '../ward-reports-api';
 
@@ -63,10 +63,10 @@ const PERMIT_VISIBLE_LABELS: Record<string, string> = {
 };
 const permitSentence = (check: PermitPrecheck) => `Giấy phép #${check.permitId}${check.slotCode ? ` (ô ${check.slotCode})` : ''} ${check.validNow ? 'còn hiệu lực' : 'không còn hiệu lực'}.`;
 
-/** "Hạn 25/10/2026 23:59" or "Quá hạn từ …", the internal handling target (not a statutory deadline). */
+/** "Hạn xử lý: hết ngày 03/11/2026" or "Quá hạn, …", the internal handling target (not a statutory deadline). */
 function dueLine(r: { status: string; dueAt: string | null; isOverdue: boolean }): string | null {
   if (r.status !== 'PENDING' || !r.dueAt) return null;
-  return r.isOverdue ? `Quá hạn từ ${formatVietnamDateTime(r.dueAt)}` : `Hạn xử lý ${formatVietnamDateTime(r.dueAt)}`;
+  return `${r.isOverdue ? 'Quá hạn, hạn là' : 'Hạn xử lý:'} ${formatDueDay(r.dueAt)}`;
 }
 
 /**
@@ -284,7 +284,7 @@ export function WardReportDetailScreen() {
         detail={
           pending
             ? d.dueAt
-              ? `${d.isOverdue ? 'Quá hạn từ' : 'Hạn xử lý'} ${formatVietnamDateTime(d.dueAt)}. Hạn nội bộ của phường, không phải hạn luật định.`
+              ? `${d.isOverdue ? 'Quá hạn, hạn là' : 'Hạn xử lý:'} ${formatDueDay(d.dueAt)}. Hạn nội bộ của phường, không phải hạn luật định.`
               : undefined
             : d.outcome?.reviewedAt
               ? `${d.outcome.reviewedByName ? `${d.outcome.reviewedByName}, ` : ''}${formatVietnamDateTime(d.outcome.reviewedAt)}`
