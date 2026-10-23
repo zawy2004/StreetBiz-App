@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useRef, useState } from 'react';
@@ -17,22 +16,22 @@ import { Banner } from '@/components/feedback/Banner';
 import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState } from '@/components/feedback/States';
 import { showToast } from '@/components/feedback/Toast';
-import { useFilePicker } from '@/components/forms/FileSourceSheet';
 import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { LeafletMap } from '@/components/map/LeafletMap';
 import { errorMessage } from '@/core/api';
-import type { PickedFile } from '@/core/api/upload';
 import { detectPosition } from '@/features/buyer-discovery/geolocation';
 import { directionsUrl } from '@/features/buyer-discovery/discovery-format';
 import { askToSignIn } from '@/features/cart/cart-api';
+import { parsePermitQr } from '@/features/digital-permits/permit-qr-text';
 import { useOnline } from '@/features/orders/components/order-display';
 import { distanceLabel, haversineMeters } from '@/features/orders/pickup/pickup-range';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { Pass, Plate, Section, Signboard, useLightStatusBar } from '@/ui';
 import { formatVietnamDate, formatVietnamDateTime } from '@/utils/format';
-import { communityApi, CommunityApiError, type PermitVerification } from '../community-api';
+import { communityApi, CommunityApiError, type PermitVerification, type VendorReportType } from '../community-api';
+import { CityFeedbackLinks, ReportChoices, VerdictPriceBoard } from '../components/PriceBoardPanel';
 
 const go = (href: string) => router.push(href as Href);
 type Point = { latitude: number; longitude: number };
@@ -42,19 +41,23 @@ const VIEWFINDER_BG = '#0E151F';
 
 /** Where the buyer is, when the phone can say quickly; a check never waits on it. */
 async function currentPoint(): Promise<Point | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([detectPosition(), new Promise<undefined>((r) => setTimeout(() => r(undefined), 7000))]);
+    return await Promise.race([detectPosition(), new Promise<undefined>((r) => (timer = setTimeout(() => r(undefined), 7000)))]);
   } catch {
     return undefined;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 /**
- * V-C08 Quét QR (BUY-01, BR-39), v5 (screens/v5/buyer-rest.md): the camera fills the top of the
- * screen under the status bar with sign lettering and orange corner brackets; a white sheet
- * rises over it with one sentence, the paste field and "Kiểm tra". Every check is a fresh POST
- * to the server; the answer lives only on this screen, never stored. The verdict paints the
- * top of the screen green or red with the time the ward's server answered.
+ * V-C08 Quét QR (BUY-01, BUY-06, BR-39), v5 (screens/v5/buyer-rest.md): the camera fills the top
+ * of the screen under the status bar with sign lettering and orange corner brackets; a white sheet
+ * rises over it with one sentence, the paste field and "Kiểm tra". It reads the bare permit token
+ * and the link a printed price board carries (`…/q/<token>?v=N`). Every check is a fresh POST to
+ * the server; the answer, price board included, lives only on this screen, never stored. The
+ * verdict paints the top of the screen green or red with the time the ward's server answered.
  */
 export function PublicScanScreen() {
   const insets = useSafeAreaInsets();
@@ -66,17 +69,20 @@ export function PublicScanScreen() {
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const last = useRef<{ value: string; at: number } | null>(null);
   const verify = useMutation({
-    mutationFn: async (payload: string) => {
+    mutationFn: async (text: string) => {
+      const scanned = parsePermitQr(text);
       const p = await currentPoint();
       setPoint(p);
-      return communityApi.verifyPermit(payload, p);
+      const answer = await communityApi.verifyPermit(scanned.token, p, scanned.printedVersion);
+      return { answer, scanned };
     },
-    onSuccess: (r) => {
+    onSuccess: ({ answer }) => {
       setCheckedAt(Date.now());
-      void Haptics.notificationAsync(r.isValid ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error);
+      void Haptics.notificationAsync(answer.isValid ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error);
     },
   });
-  const result = verify.data;
+  const result = verify.data?.answer;
+  const scanned = verify.data?.scanned;
   const scanning = !result && !verify.isPending && online;
   const onScanned = ({ data }: { data: string }) => {
     const now = Date.now();
@@ -91,12 +97,12 @@ export function PublicScanScreen() {
     last.current = null;
   };
 
-  if (result) {
+  if (result && scanned) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <Stack.Screen options={{ headerShown: false }} />
         <ScrollView contentContainerStyle={{ paddingBottom: 40, gap: 18 }}>
-          <Verdict result={result} point={point} checkedAt={checkedAt} onAgain={again} />
+          <Verdict result={result} token={scanned.token} printedVersion={scanned.printedVersion} point={point} checkedAt={checkedAt} onAgain={again} />
         </ScrollView>
       </View>
     );
@@ -165,7 +171,7 @@ export function PublicScanScreen() {
             <Text style={[text.callout, { flex: 1, color: colors.ink }]}>Quét mã QR treo ở quầy để biết quán có được phường cấp phép bán ở ô này không.</Text>
           </View>
           {verify.isError ? <Banner tone="danger" action={{ label: 'Thử lại', onPress: again }}>{verify.error instanceof CommunityApiError ? verify.error.message : errorMessage(verify.error)}</Banner> : null}
-          <TextField label="Hoặc dán mã giấy phép" value={code} onChangeText={(v) => setCode(v.slice(0, 500))} autoCapitalize="none" autoCorrect={false} placeholder="SBP1.…" icon={{ sf: 'number', md: 'tag' }} />
+          <TextField label="Hoặc dán mã giấy phép" value={code} onChangeText={(v) => setCode(v.slice(0, 1000))} autoCapitalize="none" autoCorrect={false} placeholder="SBP1.… hoặc đường link" hint="Nhận cả mã SBP1 và đường link dưới mã QR của bảng giá." icon={{ sf: 'number', md: 'tag' }} />
           <Button label="Kiểm tra" size={56} icon={{ sf: 'checkmark.shield', md: 'verified_user' }} loading={verify.isPending} disabled={!code.trim() || !online} onPress={() => verify.mutate(code.trim())} />
         </View>
       </ScrollView>
@@ -190,9 +196,24 @@ function Brackets({ busy }: { busy: boolean }) {
 /**
  * The server's answer, read at arm's length: the top of the screen painted in the verdict with
  * the word in sign lettering and when the ward's server answered; the stall's permit as a pass
- * across the sign's edge (vendor, slot plate, validity, distance); then what the buyer can do.
+ * across the sign's edge (vendor, slot plate, validity, distance); for a valid permit the price
+ * board; then what the buyer can do, and the city's 1022 channel for those without an account.
  */
-function Verdict({ result, point, checkedAt, onAgain }: { result: PermitVerification; point?: Point; checkedAt: number | null; onAgain: () => void }) {
+function Verdict({
+  result,
+  token,
+  printedVersion,
+  point,
+  checkedAt,
+  onAgain,
+}: {
+  result: PermitVerification;
+  token: string;
+  printedVersion: number | null;
+  point?: Point;
+  checkedAt: number | null;
+  onAgain: () => void;
+}) {
   const answered = checkedAt ? `Máy chủ phường trả lời lúc ${new Date(checkedAt).toLocaleTimeString('vi-VN')}` : undefined;
   if (!result.permitId) {
     return (
@@ -208,8 +229,9 @@ function Verdict({ result, point, checkedAt, onAgain }: { result: PermitVerifica
         >
           {answered ? <Text style={[text.caption, { marginTop: 8, color: colors.white }]}>{answered}</Text> : null}
         </Signboard>
-        <View style={{ paddingHorizontal: 20 }}>
+        <View style={{ paddingHorizontal: 20, gap: 18 }}>
           <Button label="Quét mã khác" size={56} icon={{ sf: 'qrcode.viewfinder', md: 'qr_code_scanner' }} onPress={onAgain} />
+          <CityFeedbackLinks />
         </View>
       </>
     );
@@ -220,7 +242,13 @@ function Verdict({ result, point, checkedAt, onAgain }: { result: PermitVerifica
     result.validFrom && result.validUntil ? { label: 'Hiệu lực', value: `${formatVietnamDate(result.validFrom)} – ${formatVietnamDate(result.validUntil)}` } : null,
     distance != null ? { label: 'Bạn cách ô cấp phép', value: distanceLabel(distance) } : null,
   ];
-  const report = result.vendorId ? () => go(`/customer/explore/vendors/${result.vendorId}/report?permitId=${result.permitId}&slotId=${result.slotId ?? ''}`) : null;
+  // The complaint form asks the server for the board again with this token (BR-39): nothing of
+  // this answer is handed on but the ids and the token the server checks again.
+  const reportAs = (type: VendorReportType) => {
+    const board = valid ? `&qr=${encodeURIComponent(token)}${printedVersion ? `&v=${printedVersion}` : ''}` : '';
+    go(`/customer/explore/vendors/${result.vendorId}/report?type=${type}&permitId=${result.permitId}&slotId=${result.slotId ?? ''}${board}`);
+  };
+  const report = result.vendorId ? () => reportAs('GENERAL') : null;
   return (
     <>
       <Signboard
@@ -251,6 +279,8 @@ function Verdict({ result, point, checkedAt, onAgain }: { result: PermitVerifica
       />
       <View style={{ paddingHorizontal: 20, gap: 12 }}>
         {distance != null && distance > 100 ? <Banner tone="warning">Quầy bạn đang đứng có thể không đúng ô được cấp phép.</Banner> : null}
+        {/* Prices only under a valid permit (BUY-06); an invalid one shows no board at all. */}
+        <VerdictPriceBoard result={result} printedVersion={printedVersion} />
         {/* A valid permit usually means buy or move on: scanning again leads. A failed one
             leads with telling the ward. Every way stays one tap away. */}
         {valid || !report ? <Button label="Quét mã khác" size={56} icon={{ sf: 'qrcode.viewfinder', md: 'qr_code_scanner' }} onPress={onAgain} /> : null}
@@ -258,10 +288,13 @@ function Verdict({ result, point, checkedAt, onAgain }: { result: PermitVerifica
         {result.vendorId ? (
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button label="Hồ sơ quán" variant="secondary" icon={{ sf: 'person.text.rectangle', md: 'badge' }} onPress={() => go(`/customer/explore/vendors/${result.vendorId}`)} style={{ flex: 1 }} />
-            {valid && report ? <Button label="Phản ánh" variant="secondary" icon={{ sf: 'exclamationmark.bubble', md: 'report' }} onPress={report} style={{ flex: 1 }} /> : null}
             {!valid && report ? <Button label="Quét mã khác" variant="secondary" icon={{ sf: 'qrcode.viewfinder', md: 'qr_code_scanner' }} onPress={onAgain} style={{ flex: 1 }} /> : null}
           </View>
         ) : null}
+      </View>
+      <View style={{ paddingHorizontal: 20, gap: 18, marginTop: 6 }}>
+        {valid && result.vendorId ? <ReportChoices onPick={reportAs} /> : null}
+        <CityFeedbackLinks />
       </View>
     </>
   );
@@ -471,88 +504,5 @@ export function VendorCommentScreen() {
       </View>
       <TextField label="Nhận xét" value={note} onChangeText={(v) => setNote(v.slice(0, 1000))} multiline placeholder="Chia sẻ trải nghiệm của bạn" hint={`${note.length}/1000 ký tự`} error={save.isError ? (save.error instanceof CommunityApiError ? save.error.message : errorMessage(save.error)) : undefined} />
     </Screen>
-  );
-}
-
-const VIOLATIONS = ['Bán sai vị trí', 'Lấn chiếm lối đi', 'Không treo giấy phép', 'Giấy phép không khớp quầy', 'Mất vệ sinh'];
-const positiveId = (value: string | undefined) => {
-  const n = Number(value);
-  return Number.isSafeInteger(n) && n > 0 ? n : undefined;
-};
-
-/** Phản ánh tới Phường (BUY-04): what is wrong, a photo if you have one. The ward decides; nothing is automatic. */
-export function VendorReportScreen() {
-  const { vendorId, slotId, permitId } = useLocalSearchParams<{ vendorId: string; slotId?: string; permitId?: string }>();
-  const user = useAuthStore((s) => s.user);
-  const profile = useProfile(vendorId);
-  const picker = useFilePicker();
-  const [reason, setReason] = useState('');
-  const [photo, setPhoto] = useState<PickedFile | null>(null);
-  const submit = useMutation({
-    mutationFn: async () => {
-      const evidence = photo ? await communityApi.uploadEvidence(photo) : undefined;
-      return communityApi.report(vendorId!, { reason: reason.trim(), evidenceUrl: evidence?.fileUrl, slotId: positiveId(slotId), scannedPermitId: positiveId(permitId) });
-    },
-    onSuccess: (receipt) => {
-      showToast(`Đã gửi phản ánh #${receipt.reportId} tới Phường`);
-      router.back();
-    },
-  });
-  const send = () => {
-    if (user?.role_code !== 'CUSTOMER') return askToSignIn('Đăng nhập bằng tài khoản người mua để gửi phản ánh.');
-    submit.mutate();
-  };
-  return (
-    <View style={{ flex: 1 }}>
-      <Screen gap={18} footer={<Button label="Gửi phản ánh" size={56} icon={{ sf: 'paperplane.fill', md: 'send' }} loading={submit.isPending} disabled={!reason.trim()} onPress={send} />}>
-        <Stack.Screen options={{ title: 'Phản ánh tới Phường' }} />
-        {/* Addressed like an envelope: to the ward officer, about this slot */}
-        <Card style={{ gap: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandTint, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon sf="building.columns.fill" md="account_balance" size={17} color={colors.primary} />
-            </View>
-            <Text style={[text.subhead, { flex: 1, color: colors.muted }]}>Gửi: Cán bộ phường quản lý vỉa hè</Text>
-          </View>
-          <View style={{ height: 1, backgroundColor: colors.separator }} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Text style={[text.headline, { flex: 1, color: colors.ink }]}>{profile.data?.displayName ?? 'Hộ kinh doanh'}</Text>
-            {profile.data ? <Plate code={profile.data.slotCode} /> : null}
-          </View>
-        </Card>
-        <View style={{ gap: 10 }}>
-          <Text style={{ fontFamily: fonts.heavy, fontSize: 17, color: colors.ink }}>Vấn đề bạn thấy</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {VIOLATIONS.map((v) => (
-              <Chip key={v} label={v} selected={reason.includes(v)} onPress={() => setReason((r) => (r.includes(v) ? r : appendPhrase(r, v)).slice(0, 1000))} />
-            ))}
-          </View>
-        </View>
-        <TextField label="Mô tả" value={reason} onChangeText={(v) => setReason(v.slice(0, 1000))} multiline placeholder="Ở đâu, lúc nào, chuyện gì" hint={`${reason.length}/1000 ký tự`} />
-        <Pressable
-          onPress={async () => {
-            const f = await picker.pick('Ảnh hiện trường', false);
-            if (f) setPhoto(f);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={photo ? 'Đổi ảnh hiện trường' : 'Thêm ảnh hiện trường, không bắt buộc'}
-          style={({ pressed }) => ({ minHeight: photo ? 180 : 96, borderRadius: radius.photo, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: photo ? colors.card : pressed ? colors.brandTint : colors.kerbPaint, borderWidth: photo ? 0 : 2, borderStyle: 'dashed', borderColor: colors.brandLight, alignItems: 'center', justifyContent: 'center', gap: 6, padding: photo ? 0 : 14 })}
-        >
-          {photo ? (
-            <Image source={{ uri: photo.uri }} style={{ width: '100%', height: 180 }} contentFit="cover" />
-          ) : (
-            <>
-              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon sf="camera.fill" md="photo_camera" size={20} color={colors.primary} />
-              </View>
-              <Text style={{ fontFamily: fonts.bold, fontSize: 14, color: colors.primary }}>Thêm ảnh (không bắt buộc)</Text>
-            </>
-          )}
-        </Pressable>
-        {submit.isError ? <Banner tone="danger">{submit.error instanceof CommunityApiError ? submit.error.message : errorMessage(submit.error)}</Banner> : null}
-        <Banner tone="neutral" title="Sau khi gửi">Cán bộ phường xem phản ánh và tự quyết định có xử lý hay không. Bạn nhận thông báo khi có kết quả.</Banner>
-      </Screen>
-      {picker.sheet}
-    </View>
   );
 }

@@ -44,6 +44,7 @@ export default function AccountTab() {
         <ListRow title="Đơn hàng của tôi" subtitle="Mã nhận món, theo dõi, đánh giá" icon={{ sf: 'bag.fill', md: 'shopping_bag' }} onPress={() => router.navigate('/customer/orders' as Href)} />
         <ListRow title="Bản đồ quán" subtitle="Quán có phép quanh bạn" icon={{ sf: 'map.fill', md: 'map' }} tint={colors.sign} tileColor={colors.signTint} onPress={() => go('/customer/explore/map')} />
         <ListRow title="Kiểm tra giấy phép quán" subtitle="Quét mã QR ở quầy" icon={{ sf: 'qrcode.viewfinder', md: 'qr_code_scanner' }} tint={colors.onLeaf} tileColor={colors.leafTint} onPress={() => router.navigate('/customer/scan' as Href)} />
+        <ListRow title="Phản ánh của tôi" subtitle="Hạn xử lý, kết quả, tiền được hoàn" icon={{ sf: 'exclamationmark.bubble.fill', md: 'feedback' }} tint={colors.onMango} tileColor={colors.mangoTint} onPress={() => go('/customer/account/reports')} />
         <ListRow title="Thông báo" icon={{ sf: 'bell.fill', md: 'notifications' }} onPress={() => go('/notifications')} />
       </ListGroup>
     </AccountScreen>

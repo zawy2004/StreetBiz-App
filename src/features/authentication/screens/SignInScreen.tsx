@@ -1,4 +1,4 @@
-import { router, type Href } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
@@ -7,7 +7,6 @@ import { Icon } from '@/components/common/Icon';
 import { Banner } from '@/components/feedback/Banner';
 import { PasswordField, PhoneField } from '@/components/forms/TextField';
 import { ApiError, errorMessage } from '@/core/api';
-import { ROLE_HOME_ROUTE } from '@/core/auth/role-routes';
 import { isDev } from '@/core/config/env';
 import type { RoleCode } from '@/core/types/role';
 import { phoneError, toLocalPhone } from '@/core/utils/phone';
@@ -15,6 +14,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, shadow, text } from '@/theme';
 import { useLightStatusBar } from '@/ui';
 import { AuthSignboard, go, LegalLinks, TextLink } from '../components/auth-parts';
+import { COME_BACK_PARAM, leaveSignIn } from '../sign-in-return';
 
 /** The seeded demo accounts (StreetBiz-BE `docs/database.md`), offered on development builds only, as on the web. */
 const DEMO: { role: RoleCode; label: string; phone: string }[] = [
@@ -29,10 +29,11 @@ const DEMO_PASSWORD = 'Password123!';
  * A01 Đăng nhập (AUTH-03), v5 "Biển hiệu phố" (screens/v5/shared-admin.md): the orange street
  * sign with the dishes of the hour; the form is a white sheet rising across the painted kerb,
  * its primary button under the thumb. Wrong input is said under its field; a server error in a
- * banner. Signing in lands on the role's home.
+ * banner. Signing in lands on the role's home, or back on the form that asked for it (`?back=1`).
  */
 export function SignInScreen() {
   useLightStatusBar();
+  const comeBack = useLocalSearchParams<{ [COME_BACK_PARAM]?: string }>()[COME_BACK_PARAM] === '1';
   const signIn = useAuthStore((s) => s.signIn);
   const sessionExpired = useAuthStore((s) => s.sessionExpired);
   const clearSessionExpired = useAuthStore((s) => s.clearSessionExpired);
@@ -57,7 +58,7 @@ export function SignInScreen() {
     setBusy(true);
     try {
       const user = await signIn(toLocalPhone(phone), password);
-      router.replace(ROLE_HOME_ROUTE[user.role_code] as Href);
+      leaveSignIn(user.role_code, comeBack);
     } catch (err) {
       if (err instanceof ApiError && err.isValidation) {
         setErrors({
@@ -145,7 +146,7 @@ export function SignInScreen() {
             label="Đăng nhập bằng mã OTP"
             variant="secondary"
             icon={{ sf: 'message.badge.fill', md: 'sms' }}
-            onPress={() => go('/auth/sign-in/otp')}
+            onPress={() => go(comeBack ? `/auth/sign-in/otp?${COME_BACK_PARAM}=1` : '/auth/sign-in/otp')}
           />
 
           <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>

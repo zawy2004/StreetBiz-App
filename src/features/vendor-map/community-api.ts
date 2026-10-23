@@ -62,6 +62,27 @@ export type PublicVendorProfile = {
   comments: VendorComment[];
 };
 
+/** One dish on a stall's price board: VND integer price for one `priceUnit` ("ổ", "ly", "kg"…). */
+export type PriceBoardItem = {
+  menuItemId: number;
+  name: string;
+  nameEn: string | null;
+  priceUnit: string;
+  unitPrice: number;
+};
+
+/**
+ * The stall's price board as the server read it with the permit (BUY-06, BR-39): never stored,
+ * never reused. `version` is "Bản số N"; `printedVersionIsCurrent` says whether the paper board
+ * scanned (its `?v=`) is this version, null when the scan carried no version.
+ */
+export type PublicPriceBoard = {
+  version: number;
+  updatedAt: string | null;
+  printedVersionIsCurrent: boolean | null;
+  items: PriceBoardItem[];
+};
+
 export type PermitVerification = {
   isValid: boolean;
   status: string;
@@ -74,7 +95,76 @@ export type PermitVerification = {
   longitude: number | null;
   validFrom: string | null;
   validUntil: string | null;
+  /** Only when the permit is VALID and the stall keeps a board on StreetBiz; absent from an older server. */
+  priceBoard?: PublicPriceBoard | null;
 };
+
+export type VendorReportType = 'GENERAL' | 'OVERCHARGE' | 'PRICE_NOT_POSTED';
+
+export type VendorReportRequest = {
+  reportType: VendorReportType;
+  /** Required for GENERAL only; at most 500 characters. */
+  reason?: string;
+  evidenceUrl?: string;
+  slotId?: number;
+  scannedPermitId?: number;
+  /** OVERCHARGE only. There is no posted-price field: the server reads it from the price history. */
+  menuItemId?: number;
+  quantity?: number;
+  chargedAmount?: number;
+  /** ISO instant with its offset. */
+  purchasedAt?: string;
+};
+
+export type VendorReportReceipt = {
+  reportId: number;
+  status: string;
+  reportType: VendorReportType;
+  dueAt: string | null;
+  postedAmount: number | null;
+  chargedAmount: number | null;
+};
+
+/** An overcharge's evidence, computed by the server from the price history at the purchase time. */
+export type ReportPriceEvidence = {
+  menuItemId: number;
+  itemName: string;
+  priceUnit: string;
+  postedUnitPrice: number;
+  /** The board version ("bản số") the posted price comes from. */
+  priceVersion: number;
+  priceVersionAt: string;
+  quantity: number;
+  postedAmount: number;
+  chargedAmount: number;
+  difference: number;
+  purchasedAt: string;
+};
+
+export type ReportResolution = 'DISMISSED' | 'MEDIATED' | 'VIOLATION_RECORDED';
+
+/** "Phản ánh của tôi": the caller's own report and how the ward closed it. */
+export type MyVendorReport = {
+  reportId: number;
+  vendorId: number | null;
+  vendorName: string | null;
+  slotCode: string | null;
+  reportType: VendorReportType;
+  reason: string;
+  status: string;
+  createdAt: string;
+  dueAt: string | null;
+  isOverdue: boolean;
+  resolution: ReportResolution | null;
+  resolutionNote: string | null;
+  refundAmount: number | null;
+  reviewedAt: string | null;
+  hasPhoto: boolean;
+  priceEvidence: ReportPriceEvidence | null;
+};
+
+/** GET /community/my-reports returns this many rows a page. */
+export const MY_REPORTS_PAGE_SIZE = 20;
 
 type CustomerIdentity = { id: number; fullName: string | null; roleCode: string };
 type LoginResponse = {
@@ -145,12 +235,20 @@ export const communityApi = {
       {},
       '',
     ),
-  verifyPermit: (qrPayload: string, point?: { latitude: number; longitude: number }) =>
+  /**
+   * A fresh POST every time (BR-39): the answer is for the screen that asked, never kept. The
+   * server takes the bare token or a /q/ link; `printedVersion` is the `?v=` of a paper board.
+   */
+  verifyPermit: (
+    qrPayload: string,
+    point?: { latitude: number; longitude: number },
+    printedVersion?: number | null,
+  ) =>
     communityRequest<PermitVerification>(
       '/community/permits/verify',
       {
         method: 'POST',
-        body: JSON.stringify({ qrPayload, ...point }),
+        body: JSON.stringify({ qrPayload, ...point, ...(printedVersion ? { printedVersion } : {}) }),
       },
       '',
     ),
@@ -184,17 +282,12 @@ export const communityApi = {
       { method: 'POST', body: form },
     );
   },
-  report: (
-    vendorId: string | number,
-    request: {
-      reason: string;
-      evidenceUrl?: string;
-      slotId?: number;
-      scannedPermitId?: number;
-    },
-  ) =>
-    communityRequest<{ reportId: number; status: string }>(
+  /** BUY-05 / BUY-07 (CUSTOMER). 409 while a report about this vendor is still pending. */
+  report: (vendorId: string | number, request: VendorReportRequest) =>
+    communityRequest<VendorReportReceipt>(
       `/community/vendors/${encodeURIComponent(vendorId)}/reports`,
       { method: 'POST', body: JSON.stringify(request) },
     ),
+  /** The calling customer's own reports, newest first, MY_REPORTS_PAGE_SIZE a page. */
+  myReports: (page = 1) => communityRequest<MyVendorReport[]>(`/community/my-reports?page=${page}`),
 };
