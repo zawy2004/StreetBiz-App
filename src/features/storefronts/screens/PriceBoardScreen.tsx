@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Linking, Text, View } from 'react-native';
 
@@ -23,13 +24,15 @@ import { historyLine } from '../price-board-view';
  * with its unit and English name, "Bản số N", the QR that opens the live board), "In bảng giá"
  * opening the public A5 print page in the browser (no sign-in there), and the append-only history
  * of every change: when, the price before and after, who. The paper board stays required by law;
- * the QR only adds to it.
+ * the QR only adds to it. A business renting several slots hangs one board at each: same prices,
+ * that slot's own permit QR, picked with the slot chips.
  */
 export function PriceBoardScreen() {
   const { storefrontId } = useLocalSearchParams<{ storefrontId?: string }>();
   const stores = useQuery({ queryKey: ['commerce', 'stores'], queryFn: sellerStoreApi.stores });
   const storeId = Number(storefrontId) || stores.data?.[0]?.storefrontId;
   const board = useQuery({ queryKey: ['commerce', 'price-board', storeId], queryFn: () => sellerStoreApi.priceBoard(storeId!), enabled: Boolean(storeId) });
+  const [slotCode, setSlotCode] = useState<string | null>(null);
 
   if (stores.isPending || (storeId && board.isPending)) {
     return (
@@ -58,9 +61,14 @@ export function PriceBoardScreen() {
     );
   }
   const b = board.data;
+  const slots = (b.boards ?? []).filter((x) => x.printUrl);
+  // The board being looked at and printed: the chosen slot, else the storefront's own (the first).
+  const slot = slots.find((x) => x.slotCode === slotCode) ?? slots[0];
+  const qrUrl = slot?.qrUrl ?? b.qrUrl;
+  const printUrl = slot?.printUrl ?? b.printUrl;
   const print = () => {
-    if (!b.printUrl) return;
-    Linking.openURL(b.printUrl).catch(() => showToast('Không mở được trang in. Kiểm tra trình duyệt trên máy.', 'error'));
+    if (!printUrl) return;
+    Linking.openURL(printUrl).catch(() => showToast('Không mở được trang in. Kiểm tra trình duyệt trên máy.', 'error'));
   };
 
   return (
@@ -68,7 +76,7 @@ export function PriceBoardScreen() {
       onRefresh={() => void board.refetch()}
       refreshing={board.isRefetching}
       gap={18}
-      footer={<Button label="In bảng giá" size={56} icon={{ sf: 'printer.fill', md: 'print' }} disabled={!b.printUrl || b.items.length === 0} onPress={print} accessibilityHint="Mở trang in khổ A5 trong trình duyệt" />}
+      footer={<Button label={slots.length > 1 && slot ? `In bảng ô ${slot.slotCode}` : 'In bảng giá'} size={56} icon={{ sf: 'printer.fill', md: 'print' }} disabled={!printUrl || b.items.length === 0} onPress={print} accessibilityHint="Mở trang in khổ A5 trong trình duyệt" />}
     >
       <Stack.Screen options={{ title: 'Bảng giá' }} />
       {stores.data!.length > 1 ? (
@@ -76,6 +84,16 @@ export function PriceBoardScreen() {
           {stores.data!.map((s) => (
             <Chip key={s.storefrontId} label={s.name} selected={s.storefrontId === storeId} onPress={() => router.setParams({ storefrontId: String(s.storefrontId) })} accessibilityRole="radio" />
           ))}
+        </View>
+      ) : null}
+      {slots.length > 1 ? (
+        <View style={{ gap: 8 }}>
+          <Text style={[text.footnote, { color: colors.muted, paddingHorizontal: 4 }]}>Mỗi ô treo một bảng: cùng giá, mã QR riêng của giấy phép ô đó.</Text>
+          <View accessibilityRole="radiogroup" accessibilityLabel="Bảng cho ô" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {slots.map((x) => (
+              <Chip key={x.slotCode} label={`Ô ${x.slotCode}`} selected={x.slotCode === slot?.slotCode} onPress={() => setSlotCode(x.slotCode)} accessibilityRole="radio" />
+            ))}
+          </View>
         </View>
       ) : null}
 
@@ -86,7 +104,7 @@ export function PriceBoardScreen() {
           <View style={{ gap: 14 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Text accessibilityRole="header" style={{ flex: 1, fontFamily: fonts.heavy, fontSize: 19, lineHeight: 25, color: colors.ink }}>{b.storefrontName}</Text>
-              {b.slotCode ? <Plate code={b.slotCode} /> : null}
+              {slot?.slotCode ?? b.slotCode ? <Plate code={slot?.slotCode ?? b.slotCode!} /> : null}
             </View>
             <Text style={[text.footnote, tabular, { color: colors.muted }]}>
               {b.updatedAt ? `Bản số ${b.version} — cập nhật ${formatVietnamDateTime(b.updatedAt)}` : `Bản số ${b.version}`}
@@ -113,22 +131,22 @@ export function PriceBoardScreen() {
         }
         stub={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-            {b.qrUrl ? (
+            {qrUrl ? (
               <View style={{ padding: 8, borderRadius: radius.sticker, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line }} accessibilityLabel="Mã QR in trên bảng giá">
-                <PermitQr value={b.qrUrl} size={96} />
+                <PermitQr value={qrUrl} size={96} />
               </View>
             ) : null}
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={{ fontFamily: fonts.heavy, fontSize: 15, color: colors.ink }}>Treo bảng này tại quầy</Text>
               <Text style={[text.footnote, { color: colors.muted }]}>
-                {b.qrUrl ? 'Khách quét mã bằng camera điện thoại để xem giấy phép và giá hiện tại, không cần cài ứng dụng.' : 'Bảng in ra có mã QR để khách kiểm tra giấy phép và giá.'}
+                {qrUrl ? 'Khách quét mã bằng camera điện thoại để xem giấy phép và giá hiện tại, không cần cài ứng dụng.' : 'Bảng in ra có mã QR để khách kiểm tra giấy phép và giá.'}
               </Text>
             </View>
           </View>
         }
       />
 
-      {!b.printUrl ? (
+      {!printUrl ? (
         <Banner tone="warning" title="Chưa in được bảng giá có mã QR">
           Cần giấy phép còn hiệu lực cho ô của gian hàng này. Nếu giấy phép vẫn còn hiệu lực, máy chủ chưa có địa chỉ trang công khai: báo quản trị viên.
         </Banner>

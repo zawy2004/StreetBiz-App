@@ -7,6 +7,7 @@ import { PermitQr } from '@/components/common/PermitQr';
 import { sellerStoreApi, type SellerMenuItem, type SellerPriceBoard } from '@/core/api/seller-store-api';
 import { historyLine } from '@/features/storefronts/price-board-view';
 import { DishEditScreen, MenuScreen } from '@/features/storefronts/screens/MenuScreens';
+import { PriceBoardScreen } from '@/features/storefronts/screens/PriceBoardScreen';
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn(), navigate: jest.fn(), setParams: jest.fn(), canGoBack: () => true },
@@ -49,6 +50,7 @@ const board: SellerPriceBoard = {
   qrUrl: null,
   printUrl: null,
   items: [],
+  boards: [],
   history: [
     { priceHistoryId: 12, menuItemId: 3, name: 'Cà phê sữa đá', nameEn: null, priceUnit: 'ly', unitPrice: 25_000, previousUnitPrice: 20_000, isListed: true, changeKind: 'UPDATED', changedAt: '2026-10-20T01:15:00Z', changedByName: 'Nguyễn Thị Hoa' },
     { priceHistoryId: 11, menuItemId: 3, name: 'Cà phê sữa đá', nameEn: null, priceUnit: 'ly', unitPrice: 20_000, previousUnitPrice: null, isListed: true, changeKind: 'CREATED', changedAt: '2026-10-01T01:00:00Z', changedByName: 'Nguyễn Thị Hoa' },
@@ -136,5 +138,25 @@ describe('PermitQr', () => {
   it('draws the bare token as before when there is no link', async () => {
     await render(<PermitQr value="SBP1.abc" url={null} size={120} />);
     expect(drawn.mock.calls[0]![0]).toEqual(expect.objectContaining({ value: 'SBP1.abc' }));
+  });
+
+  it('a business with two slots shows and prints each slot its own board', async () => {
+    const boards = [
+      { permitId: 1, contractId: 1, slotCode: 'HC-07', qrUrl: 'http://h/q/SBP1.a.b?v=2', printUrl: 'http://h/q/SBP1.a.b/print' },
+      { permitId: 4, contractId: 9, slotCode: 'HC-03', qrUrl: 'http://h/q/SBP1.c.d?v=2', printUrl: 'http://h/q/SBP1.c.d/print' },
+    ];
+    api.priceBoard.mockResolvedValue({ ...board, items: [{ menuItemId: 3, name: 'Cà phê sữa đá', nameEn: null, priceUnit: 'ly', unitPrice: 25_000 }], qrUrl: boards[0]!.qrUrl, printUrl: boards[0]!.printUrl, boards });
+    const { Linking } = jest.requireActual<typeof import('react-native')>('react-native');
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    renderWith(<PriceBoardScreen />);
+
+    await waitFor(() => expect(screen.getByText('In bảng ô HC-07')).toBeTruthy());
+    expect(drawn.mock.calls.at(-1)![0]).toEqual(expect.objectContaining({ value: 'http://h/q/SBP1.a.b?v=2' }));
+
+    await fireEvent.press(screen.getByText('Ô HC-03'));
+    await fireEvent.press(screen.getByText('In bảng ô HC-03'));
+
+    expect(drawn.mock.calls.at(-1)![0]).toEqual(expect.objectContaining({ value: 'http://h/q/SBP1.c.d?v=2' }));
+    expect(open).toHaveBeenCalledWith('http://h/q/SBP1.c.d/print');
   });
 });

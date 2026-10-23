@@ -86,7 +86,13 @@ export type SellerPriceBoard = {
   items: PriceBoardItem[];
   /** The 50 latest changes, newest first. */
   history: PriceHistoryEntry[];
+  /**
+   * One paper board per slot the business holds with a live permit: same prices, each with that
+   * slot's own signed QR. `qrUrl`/`printUrl` above are the first of these (the storefront's slot).
+   */
+  boards: PriceBoardPermit[];
 };
+export type PriceBoardPermit = { permitId: number; contractId: number; slotCode: string; qrUrl: string | null; printUrl: string | null };
 export type SellerCategory = { categoryId: number; name: string; requiresFoodSafety: boolean };
 export type RentalChoice = {
   contractId: number;
