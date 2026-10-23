@@ -5,9 +5,9 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
 import { Sheet } from '@/components/common/Sheet';
-import { SheetOption } from '@/components/common/SheetOption';
 import { Banner } from '@/components/feedback/Banner';
 import { PasswordField, PhoneField, TextField } from '@/components/forms/TextField';
+import { WardPickerList } from '@/components/forms/WardPickerList';
 import { Screen } from '@/components/layout/Screen';
 import { ApiError, authApi, errorMessage, OTP_PURPOSE } from '@/core/api';
 import { isPasswordValid, passwordError } from '@/core/auth/password-policy';
@@ -238,20 +238,15 @@ export function RegisterScreen() {
         title="Phường/xã"
         subtitle="Giúp phường liên hệ khi cần. Có thể bỏ qua."
       >
-        {wards.map((w, i) => (
-          <SheetOption
-            key={w.unitId}
-            title={w.unitName}
-            subtitle={w.parentName ?? undefined}
-            icon={{ sf: 'mappin.and.ellipse', md: 'location_on' }}
-            selected={w.unitId === wardUnitId}
-            last={i === wards.length - 1}
-            onPress={() => {
-              setWardUnitId(w.unitId === wardUnitId ? undefined : w.unitId);
-              setWardSheet(false);
-            }}
-          />
-        ))}
+        <WardPickerList
+          wards={wards}
+          selectedId={wardUnitId}
+          icon={{ sf: 'mappin.and.ellipse', md: 'location_on' }}
+          onPick={(w) => {
+            setWardUnitId(w.unitId === wardUnitId ? undefined : w.unitId);
+            setWardSheet(false);
+          }}
+        />
       </Sheet>
     </Screen>
   );

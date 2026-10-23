@@ -293,6 +293,7 @@ function Applicant({ d, onDocs }: { d: WardEnrollmentDetail; onDocs: () => void 
           <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             <StatusPill label={s.label} tone={s.tone} />
             {d.fastTrack ? <StatusPill label="Ưu tiên xét nhanh" tone="ok" /> : null}
+            {d.assistedByAi ? <AiTag label="soạn từ lời kể, người bán đã xác nhận" /> : null}
           </View>
           <Pressable
             onPress={onDocs}
