@@ -77,6 +77,13 @@
         {
           "microphonePermission": "StreetBiz dùng micro khi bạn chọn đăng ký kinh doanh bằng giọng nói."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FF6A00",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {

@@ -13,6 +13,7 @@ import {
 } from '@/core/api';
 import { apiAssetUrl } from '@/core/api/asset-url';
 import { hydrateTokens } from '@/core/api/token-storage';
+import { unregisterPush } from '@/services/notification/push';
 import type { RoleCode } from '@/core/types/role';
 
 /**
@@ -128,6 +129,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     // Best effort: an expired or revoked session must not trap the user in a signed-in UI.
     if (getTokens()) {
+      // Stop pushes to this phone first, while the session can still call the API.
+      await unregisterPush();
       try {
         await authApi.logout();
       } catch {

@@ -12,6 +12,7 @@ import { AppProviders } from '@/providers/AppProviders';
 import { useAuthStore } from '@/store/auth-store';
 import { headerOptions } from '@/core/navigation/header-options';
 import { colors, useAppFonts } from '@/theme';
+import { usePushNotifications } from '@/services/notification/usePushNotifications';
 
 /** Light only for this release (master prompt v3 §11): the brand is bright. */
 const theme = {
@@ -39,6 +40,8 @@ export default function RootLayout() {
   const ready = useAuthStore((s) => s.ready);
   const role = useAuthStore((s) => s.user?.role_code);
   const bootstrap = useAuthStore((s) => s.bootstrap);
+  const userId = useAuthStore((s) => s.user?.id);
+  usePushNotifications(userId, role);
 
   useEffect(() => {
     void bootstrap();
