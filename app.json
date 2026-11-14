@@ -26,7 +26,9 @@
       "expo-router",
       "expo-font",
       "expo-image",
-      "expo-audio"
+      "expo-audio",
+      "expo-sharing",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

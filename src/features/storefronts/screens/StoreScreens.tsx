@@ -13,11 +13,14 @@ import { Skeleton } from '@/components/feedback/Skeleton';
 import { ErrorState, ListSkeleton } from '@/components/feedback/States';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
+import { useFilePicker } from '@/components/forms/FileSourceSheet';
 import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { SegmentedControl } from '@/components/native/SegmentedControl';
 import { StockTag } from '@/components/status/MockBadge';
 import { errorMessage } from '@/core/api';
+import { apiAssetUrl } from '@/core/api/asset-url';
+import type { PickedFile } from '@/core/api/upload';
 import { sellerStoreApi, type RentalChoice, type SellerStore } from '@/core/api/seller-store-api';
 import { statusLabel } from '@/core/constants/status-labels';
 import { storefrontPhotos } from '@/features/buyer-discovery/food-photos';
@@ -164,7 +167,7 @@ function BigTile({ icon, label, note, onPress, warm }: { icon: { sf: string; md:
 /** One stall as its shopfront: the painted sign, the kerb, the photo with its slot plate, then what to do. */
 function Facade({ store, contracts }: { store: SellerStore; contracts: RentalChoice[] }) {
   const contract = contractFor(store, contracts);
-  const photo = storefrontPhotos({ storefrontId: store.storefrontId, storefrontName: store.name, description: store.description })[0]!;
+  const photo = storefrontPhotos({ storefrontId: store.storefrontId, storefrontName: store.name, description: store.description, imageUrl: store.imageUrl })[0]!;
   return (
     <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card }}>
       <View style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden' }}>
@@ -235,6 +238,9 @@ function StartSteps() {
   );
 }
 
+/** Upload limit the backend enforces for every photo. */
+const STORE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
 const STATUS_OPTIONS = [
   { key: 'OPEN', label: 'Đang mở' },
   { key: 'PAUSED', label: 'Tạm dừng' },
@@ -254,16 +260,24 @@ export function StoreEditScreen() {
   const set = (patch: Partial<typeof values>) => setForm({ ...values, ...patch });
   const selected = choices.find((c) => c.contractId === (contractId ?? choices[0]?.contractId));
   const [nameError, setNameError] = useState<string>();
+  const picker = useFilePicker();
+  /** A newly picked stall photo, uploaded on save; `removed` drops the current one. */
+  const [photo, setPhoto] = useState<PickedFile | null>(null);
+  const [removed, setRemoved] = useState(false);
+  const [photoError, setPhotoError] = useState<string>();
 
   const save = useMutation({
-    mutationFn: () =>
-      sellerStoreApi.saveStore(existing?.storefrontId ?? null, {
+    mutationFn: async () => {
+      const imageUrl = photo ? (await sellerStoreApi.uploadMenuImage(photo)).fileUrl : removed ? '' : undefined;
+      return sellerStoreApi.saveStore(existing?.storefrontId ?? null, {
         registrationId: existing?.registrationId ?? selected!.registrationId,
         contractId: existing?.contractId ?? selected!.contractId,
         name: values.name.trim(),
         description: values.description.trim() || null,
         availabilityStatus: values.status,
-      }),
+        ...(imageUrl !== undefined ? { imageUrl } : {}),
+      });
+    },
     onSuccess: async () => {
       await cache.invalidateQueries({ queryKey: ['commerce'] });
       showToast('Đã lưu gian hàng');
@@ -304,6 +318,18 @@ export function StoreEditScreen() {
     save.mutate();
   };
   const existingContract = existing ? contractFor(existing, contracts.data ?? []) : undefined;
+  const preview = photo?.uri ?? (!removed && existing?.imageUrl ? apiAssetUrl(existing.imageUrl) : undefined);
+  const pickPhoto = async () => {
+    const file = await picker.pick(preview ? 'Đổi ảnh gian hàng' : 'Ảnh gian hàng', false);
+    if (!file) return;
+    if (file.size != null && file.size > STORE_PHOTO_MAX_BYTES) {
+      setPhotoError('Ảnh lớn hơn 5 MB. Chọn ảnh nhỏ hơn.');
+      return;
+    }
+    setPhoto(file);
+    setRemoved(false);
+    setPhotoError(undefined);
+  };
 
   return (
     <Screen footer={<Button label="Lưu gian hàng" size={56} loading={save.isPending} onPress={submit} />} gap={20}>
@@ -344,6 +370,44 @@ export function StoreEditScreen() {
           <Text style={[text.footnote, tabular, { color: colors.muted }]}>Hợp đồng đến {displayDate(existingContract.endDate)}</Text>
         </View>
       ) : null}
+      <View style={{ gap: 8 }}>
+        <Pressable
+          onPress={() => void pickPhoto()}
+          accessibilityRole="button"
+          accessibilityLabel={preview ? 'Đổi ảnh gian hàng' : 'Thêm ảnh gian hàng'}
+          style={{ aspectRatio: 16 / 9, width: '100%', overflow: 'hidden', borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: preview ? colors.sunken : colors.kerbPaint, alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: preview ? 0 : 2, borderStyle: 'dashed', borderColor: photoError ? colors.danger : colors.brandLight }}
+        >
+          {preview ? (
+            <>
+              <Image source={{ uri: preview }} style={{ width: '100%', height: '100%' }} contentFit="cover" accessibilityIgnoresInvertColors />
+              <View style={{ position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.full, paddingHorizontal: 14, minHeight: 40, backgroundColor: colors.white, boxShadow: shadow.raised }}>
+                <Icon sf="camera.fill" md="photo_camera" size={15} color={colors.ink} />
+                <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.ink }}>Đổi ảnh</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <Icon sf="camera.fill" md="photo_camera" size={28} color={colors.primary} />
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 16, color: colors.primary }}>Ảnh gian hàng</Text>
+              <Text style={[text.footnote, { color: colors.muted }]}>Mặt tiền hoặc món nổi bật của quán</Text>
+            </>
+          )}
+        </Pressable>
+        {photoError ? <Text style={[text.footnote, { color: colors.onDanger }]}>{photoError}</Text> : null}
+        {preview ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setPhoto(null);
+              setRemoved(true);
+              setPhotoError(undefined);
+            }}
+            style={{ alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center' }}
+          >
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.muted, textDecorationLine: 'underline' }}>Gỡ ảnh</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <TextField
         label="Tên gian hàng"
         value={values.name}
@@ -362,6 +426,7 @@ export function StoreEditScreen() {
         {STATUS_CONSEQUENCE[values.status] ? <Text style={[text.footnote, { color: colors.muted }]}>{STATUS_CONSEQUENCE[values.status]}</Text> : null}
       </View>
       {save.isError ? <Banner tone="danger">{errorMessage(save.error)}</Banner> : null}
+      {picker.sheet}
     </Screen>
   );
 }

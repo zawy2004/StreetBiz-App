@@ -13,10 +13,11 @@ import { Banner } from '@/components/feedback/Banner';
 import { Skeleton } from '@/components/feedback/Skeleton';
 import { StateView } from '@/components/feedback/StateView';
 import { showToast } from '@/components/feedback/Toast';
+import { useFilePicker } from '@/components/forms/FileSourceSheet';
 import { PasswordField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { StatusHeader } from '@/components/native/StatusHeader';
-import { ApiError, authApi, errorMessage, type ApiSession, type SecurityEvent } from '@/core/api';
+import { accountApi, ApiError, authApi, errorMessage, type ApiSession, type SecurityEvent } from '@/core/api';
 import { isPasswordValid, passwordError } from '@/core/auth/password-policy';
 import { ROLE_LABELS, type RoleCode } from '@/core/types/role';
 import { formatPhone } from '@/core/utils/phone';
@@ -46,6 +47,94 @@ const ROLE_PAINT: Record<RoleCode, { band: string; wash: string; ink: string }> 
 
 const go = (href: string) => router.push(href as Href);
 
+/** Upload limit the backend enforces for every photo. */
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+/**
+ * "Đổi ảnh" / "Gỡ ảnh" under the name. The photo is public (chat, account lists), so the server
+ * crops it to a square JPEG and strips its metadata; the app only checks type and size first.
+ */
+function ProfilePhotoActions() {
+  const user = useAuthStore((s) => s.user);
+  const setAvatarUrl = useAuthStore((s) => s.setAvatarUrl);
+  const picker = useFilePicker();
+  const [error, setError] = useState<string | null>(null);
+  const upload = useMutation({
+    mutationFn: accountApi.uploadAvatar,
+    onSuccess: (result) => {
+      setAvatarUrl(result.avatarUrl);
+      showToast('Đã cập nhật ảnh đại diện');
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
+  const remove = useMutation({
+    mutationFn: accountApi.removeAvatar,
+    onSuccess: () => {
+      setAvatarUrl(null);
+      showToast('Đã gỡ ảnh đại diện');
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
+  if (!user) return null;
+  const busy = upload.isPending || remove.isPending;
+  const hasPhoto = Boolean(user.avatarUrl);
+
+  const pick = async () => {
+    const file = await picker.pick(hasPhoto ? 'Đổi ảnh đại diện' : 'Ảnh đại diện', false);
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      setError('Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP.');
+      return;
+    }
+    if (file.size != null && file.size > MAX_PHOTO_BYTES) {
+      setError('Ảnh lớn hơn 5 MB. Chọn ảnh nhỏ hơn.');
+      return;
+    }
+    setError(null);
+    upload.mutate(file);
+  };
+
+  const chip = { minHeight: 36, paddingHorizontal: 12, borderRadius: radius.full, flexDirection: 'row', alignItems: 'center', gap: 6 } as const;
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: busy }}
+          disabled={busy}
+          onPress={() => void pick()}
+          style={({ pressed }) => [chip, { backgroundColor: pressed ? colors.sunken : colors.brandTint }]}
+        >
+          {upload.isPending ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon sf="camera.fill" md="photo_camera" size={15} color={colors.primary} />}
+          <Text style={{ fontFamily: fonts.bold, fontSize: 13.5, color: colors.primary }}>
+            {upload.isPending ? 'Đang tải ảnh…' : hasPhoto ? 'Đổi ảnh' : 'Thêm ảnh đại diện'}
+          </Text>
+        </Pressable>
+        {hasPhoto ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: busy }}
+            disabled={busy}
+            onPress={() => {
+              setError(null);
+              remove.mutate();
+            }}
+            style={({ pressed }) => [chip, { borderWidth: 1, borderColor: colors.line, backgroundColor: pressed ? colors.sunken : colors.card }]}
+          >
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 13.5, color: colors.muted }}>{remove.isPending ? 'Đang gỡ…' : 'Gỡ ảnh'}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {error ? (
+        <Text accessibilityRole="alert" style={[text.footnote, { color: colors.onDanger }]}>
+          {error}
+        </Text>
+      ) : null}
+      {picker.sheet}
+    </View>
+  );
+}
+
 /**
  * The member pass at the top of every account tab (v5 `Pass`): the role's band, the person and
  * their role above the tear line; the phone in sign lettering and what the role may do below it.
@@ -63,7 +152,7 @@ function IdentityCard() {
         <View style={{ gap: 14 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
             <View style={{ padding: 3, borderRadius: radius.full, backgroundColor: paint.wash }}>
-              <Avatar name={user.fullName} size={62} />
+              <Avatar name={user.fullName} size={62} uri={user.avatarUrl} />
             </View>
             <View style={{ flex: 1, gap: 6 }}>
               <Text style={[text.title2, { color: colors.ink }]} numberOfLines={2}>
@@ -80,6 +169,7 @@ function IdentityCard() {
               </View>
             </View>
           </View>
+          <ProfilePhotoActions />
           {suspended ? (
             <Banner tone="danger">Tài khoản đang bị tạm khoá. Vui lòng liên hệ quản trị viên.</Banner>
           ) : null}

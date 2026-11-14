@@ -11,6 +11,7 @@ import {
   type AuthResult,
   type RegisterPayload,
 } from '@/core/api';
+import { apiAssetUrl } from '@/core/api/asset-url';
 import { hydrateTokens } from '@/core/api/token-storage';
 import type { RoleCode } from '@/core/types/role';
 
@@ -27,6 +28,8 @@ export type AppUser = {
   role_code: RoleCode;
   wardUnitId?: number;
   account_status: 'ACTIVE' | 'SUSPENDED';
+  /** Absolute URL of the profile photo; undefined shows the initials. */
+  avatarUrl?: string;
 };
 
 const USER_KEY = 'streetbiz-user';
@@ -39,6 +42,7 @@ function toAppUser(apiUser: ApiUser): AppUser {
     role_code: apiUser.roleCode,
     wardUnitId: apiUser.wardUnitId ?? undefined,
     account_status: apiUser.accountStatus === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+    avatarUrl: apiUser.avatarUrl ? apiAssetUrl(apiUser.avatarUrl) : undefined,
   };
 }
 
@@ -74,6 +78,8 @@ type AuthState = {
   register: (payload: RegisterPayload) => Promise<AppUser>;
   signOut: () => Promise<void>;
   clearSessionExpired: () => void;
+  /** After the profile photo changed: the URL the API returned, or null once removed. */
+  setAvatarUrl: (avatarUrl: string | null) => void;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -134,6 +140,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearSessionExpired: () => set({ sessionExpired: false }),
+
+  setAvatarUrl: (avatarUrl) =>
+    set((state) => {
+      if (!state.user) return {};
+      const user = { ...state.user, avatarUrl: avatarUrl ? apiAssetUrl(avatarUrl) : undefined };
+      persistUser(user);
+      return { user };
+    }),
 }));
 
 // When the refresh token is rejected, drop the user so the guards route to sign-in.

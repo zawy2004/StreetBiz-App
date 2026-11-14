@@ -8,18 +8,19 @@ import { Icon } from '@/components/common/Icon';
 import { PASSWORD_RULES } from '@/core/auth/password-policy';
 import type { RoleCode } from '@/core/types/role';
 import { LEGAL_ROUTES } from '@/features/legal/legal-content';
+import { staticPhotoUrl } from '@/core/api/asset-url';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { daypart, IllustrativeTag, MEAL_WORD, Signboard, type Daypart } from '@/ui';
 
 type IconSpec = { sf: string; md: string };
 
-/** Three dishes of the hour in Đà Nẵng (the project's credited stock photos, `assets/images/food`). */
+/** Three dishes of the hour in Đà Nẵng (the project's credited stock photos, served by the API from `/static/food`). */
 const MEAL_PHOTOS: Record<Daypart, ImageSourcePropType[]> = {
-  morning: [require('@/assets/images/food/banh-mi.jpg'), require('@/assets/images/food/ca-phe.jpg'), require('@/assets/images/food/xoi-ga.jpg')],
-  noon: [require('@/assets/images/food/com-tam.jpg'), require('@/assets/images/food/bun-cha.jpg'), require('@/assets/images/food/pho.jpg')],
-  afternoon: [require('@/assets/images/food/banh-trang-nuong.jpg'), require('@/assets/images/food/che.jpg'), require('@/assets/images/food/tra-da.jpg')],
-  evening: [require('@/assets/images/food/banh-xeo.jpg'), require('@/assets/images/food/do-nuong.jpg'), require('@/assets/images/food/nem-nuong.jpg')],
-  night: [require('@/assets/images/food/hu-tieu.jpg'), require('@/assets/images/food/chao.jpg'), require('@/assets/images/food/sua-dau-nanh.jpg')],
+  morning: [{ uri: staticPhotoUrl('food/banh-mi.jpg') }, { uri: staticPhotoUrl('food/ca-phe.jpg') }, { uri: staticPhotoUrl('food/xoi-ga.jpg') }],
+  noon: [{ uri: staticPhotoUrl('food/com-tam.jpg') }, { uri: staticPhotoUrl('food/bun-cha.jpg') }, { uri: staticPhotoUrl('food/pho.jpg') }],
+  afternoon: [{ uri: staticPhotoUrl('food/banh-trang-nuong.jpg') }, { uri: staticPhotoUrl('food/che.jpg') }, { uri: staticPhotoUrl('food/tra-da.jpg') }],
+  evening: [{ uri: staticPhotoUrl('food/banh-xeo.jpg') }, { uri: staticPhotoUrl('food/do-nuong.jpg') }, { uri: staticPhotoUrl('food/nem-nuong.jpg') }],
+  night: [{ uri: staticPhotoUrl('food/hu-tieu.jpg') }, { uri: staticPhotoUrl('food/chao.jpg') }, { uri: staticPhotoUrl('food/sua-dau-nanh.jpg') }],
 };
 
 /**
@@ -284,14 +285,14 @@ const ROLE_CARDS: { role: SelfRole; title: string; line: string; icon: IconSpec;
     title: 'Người mua',
     line: 'Tìm quán có phép, đặt trước, đến lấy',
     icon: { sf: 'bag.fill', md: 'shopping_bag' },
-    photo: require('@/assets/images/food/bun-cha.jpg'),
+    photo: { uri: staticPhotoUrl('food/bun-cha.jpg') },
   },
   {
     role: 'VENDOR',
     title: 'Hộ kinh doanh',
     line: 'Đăng ký, thuê ô vỉa hè, nhận đơn',
     icon: { sf: 'storefront.fill', md: 'storefront' },
-    photo: require('@/assets/images/food/banh-mi-thit-nuong.jpg'),
+    photo: { uri: staticPhotoUrl('food/banh-mi-thit-nuong.jpg') },
   },
 ];
 
