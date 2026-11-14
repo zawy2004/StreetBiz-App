@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { Text, View } from 'react-native';
 
 import { fonts } from '@/theme';
@@ -6,7 +7,19 @@ const WASHES = ['#FFE8DB', '#FFF4D1', '#E6F6EC', '#E5F0FA', '#FDEBEA'];
 const INKS = ['#CF4A0B', '#6B4100', '#0B5D33', '#0A5FA8', '#8F1717'];
 
 /** Initials on a soft colour picked from the name, so the same person keeps the same colour. */
-export function Avatar({ name, size = 44 }: { name: string; size?: number }) {
+export function Avatar({ name, size = 44, uri }: { name: string; size?: number; uri?: string }) {
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        recyclingKey={uri}
+        contentFit="cover"
+        accessibilityIgnoresInvertColors
+        accessibilityLabel={`Ảnh đại diện của ${name}`}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+      />
+    );
+  }
   const words = name.trim().split(/\s+/).filter(Boolean);
   const initials =
     words.length >= 2
