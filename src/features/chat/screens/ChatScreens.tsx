@@ -166,7 +166,7 @@ export function ConversationsScreen() {
                 </>
               ) : null}
             </View>
-          ) : null
+          ) : undefined
         }
         ListEmptyComponent={
           conversations.isPending ? (
@@ -364,7 +364,7 @@ export function ChatThreadScreen() {
             </Pressable>
           ) : messages.length > 0 ? (
             <ThreadStart conversation={conversation} role={role} />
-          ) : null
+          ) : undefined
         }
         ListEmptyComponent={
           <View style={{ flex: 1, justifyContent: 'center' }}>

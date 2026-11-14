@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable, Text, View, type ImageSourcePropType } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
 import { PASSWORD_RULES } from '@/core/auth/password-policy';
@@ -11,11 +11,12 @@ import { LEGAL_ROUTES } from '@/features/legal/legal-content';
 import { staticPhotoUrl } from '@/core/api/asset-url';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { daypart, IllustrativeTag, MEAL_WORD, Signboard, type Daypart } from '@/ui';
+import type { PhotoSource } from '@/types/image';
 
 type IconSpec = { sf: string; md: string };
 
 /** Three dishes of the hour in Đà Nẵng (the project's credited stock photos, served by the API from `/static/food`). */
-const MEAL_PHOTOS: Record<Daypart, ImageSourcePropType[]> = {
+const MEAL_PHOTOS: Record<Daypart, PhotoSource[]> = {
   morning: [{ uri: staticPhotoUrl('food/banh-mi.jpg') }, { uri: staticPhotoUrl('food/ca-phe.jpg') }, { uri: staticPhotoUrl('food/xoi-ga.jpg') }],
   noon: [{ uri: staticPhotoUrl('food/com-tam.jpg') }, { uri: staticPhotoUrl('food/bun-cha.jpg') }, { uri: staticPhotoUrl('food/pho.jpg') }],
   afternoon: [{ uri: staticPhotoUrl('food/banh-trang-nuong.jpg') }, { uri: staticPhotoUrl('food/che.jpg') }, { uri: staticPhotoUrl('food/tra-da.jpg') }],
@@ -279,7 +280,7 @@ export function Checkbox({
 
 export type SelfRole = Extract<RoleCode, 'CUSTOMER' | 'VENDOR'>;
 
-const ROLE_CARDS: { role: SelfRole; title: string; line: string; icon: IconSpec; photo: ImageSourcePropType }[] = [
+const ROLE_CARDS: { role: SelfRole; title: string; line: string; icon: IconSpec; photo: PhotoSource }[] = [
   {
     role: 'CUSTOMER',
     title: 'Người mua',

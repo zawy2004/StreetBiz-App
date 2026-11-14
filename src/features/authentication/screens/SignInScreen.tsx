@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams, type Href } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
@@ -42,7 +42,7 @@ export function SignInScreen() {
   const [errors, setErrors] = useState<{ phone?: string; password?: string }>({});
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   useEffect(() => clearSessionExpired, [clearSessionExpired]);
 

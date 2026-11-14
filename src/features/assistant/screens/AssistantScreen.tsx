@@ -153,7 +153,7 @@ export function AssistantScreen() {
             <Pressable onPress={() => void chat.loadOlder()} accessibilityRole="button" hitSlop={6} style={({ pressed }) => ({ alignSelf: 'center', paddingHorizontal: 16, minHeight: 36, borderRadius: radius.full, justifyContent: 'center', backgroundColor: pressed ? colors.brandTint : colors.card, boxShadow: shadow.card })}>
               <Text style={[text.caption, { color: colors.ink }]}>Xem tin cũ hơn</Text>
             </Pressable>
-          ) : null
+          ) : undefined
         }
         ListEmptyComponent={
           <View style={{ flex: 1 }}>

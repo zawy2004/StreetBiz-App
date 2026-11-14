@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useRef } from 'react';
+import { useRef, type ComponentRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
@@ -33,7 +33,7 @@ export function LegalScreen() {
   const { doc, section } = useLocalSearchParams<{ doc: string; section?: string }>();
   const document = DOCS[doc] ?? TERMS;
   const icon = DOC_ICON[doc] ?? DOC_ICON.terms!;
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const offsets = useRef<Record<string, number>>({});
   const jumped = useRef(false);
 

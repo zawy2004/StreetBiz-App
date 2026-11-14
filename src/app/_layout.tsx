@@ -12,6 +12,7 @@ import { AppProviders } from '@/providers/AppProviders';
 import { useAuthStore } from '@/store/auth-store';
 import { headerOptions } from '@/core/navigation/header-options';
 import { colors, useAppFonts } from '@/theme';
+import { usePushNotifications } from '@/services/notification/usePushNotifications';
 
 /** Light only for this release (master prompt v3 §11): the brand is bright. */
 const theme = {
@@ -39,6 +40,8 @@ export default function RootLayout() {
   const ready = useAuthStore((s) => s.ready);
   const role = useAuthStore((s) => s.user?.role_code);
   const bootstrap = useAuthStore((s) => s.bootstrap);
+  const userId = useAuthStore((s) => s.user?.id);
+  usePushNotifications(userId, role);
 
   useEffect(() => {
     void bootstrap();
@@ -49,8 +52,8 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <AppProviders>
           <ThemeProvider value={theme}>
-            {/* Expo Go on Android paints an opaque black status bar unless asked for a transparent, translucent one. */}
-            <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+            {/* Android is edge-to-edge since React Native 0.88: the status bar is always transparent. */}
+            <StatusBar barStyle="dark-content" />
             {API_RECORD ? <ApiRouteTracker /> : null}
             {fontsReady && ready ? (
               <Stack screenOptions={{ headerShown: false, ...headerOptions }}>

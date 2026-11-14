@@ -151,6 +151,45 @@ Trước khi mở pull request, hãy chạy:
 npm run lint; npm run typecheck; npm test -- --runInBand
 ~~~
 
+## Build bản cài đặt (EAS)
+
+Build chạy trên máy chủ của Expo (EAS Build), không cần Android Studio hay Xcode. `eas.json` có 3 profile, đều gọi API
+production (`https://api.103-78-1-179.sslip.io/api`):
+
+| Profile | Dùng cho | Kết quả |
+|---|---|---|
+| `development` | Thử trên máy thật, bật công cụ dev | APK cài trực tiếp |
+| `preview` | Gửi cho người thử (phường, hộ kinh doanh) | APK cài trực tiếp (Android), bản nội bộ (iOS) |
+| `production` | Đưa lên CH Play / App Store | AAB (Android), IPA (iOS); số build tự tăng |
+
+Lần đầu (một lần cho cả dự án):
+
+~~~powershell
+npm install -g eas-cli
+eas login            # tài khoản Expo của nhóm
+eas init             # gắn app với project trên expo.dev, ghi extra.eas.projectId vào app.json
+~~~
+
+Mỗi lần build:
+
+~~~powershell
+eas build --profile preview --platform android     # APK để gửi người thử
+eas build --profile production --platform all      # bản lên store
+eas submit --profile production --platform android # đẩy bản mới nhất lên CH Play
+~~~
+
+- iOS cần tài khoản Apple Developer (99 USD/năm), CH Play cần tài khoản Google Play Console (25 USD một lần).
+- Quyền camera, ảnh, vị trí (chỉ khi đang mở app) và micro đã khai báo trong `app.json`, kèm câu giải thích tiếng Việt
+  hiện cho người dùng. App không xin vị trí chạy nền.
+- Icon và màn hình khởi động nằm ở `src/assets/app/`.
+- **Thông báo đẩy** bật sẵn trong 3 profile (`EXPO_PUBLIC_ENABLE_PUSH_NOTIFICATIONS=true`). Sau khi đăng nhập, app xin
+  quyền, lấy Expo push token và gửi lên `POST /api/devices`. Server đẩy mọi thông báo mới tới máy đó; bấm vào thông
+  báo sẽ mở đúng màn hình. Cần làm một lần:
+  - Android: tạo project Firebase, tải *service account key* (FCM V1) và đưa lên bằng `eas credentials` →
+    Android → Push Notifications.
+  - iOS: `eas build` tự tạo khoá APNs khi đăng nhập tài khoản Apple Developer.
+  - Expo Go trên Android không nhận được push từ xa; hãy thử bằng bản build `preview`.
+
 ## Cấu trúc thư mục
 
 ~~~text

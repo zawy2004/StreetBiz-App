@@ -96,7 +96,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, Props>(function LeafletMa
   { center, zoom = 16, markers, onMarkerPress, onBoundsChange, onMapPress, me, style, autoFit, interactive = true, layer = 'street' },
   ref,
 ) {
-  const web = useRef<WebView>(null);
+  const web = useRef<WebView<object>>(null);
   const [ready, setReady] = useState(false);
   const fitted = useRef(false);
   const markerJson = useMemo(() => JSON.stringify(markers), [markers]);
@@ -148,7 +148,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, Props>(function LeafletMa
 
   return (
     <View style={[{ overflow: 'hidden', backgroundColor: '#EEF3EF' }, style]} pointerEvents={interactive ? 'auto' : 'none'}>
-      <WebView
+      <WebView<object>
         ref={web}
         originWhitelist={['*']}
         source={{ html: HTML }}
