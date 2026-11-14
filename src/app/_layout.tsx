@@ -49,8 +49,8 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <AppProviders>
           <ThemeProvider value={theme}>
-            {/* Expo Go on Android paints an opaque black status bar unless asked for a transparent, translucent one. */}
-            <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+            {/* Android is edge-to-edge since React Native 0.88: the status bar is always transparent. */}
+            <StatusBar barStyle="dark-content" />
             {API_RECORD ? <ApiRouteTracker /> : null}
             {fontsReady && ready ? (
               <Stack screenOptions={{ headerShown: false, ...headerOptions }}>

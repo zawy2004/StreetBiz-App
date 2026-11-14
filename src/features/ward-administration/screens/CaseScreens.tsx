@@ -71,7 +71,7 @@ export function WardCasesScreen() {
             <StateView icon={{ sf: 'tray', md: 'inbox' }} tone="neutral" title={`Không có ${caseLabels[kind].toLowerCase()}`} body="Hồ sơ mới gửi tới phường sẽ hiện ở đây. Kéo xuống để tải lại." action={{ label: 'Tải lại', onPress: () => void list.refetch() }} />
           )
         }
-        ListFooterComponent={list.isFetchingNextPage ? <ListSkeleton rows={1} height={124} /> : null}
+        ListFooterComponent={list.isFetchingNextPage ? <ListSkeleton rows={1} height={124} /> : undefined}
       />
     </View>
   );

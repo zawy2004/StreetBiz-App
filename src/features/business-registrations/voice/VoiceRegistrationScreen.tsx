@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { router, Stack, type Href } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, Text, View, type ScrollView } from 'react-native';
 
 import { Button } from '@/components/common/Button';
@@ -200,7 +200,7 @@ function InterviewStep() {
   const [liveCapable] = useState(canTalkLive);
   const [mode, setMode] = useState<'live' | 'turn'>(() => (session.voiceConsent && liveCapable ? 'live' : 'turn'));
   const [liveNotice, setLiveNotice] = useState<string>();
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const inFlight = useRef(false);
 
   const wardName = useCallback((unitId: number | null | undefined) => wards.find((w) => w.unitId === unitId)?.unitName ?? null, [wards]);

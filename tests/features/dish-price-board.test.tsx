@@ -147,7 +147,7 @@ describe('PermitQr', () => {
     ];
     api.priceBoard.mockResolvedValue({ ...board, items: [{ menuItemId: 3, name: 'Cà phê sữa đá', nameEn: null, priceUnit: 'ly', unitPrice: 25_000 }], qrUrl: boards[0]!.qrUrl, printUrl: boards[0]!.printUrl, boards });
     const { Linking } = jest.requireActual<typeof import('react-native')>('react-native');
-    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
     renderWith(<PriceBoardScreen />);
 
     await waitFor(() => expect(screen.getByText('In bảng ô HC-07')).toBeTruthy());
