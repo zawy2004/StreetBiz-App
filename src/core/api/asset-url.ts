@@ -15,3 +15,12 @@ export function apiAssetUrl(url: string): string {
 export function assetUrl(url: string | null | undefined): string | undefined {
   return url ? apiAssetUrl(url) : undefined;
 }
+
+/**
+ * The illustrative photos (dish stock photos, street hero) live on the API, not in the app bundle:
+ * `staticPhotoUrl('food/pho.jpg')` is `https://<api-host>/static/food/pho.jpg`.
+ */
+export function staticPhotoUrl(path: string): string {
+  const host = env.apiBaseUrl.replace(/\/$/, '').replace(/\/api$/, '');
+  return `${host}/static/${path}`;
+}

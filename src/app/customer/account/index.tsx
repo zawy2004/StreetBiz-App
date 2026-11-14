@@ -5,6 +5,7 @@ import { Button } from '@/components/common/Button';
 import { ListGroup, ListRow } from '@/components/common/ListGroup';
 import { Screen } from '@/components/layout/Screen';
 import { AccountScreen } from '@/features/account-management/AccountScreens';
+import { staticPhotoUrl } from '@/core/api/asset-url';
 import { LEGAL_ROUTES } from '@/features/legal/legal-content';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, radius, shadow, text } from '@/theme';
@@ -21,7 +22,7 @@ export default function AccountTab() {
         <Stack.Screen options={{ title: 'Tài khoản' }} />
         {/* The invitation: the street in a photo, one line, the two ways in */}
         <View style={{ borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card, padding: 10, gap: 16 }}>
-          <PhotoTile source={require('@/assets/images/hero/hanoi-street-960.webp')} illustrative style={{ height: 168 }} />
+          <PhotoTile source={{ uri: staticPhotoUrl('hero/hanoi-street-960.webp') }} illustrative style={{ height: 168 }} />
           <View style={{ paddingHorizontal: 10, gap: 6 }}>
             <Text accessibilityRole="header" style={[text.title2, { color: colors.ink }]}>Đặt trước món vỉa hè có phép</Text>
             <Text style={[text.callout, { color: colors.muted }]}>Đăng nhập để đặt món, lấy mã nhận món và theo dõi đơn.</Text>

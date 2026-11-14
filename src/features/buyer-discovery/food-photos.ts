@@ -1,41 +1,44 @@
 /**
  * Port of StreetBiz-FE `features/buyer-discovery/food-photos.ts`: stock photos
- * (assets/images/food, credits in CREDITS.md there) for a stall or dish without a
+ * (served by the API from /static/food; credits in StreetBiz-BE wwwroot/static/food/CREDITS.md) for a stall or dish without a
  * photo of its own. A vendor's own `imageUrl` always wins; a stock photo is flagged
  * `illustrative` so the UI labels it "Ảnh minh họa".
  */
 import type { ImageSourcePropType } from 'react-native';
 
-import { apiAssetUrl } from '@/core/api/asset-url';
+import { apiAssetUrl, staticPhotoUrl } from '@/core/api/asset-url';
 
 export type FoodPhoto = { source: ImageSourcePropType; illustrative: boolean };
 
-const STOCK = {
-  'banh-mi': require('@/assets/images/food/banh-mi.jpg'),
-  'banh-mi-thit-nuong': require('@/assets/images/food/banh-mi-thit-nuong.jpg'),
-  'xoi-ga': require('@/assets/images/food/xoi-ga.jpg'),
-  'xoi-xeo': require('@/assets/images/food/xoi-xeo.jpg'),
-  'bun-cha': require('@/assets/images/food/bun-cha.jpg'),
-  'bun-bo-hue': require('@/assets/images/food/bun-bo-hue.jpg'),
-  pho: require('@/assets/images/food/pho.jpg'),
-  'hu-tieu': require('@/assets/images/food/hu-tieu.jpg'),
-  'com-tam': require('@/assets/images/food/com-tam.jpg'),
-  chao: require('@/assets/images/food/chao.jpg'),
-  'banh-xeo': require('@/assets/images/food/banh-xeo.jpg'),
-  'banh-cuon': require('@/assets/images/food/banh-cuon.jpg'),
-  'banh-trang-nuong': require('@/assets/images/food/banh-trang-nuong.jpg'),
-  'nem-cua-be': require('@/assets/images/food/nem-cua-be.jpg'),
-  'nem-nuong': require('@/assets/images/food/nem-nuong.jpg'),
-  'cha-gio': require('@/assets/images/food/cha-gio.jpg'),
-  'ca-phe': require('@/assets/images/food/ca-phe.jpg'),
-  'tra-da': require('@/assets/images/food/tra-da.jpg'),
-  'sua-dau-nanh': require('@/assets/images/food/sua-dau-nanh.jpg'),
-  che: require('@/assets/images/food/che.jpg'),
-  'do-nuong': require('@/assets/images/food/do-nuong.jpg'),
-  'nuoc-giai-khat': require('@/assets/images/food/nuoc-giai-khat.jpg'),
-} as const satisfies Record<string, ImageSourcePropType>;
+const STOCK_KEYS = [
+  'banh-mi',
+  'banh-mi-thit-nuong',
+  'xoi-ga',
+  'xoi-xeo',
+  'bun-cha',
+  'bun-bo-hue',
+  'pho',
+  'hu-tieu',
+  'com-tam',
+  'chao',
+  'banh-xeo',
+  'banh-cuon',
+  'banh-trang-nuong',
+  'nem-cua-be',
+  'nem-nuong',
+  'cha-gio',
+  'ca-phe',
+  'tra-da',
+  'sua-dau-nanh',
+  'che',
+  'do-nuong',
+  'nuoc-giai-khat',
+] as const;
 
-type PhotoKey = keyof typeof STOCK;
+type PhotoKey = (typeof STOCK_KEYS)[number];
+
+/** A stock photo, served by the API from the VPS (/static/food), cached on the phone by expo-image. */
+const stock = (key: PhotoKey): ImageSourcePropType => ({ uri: staticPhotoUrl(`food/${key}.jpg`) });
 
 /** Same rules and order as the web: the specific dish before the word it contains. */
 const RULES: [RegExp, PhotoKey][] = [
@@ -112,7 +115,7 @@ export function storefrontPhotos(storefront: {
   const photos: FoodPhoto[] = [];
   if (storefront.imageUrl)
     photos.push({ source: { uri: apiAssetUrl(storefront.imageUrl) }, illustrative: false });
-  photos.push({ source: STOCK[key], illustrative: true });
+  photos.push({ source: stock(key), illustrative: true });
   return photos;
 }
 
@@ -127,12 +130,13 @@ export function menuItemPhotos(item: {
     matchKey([item.itemName, item.categoryName]) ??
     STALL_FALLBACKS[Math.abs(item.menuItemId) % STALL_FALLBACKS.length]!;
   const photos: FoodPhoto[] = [];
-  if (item.imageUrl) photos.push({ source: { uri: apiAssetUrl(item.imageUrl) }, illustrative: false });
-  photos.push({ source: STOCK[key], illustrative: true });
+  if (item.imageUrl)
+    photos.push({ source: { uri: apiAssetUrl(item.imageUrl) }, illustrative: false });
+  photos.push({ source: stock(key), illustrative: true });
   return photos;
 }
 
 /** A stock photo for a category chip (always illustrative). */
 export function categoryPhoto(categoryName: string): ImageSourcePropType {
-  return STOCK[matchKey([categoryName]) ?? 'bun-cha'];
+  return stock(matchKey([categoryName]) ?? 'bun-cha');
 }
