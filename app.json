@@ -13,10 +13,23 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.streetbiz.app"
+      "bundleIdentifier": "com.streetbiz.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.streetbiz.app"
+      "package": "com.streetbiz.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/app/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -26,12 +39,49 @@
       "expo-router",
       "expo-font",
       "expo-image",
-      "expo-audio",
       "expo-sharing",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./src/assets/app/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "StreetBiz dùng camera để quét mã QR giấy phép và chụp ảnh giấy tờ, món ăn, vị trí kinh doanh.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "StreetBiz cần truy cập thư viện ảnh để bạn chọn ảnh giấy tờ, món ăn và ảnh đại diện.",
+          "cameraPermission": "StreetBiz dùng camera để chụp ảnh giấy tờ, món ăn và ảnh đại diện."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "StreetBiz dùng vị trí khi bạn đang mở app để tìm quán gần bạn và xác định chỗ đăng ký kinh doanh.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "StreetBiz dùng micro khi bạn chọn đăng ký kinh doanh bằng giọng nói."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "icon": "./src/assets/app/icon.png"
   }
 }
