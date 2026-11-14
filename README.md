@@ -182,6 +182,13 @@ eas submit --profile production --platform android # đẩy bản mới nhất l
 - Quyền camera, ảnh, vị trí (chỉ khi đang mở app) và micro đã khai báo trong `app.json`, kèm câu giải thích tiếng Việt
   hiện cho người dùng. App không xin vị trí chạy nền.
 - Icon và màn hình khởi động nằm ở `src/assets/app/`.
+- **Thông báo đẩy** bật sẵn trong 3 profile (`EXPO_PUBLIC_ENABLE_PUSH_NOTIFICATIONS=true`). Sau khi đăng nhập, app xin
+  quyền, lấy Expo push token và gửi lên `POST /api/devices`. Server đẩy mọi thông báo mới tới máy đó; bấm vào thông
+  báo sẽ mở đúng màn hình. Cần làm một lần:
+  - Android: tạo project Firebase, tải *service account key* (FCM V1) và đưa lên bằng `eas credentials` →
+    Android → Push Notifications.
+  - iOS: `eas build` tự tạo khoá APNs khi đăng nhập tài khoản Apple Developer.
+  - Expo Go trên Android không nhận được push từ xa; hãy thử bằng bản build `preview`.
 
 ## Cấu trúc thư mục
 
