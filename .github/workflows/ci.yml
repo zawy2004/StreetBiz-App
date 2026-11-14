@@ -1,0 +1,48 @@
+name: CI
+
+# Checks every pull request before it can be merged. Builds nothing for the stores and needs
+# no secrets.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, typecheck, test and web export
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npx jest --ci --runInBand
+
+      # Bundles the whole app (web target) so a broken import or route fails here, not on a phone.
+      - name: Web export
+        run: npm run export:web
+        env:
+          EXPO_PUBLIC_APP_ENV: production
+          EXPO_PUBLIC_API_BASE_URL: https://ci.invalid/api
