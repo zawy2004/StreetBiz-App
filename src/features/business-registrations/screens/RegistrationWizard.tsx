@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { router, Stack, type Href } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View, type ScrollView } from 'react-native';
 
 import { Button } from '@/components/common/Button';
@@ -53,7 +53,7 @@ type Errors = Record<string, string | undefined>;
  * the first group with a problem into view (the web scrolled and focused the first bad field).
  */
 function useScrollToProblem<K extends string>(order: K[]) {
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const ys = useRef<Partial<Record<K, number>>>({});
   const at = (key: K) => (y: number) => {
     ys.current[key] = y;

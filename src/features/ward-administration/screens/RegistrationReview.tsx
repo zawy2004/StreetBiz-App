@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View, type ScrollView } from 'react-native';
 
 import { Button } from '@/components/common/Button';
@@ -65,7 +65,7 @@ export function RegistrationReviewScreen() {
   const [section, setSection] = useState<Section>('profile');
   const [ocr, setOcr] = useState<Ai>(null);
   const [ocrBusy, setOcrBusy] = useState(false);
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const [sectionsY, setSectionsY] = useState(0);
   /** Switch segment and bring it into view (from the warning line, the gate, the [AI] action). */
   const show = (next: Section) => {

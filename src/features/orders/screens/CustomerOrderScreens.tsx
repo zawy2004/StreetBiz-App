@@ -187,7 +187,7 @@ export function CustomerOrdersScreen() {
               <Text style={[text.footnote, { color: colors.ink }, tabular]}>Trang {page}/{totalPages}</Text>
               <Button label="Sau" variant="secondary" disabled={page >= totalPages} onPress={() => setPage((p) => p + 1)} style={{ paddingHorizontal: 18 }} />
             </View>
-          ) : null
+          ) : undefined
         }
       />
       <Sheet visible={filterOpen} onClose={() => setFilterOpen(false)} title="Lọc đơn" subtitle="Chọn giai đoạn của đơn.">

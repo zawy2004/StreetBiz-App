@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router, Stack, useNavigation, type Href } from 'expo-router';
-import { useState, type ReactNode, type Ref } from 'react';
+import { useState, type ReactNode, type Ref, type ComponentRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View, type ScrollView } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
@@ -59,7 +59,7 @@ export function WizardStep({
   step: StepKey;
   hint?: string;
   footer: ReactNode;
-  scrollRef?: Ref<ScrollView>;
+  scrollRef?: Ref<ComponentRef<typeof ScrollView>>;
   children: ReactNode;
 }) {
   const close = useCloseFlow();

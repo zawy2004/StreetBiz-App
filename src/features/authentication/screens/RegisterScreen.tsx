@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/common/Button';
@@ -48,9 +48,9 @@ export function RegisterScreen() {
   const [phoneRegistered, setPhoneRegistered] = useState(false);
   const [busy, setBusy] = useState(false);
   const [wardSheet, setWardSheet] = useState(false);
-  const phoneRef = useRef<TextInput>(null);
-  const passRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
+  const phoneRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const passRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const confirmRef = useRef<ComponentRef<typeof TextInput>>(null);
   const ward = wards.find((w) => w.unitId === wardUnitId);
 
   const submit = async () => {

@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { Pressable, Text, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/common/Icon';
 import { colors, fonts, radius, shadow, sign, tabular } from '@/theme';
+import type { PhotoSource } from '@/types/image';
 
 type IconSpec = { sf: string; md: string };
 
@@ -81,7 +82,7 @@ export function PhotoTile({
   children,
   recyclingKey,
 }: {
-  source: ImageSourcePropType | string | null | undefined;
+  source: PhotoSource | string | null | undefined;
   illustrative?: boolean;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
@@ -103,7 +104,7 @@ export function PhotoTile({
 }
 
 /** Round photo badge for a category, ringed in orange tint (orange when chosen). */
-export function PhotoCircle({ source, label, selected, onPress }: { source: ImageSourcePropType; label: string; selected?: boolean; onPress?: () => void }) {
+export function PhotoCircle({ source, label, selected, onPress }: { source: PhotoSource; label: string; selected?: boolean; onPress?: () => void }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: !!selected }} accessibilityLabel={label} style={{ alignItems: 'center', gap: 8, width: 76 }}>
       <View style={{ width: 70, height: 70, borderRadius: 35, padding: 3, backgroundColor: selected ? colors.cta : colors.brandTint }}>

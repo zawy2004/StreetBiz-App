@@ -4,11 +4,11 @@
  * photo of its own. A vendor's own `imageUrl` always wins; a stock photo is flagged
  * `illustrative` so the UI labels it "Ảnh minh họa".
  */
-import type { ImageSourcePropType } from 'react-native';
 
 import { apiAssetUrl, staticPhotoUrl } from '@/core/api/asset-url';
+import type { PhotoSource } from '@/types/image';
 
-export type FoodPhoto = { source: ImageSourcePropType; illustrative: boolean };
+export type FoodPhoto = { source: PhotoSource; illustrative: boolean };
 
 const STOCK_KEYS = [
   'banh-mi',
@@ -38,7 +38,7 @@ const STOCK_KEYS = [
 type PhotoKey = (typeof STOCK_KEYS)[number];
 
 /** A stock photo, served by the API from the VPS (/static/food), cached on the phone by expo-image. */
-const stock = (key: PhotoKey): ImageSourcePropType => ({ uri: staticPhotoUrl(`food/${key}.jpg`) });
+const stock = (key: PhotoKey): PhotoSource => ({ uri: staticPhotoUrl(`food/${key}.jpg`) });
 
 /** Same rules and order as the web: the specific dish before the word it contains. */
 const RULES: [RegExp, PhotoKey][] = [
@@ -137,6 +137,6 @@ export function menuItemPhotos(item: {
 }
 
 /** A stock photo for a category chip (always illustrative). */
-export function categoryPhoto(categoryName: string): ImageSourcePropType {
+export function categoryPhoto(categoryName: string): PhotoSource {
   return stock(matchKey([categoryName]) ?? 'bun-cha');
 }
