@@ -9,6 +9,7 @@ export const FINANCE_KEYS = {
   penalties: (status?: string) => ['finance', 'penalties', status ?? 'ALL'] as const,
   payments: ['finance', 'payments'] as const,
   violations: ['finance', 'violations'] as const,
+  penaltySchedules: ['finance', 'penalty-schedules'] as const,
   invoices: ['finance', 'invoices'] as const,
   invoice: (invoiceId: number) => ['finance', 'invoices', invoiceId] as const,
 };
@@ -64,6 +65,13 @@ export function usePaymentHistory() {
 export function useVendorViolations() {
   const query = useQuery({ queryKey: FINANCE_KEYS.violations, queryFn: financeApi.violations });
   return { violations: query.data ?? [], ...shape(query) };
+}
+
+/** WARD-03: what each violation costs in the wards the vendor is registered in, in force today. */
+export function usePenaltySchedules() {
+  // Rates change rarely (a ward decision); no need to refetch on every visit.
+  const query = useQuery({ queryKey: FINANCE_KEYS.penaltySchedules, queryFn: financeApi.penaltySchedules, staleTime: 10 * 60 * 1000 });
+  return { wards: query.data ?? [], ...shape(query) };
 }
 
 /** FEE-03: the caller's invoices, most recent first. */
