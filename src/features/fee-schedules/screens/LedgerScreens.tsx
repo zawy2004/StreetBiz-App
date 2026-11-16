@@ -2,7 +2,7 @@ import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 
-import { KeyValueList } from '@/components/common/Blocks';
+import { Card, KeyValueList } from '@/components/common/Blocks';
 import { Button } from '@/components/common/Button';
 import { Icon } from '@/components/common/Icon';
 import { ProtectedFileTile, shareProtectedFile } from '@/components/common/ProtectedFile';
@@ -21,7 +21,8 @@ import { groupByMonth, ledgerTotals, paymentStats, PROVIDER_LABEL, PURPOSE_LABEL
 import { invoiceKind, type InvoiceKindFilter } from '../invoice-groups';
 import { dueBadge, formatDay, isOwed } from '../schedule-progress';
 import { useContractSchedule } from '../useFeeSchedules';
-import { useInvoiceDetail, useInvoices, usePaymentHistory, useVendorViolations } from '../useFinance';
+import type { VendorWardPenaltyScheduleDto } from '@/core/api/finance-api';
+import { useInvoiceDetail, useInvoices, usePaymentHistory, usePenaltySchedules, useVendorViolations } from '../useFinance';
 
 const go = (href: string) => router.push(href as Href);
 
@@ -246,11 +247,69 @@ export function PaymentHistoryScreen() {
   );
 }
 
-/** V31 Lịch sử vi phạm: each record as the notice it is, who recorded it (on site or a resident's report), the fine and its state. */
+/**
+ * "Mức phạt của phường": what each violation costs where the stall is registered, read before a
+ * notice ever arrives. The amounts are the ward's own schedule (BR-33), the one a notice is calculated from.
+ */
+export function PenaltyRateBook({ wards }: { wards: VendorWardPenaltyScheduleDto[] }) {
+  return (
+    <Card>
+      <Text accessibilityRole="header" style={[text.headline, { color: colors.ink }]}>
+        Mức phạt của phường
+      </Text>
+      <Text style={[text.footnote, { color: colors.muted, marginTop: 2 }]}>Mức đang áp dụng hôm nay. Biên bản được tính đúng theo bảng này.</Text>
+      {wards.length === 0 ? (
+        <Text style={[text.callout, { color: colors.muted, marginTop: 10 }]}>Phường của bạn chưa công bố mức phạt nào.</Text>
+      ) : (
+        wards.map((ward) => (
+          <View key={ward.wardUnitId} style={{ marginTop: 12 }}>
+            <Text style={[wards.length > 1 ? text.headline : text.footnote, { color: wards.length > 1 ? colors.ink : colors.muted }]}>{ward.wardName}</Text>
+            {ward.rates.length === 0 ? (
+              <Text style={[text.callout, { color: colors.muted, marginTop: 4 }]}>Chưa có mức phạt nào.</Text>
+            ) : (
+              ward.rates.map((rate, index) => (
+                <View
+                  key={rate.violationType}
+                  accessible
+                  accessibilityLabel={`${rate.violationTypeName}: ${formatVnd(rate.penaltyAmount)}`}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    gap: 12,
+                    paddingVertical: 10,
+                    borderTopWidth: index === 0 ? 0 : 1,
+                    borderTopColor: colors.separator,
+                  }}
+                >
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={[text.callout, { color: colors.ink }]}>{rate.violationTypeName}</Text>
+                    {rate.legalBasis ? <Text style={[text.footnote, { color: colors.muted }]}>{rate.legalBasis}</Text> : null}
+                  </View>
+                  <Text style={[text.headline, { color: colors.ink }, tabular]}>{formatVnd(rate.penaltyAmount)}</Text>
+                </View>
+              ))
+            )}
+          </View>
+        ))
+      )}
+    </Card>
+  );
+}
+
+/** V31 Lịch sử vi phạm: each record as the notice it is, who recorded it (on site or a resident's report), the fine and its state; then the ward's rates. */
 export function VendorViolationsScreen() {
   const { violations, isLoading, isError, error, refetch, isRefetching } = useVendorViolations();
+  const rates = usePenaltySchedules();
   return (
-    <Screen onRefresh={() => void refetch()} refreshing={isRefetching} gap={18}>
+    <Screen
+      onRefresh={() => {
+        void refetch();
+        void rates.refetch();
+      }}
+      refreshing={isRefetching}
+      gap={18}
+    >
       <Stack.Screen options={{ title: 'Lịch sử vi phạm' }} />
       {isLoading ? (
         <>
@@ -296,6 +355,13 @@ export function VendorViolationsScreen() {
             />
           );
         })
+      )}
+      {rates.isLoading ? (
+        <Skeleton height={160} radius={radius.card} />
+      ) : rates.isError ? (
+        <ErrorState error={rates.error} onRetry={() => void rates.refetch()} />
+      ) : (
+        <PenaltyRateBook wards={rates.wards} />
       )}
     </Screen>
   );

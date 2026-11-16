@@ -80,6 +80,21 @@ export type VendorViolationDto = {
   penaltyStatus: string | null;
 };
 
+/** WARD-03: one violation type and what it costs in a ward. */
+export type VendorPenaltyRateDto = {
+  violationType: string;
+  violationTypeName: string;
+  penaltyAmount: number;
+  legalBasis: string | null;
+};
+
+/** The rates in force today in one ward where the vendor is registered. */
+export type VendorWardPenaltyScheduleDto = {
+  wardUnitId: number;
+  wardName: string;
+  rates: VendorPenaltyRateDto[];
+};
+
 export type InvoiceDto = {
   invoiceId: number;
   invoiceNumber: string;
@@ -257,6 +272,9 @@ export const financeApi = {
 
   /** FEE-05: violations recorded against the caller, most recent first. */
   violations: () => apiGet<VendorViolationDto[]>('/vendor/finance/violations'),
+
+  /** WARD-03: the penalty rates in force today in each ward the caller is registered in. */
+  penaltySchedules: () => apiGet<VendorWardPenaltyScheduleDto[]>('/vendor/finance/penalty-schedules'),
 
   /** FEE-03: the caller's invoices, most recent first. */
   invoices: () => apiGet<InvoiceDto[]>('/vendor/finance/invoices'),
