@@ -156,8 +156,25 @@ describe('complaint form: "Bị tính cao hơn giá niêm yết" (BUY-07)', () =
     expect(screen.queryByText('Bánh mì Cô Hoa')).toBeNull();
   });
 
-  it('a guest is asked to sign in and comes back to this form afterwards', async () => {
+  it('a guest sends without signing in and without a photo (BUY-05), and may still sign in to follow it', async () => {
     useAuthStore.setState({ user: null });
+    await renderForm();
+    await pickDish('Bánh mì thịt');
+    await fireEvent.changeText(screen.getByLabelText('Số tiền bạn đã trả'), '70000');
+
+    expect(screen.getByText('Gửi không cần đăng nhập')).toBeTruthy();
+    expect(screen.queryByLabelText(/Thêm .*không bắt buộc/)).toBeNull();
+    await fireEvent.press(screen.getByText('Đăng nhập'));
+    expect(router.push).toHaveBeenCalledWith('/auth/sign-in?back=1');
+
+    await fireEvent.press(screen.getByText('Gửi phản ánh'));
+    await waitFor(() => expect(api.report).toHaveBeenCalledTimes(1));
+    expect(api.uploadEvidence).not.toHaveBeenCalled();
+    expect(api.report.mock.calls[0]![1]).toMatchObject({ reportType: 'OVERCHARGE', evidenceUrl: undefined, chargedAmount: 70_000 });
+  });
+
+  it('a vendor account is asked to sign in as a buyer and comes back to this form afterwards', async () => {
+    useAuthStore.setState({ user: { ...buyer, role_code: 'VENDOR' } });
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     await renderForm();
     await pickDish('Bánh mì thịt');
