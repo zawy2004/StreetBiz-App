@@ -20,6 +20,7 @@ import { TextField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { errorMessage } from '@/core/api';
 import type { PickedFile } from '@/core/api/upload';
+import { signInHref } from '@/features/authentication/sign-in-return';
 import { askToSignIn } from '@/features/cart/cart-api';
 import { communityApi, CommunityApiError, type PriceBoardItem, type VendorReportRequest, type VendorReportType } from '@/features/vendor-map/community-api';
 import { useAuthStore } from '@/store/auth-store';
@@ -70,6 +71,9 @@ export function VendorReportScreen() {
   const params = useLocalSearchParams<{ vendorId: string; slotId?: string; permitId?: string; type?: string; qr?: string }>();
   const vendorId = params.vendorId;
   const user = useAuthStore((s) => s.user);
+  // BUY-05: anyone may report. Without an account the report goes without a photo (a guest cannot
+  // upload) and cannot be followed afterwards.
+  const guest = !user;
   const profile = useQuery({ queryKey: ['community', 'vendor', vendorId], queryFn: () => communityApi.profile(vendorId!), enabled: Boolean(vendorId) });
   const picker = useFilePicker();
   const [type, setType] = useState<VendorReportType>(isReportType(params.type) ? params.type : 'GENERAL');
@@ -112,7 +116,7 @@ export function VendorReportScreen() {
 
   const submit = useMutation({
     mutationFn: async () => {
-      const evidence = photo ? await communityApi.uploadEvidence(photo) : undefined;
+      const evidence = photo && !guest ? await communityApi.uploadEvidence(photo) : undefined;
       const base = { evidenceUrl: evidence?.fileUrl, slotId: positiveId(params.slotId), scannedPermitId: positiveId(params.permitId) };
       const note = reason.trim() || undefined;
       const request: VendorReportRequest =
@@ -128,7 +132,8 @@ export function VendorReportScreen() {
     },
   });
   const send = () => {
-    if (user?.role_code !== 'CUSTOMER') return askToSignIn('Đăng nhập bằng tài khoản người mua để gửi phản ánh. Xong bạn quay lại đúng trang này.', true);
+    // Signed in as a vendor or an officer: reports are a buyer's, so switch accounts (or sign out).
+    if (user && user.role_code !== 'CUSTOMER') return askToSignIn('Đăng nhập bằng tài khoản người mua để gửi phản ánh. Xong bạn quay lại đúng trang này.', true);
     setShowErrors(true);
     if (ready && !blocked) submit.mutate();
   };
@@ -232,6 +237,11 @@ export function VendorReportScreen() {
           hint={`${reason.length}/${NOTE_MAX} ký tự`}
           error={showErrors && type === 'GENERAL' && !reason.trim() ? 'Mô tả điều bạn thấy.' : undefined}
         />
+        {guest ? (
+          <Banner tone="info" title="Gửi không cần đăng nhập" action={{ label: 'Đăng nhập', onPress: () => router.push(signInHref(true) as Href) }}>
+            Phường vẫn nhận và xử lý phản ánh. Đăng nhập để đính kèm ảnh và theo dõi kết quả.
+          </Banner>
+        ) : (
         <Pressable
           onPress={async () => {
             const f = await picker.pick(PHOTO_LABEL[type], false);
@@ -253,6 +263,7 @@ export function VendorReportScreen() {
             </>
           )}
         </Pressable>
+        )}
         {failure?.status === 409 ? (
           <Banner tone="warning" title="Bạn đã có phản ánh đang chờ về quầy này" action={{ label: 'Xem phản ánh của tôi', onPress: () => router.navigate('/customer/account/reports' as Href) }}>
             {failure.message}
