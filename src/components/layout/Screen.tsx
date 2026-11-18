@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type Ref } from 'react';
+import { useState, type ReactNode, type Ref, type ComponentRef } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -28,7 +28,7 @@ type Props = {
   /** Extra room at the bottom (for example under a floating bar). */
   bottomInset?: number;
   /** To scroll to a part of the screen (for example the section a status line points at). */
-  scrollRef?: Ref<ScrollView>;
+  scrollRef?: Ref<ComponentRef<typeof ScrollView>>;
 };
 
 /**

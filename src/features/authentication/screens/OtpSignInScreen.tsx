@@ -1,4 +1,4 @@
-import { router, type Href } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
@@ -8,11 +8,11 @@ import { OtpField } from '@/components/forms/OtpField';
 import { PhoneField } from '@/components/forms/TextField';
 import { Screen } from '@/components/layout/Screen';
 import { ApiError, authApi, errorMessage, OTP_PURPOSE } from '@/core/api';
-import { ROLE_HOME_ROUTE } from '@/core/auth/role-routes';
 import { formatPhone, phoneError, toLocalPhone } from '@/core/utils/phone';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useAuthStore } from '@/store/auth-store';
 import { AuthTitle, LegalLinks, PhonePlate, ResendSticker, TextLink } from '../components/auth-parts';
+import { COME_BACK_PARAM, leaveSignIn } from '../sign-in-return';
 
 const RESEND_SECONDS = 60; // the backend OTP cooldown (BR-61)
 const OTP_LENGTH = 6;
@@ -22,6 +22,7 @@ const OTP_LENGTH = 6;
  * or not the phone has an account (the backend never says), then signs straight in.
  */
 export function OtpSignInScreen() {
+  const comeBack = useLocalSearchParams<{ [COME_BACK_PARAM]?: string }>()[COME_BACK_PARAM] === '1';
   const signInWithOtp = useAuthStore((s) => s.signInWithOtp);
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');
@@ -63,8 +64,7 @@ export function OtpSignInScreen() {
     setBusy(true);
     try {
       const user = await signInWithOtp(toLocalPhone(phone), value);
-      router.dismissAll();
-      router.replace(ROLE_HOME_ROUTE[user.role_code] as Href);
+      leaveSignIn(user.role_code, comeBack, true);
     } catch (err) {
       setError(err instanceof ApiError && err.isValidation ? (err.fieldError('Otp') ?? err.message) : errorMessage(err));
       setCode('');

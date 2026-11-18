@@ -82,7 +82,7 @@ export function PermitQrScreen({ contractId }: { contractId: number }) {
           <Brackets />
           {data ? (
             <View style={{ opacity: valid ? 1 : 0.3 }}>
-              <PermitQr value={data.qrPayload} size={size} />
+              <PermitQr value={data.qrPayload} url={data.qrUrl} size={size} />
             </View>
           ) : permit.isError ? (
             <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16, borderRadius: radius.photo, backgroundColor: colors.dangerTint }}>

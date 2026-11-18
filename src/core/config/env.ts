@@ -34,6 +34,12 @@ export const env = {
   enablePushNotifications: bool(process.env.EXPO_PUBLIC_ENABLE_PUSH_NOTIFICATIONS),
   /** Sandbox payment buttons, as on the web's development build. */
   enablePaymentSandbox: bool(process.env.EXPO_PUBLIC_ENABLE_PAYMENT_SANDBOX, true),
+  /**
+   * Đà Nẵng's own citizen feedback channel (1022): the phone line and Góp ý Đà Nẵng. StreetBiz
+   * links to it for anyone who would rather not sign up; it never replaces it.
+   */
+  cityFeedbackPhone: process.env.EXPO_PUBLIC_CITY_FEEDBACK_PHONE || '02361022',
+  cityFeedbackUrl: process.env.EXPO_PUBLIC_CITY_FEEDBACK_URL || 'https://gopy.danang.gov.vn',
 } as const;
 
 export const isDev = env.appEnv === 'development';

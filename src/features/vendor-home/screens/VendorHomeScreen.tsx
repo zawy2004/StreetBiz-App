@@ -23,7 +23,8 @@ import { useAuthStore } from '@/store/auth-store';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { daypart, Pass, Plate, RoundButton, Signboard, type Daypart, useLightStatusBar } from '@/ui';
 import { contractProgress, formatVietnamDate, formatVnd, formatVietnamTime } from '@/utils/format';
-import { buildTodos, type Todo } from '../todos';
+import type { ApiRegistration } from '@/core/api';
+import { buildTodos, type SlotsNearApproval, type Todo } from '../todos';
 
 const go = (href: string) => router.push(href as Href);
 const VISIBLE = 4;
@@ -39,6 +40,7 @@ const SELLING_WORD: Record<Daypart, string> = {
 
 const TODO_LOOK: Record<Todo['kind'], { icon: { sf: string; md: string }; wash: string; ink: string }> = {
   registration: { icon: { sf: 'doc.text.fill', md: 'description' }, wash: colors.signTint, ink: colors.sign },
+  slots: { icon: { sf: 'mappin.and.ellipse', md: 'location_on' }, wash: colors.leafTint, ink: colors.leaf },
   fee: { icon: { sf: 'banknote.fill', md: 'payments' }, wash: colors.brandTint, ink: colors.primary },
   penalty: { icon: { sf: 'exclamationmark.octagon.fill', md: 'report' }, wash: colors.dangerTint, ink: colors.danger },
 };
@@ -84,6 +86,47 @@ function TodoTicket({ todo }: { todo: Todo }) {
       <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
     </Pressable>
   );
+}
+
+/** Rental applications still in flight, or already granted (SlotConstants: Open + Approved). */
+const SLOT_APPLICATION_TAKEN = new Set(['PENDING', 'UNDER_REVIEW', 'MORE_INFORMATION_REQUIRED', 'APPROVED']);
+/** Contracts that already give the vendor a slot. */
+const SLOT_CONTRACT_HELD = new Set(['ACTIVE', 'SUSPENDED']);
+/** "Gần chỗ bạn bán": a short walk from the spot the registration recorded. */
+const NEAR_RADIUS_METERS = 300;
+
+/**
+ * X01 after approval (the web's hook, same keys): when the newest registration is APPROVED and the
+ * vendor has no slot application or contract yet, count the free slots near the spot it recorded --
+ * now, not when it was filed (a slot seen during the interview may have been rented meanwhile).
+ */
+function useSlotsNearApproval(registrations: ApiRegistration[]): SlotsNearApproval | null {
+  const userId = useAuthStore((s) => s.user?.id);
+  const latest = [...registrations].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  const approved = latest?.registrationStatus === 'APPROVED' ? latest : null;
+  const enabled = approved != null;
+  const applications = useQuery({ queryKey: ['side', userId, 'applications'], queryFn: () => sideApi.listApplications(), enabled });
+  const contracts = useQuery({ queryKey: ['side', userId, 'contracts'], queryFn: () => sideApi.listContracts(), enabled });
+  const hasSlot = (applications.data ?? []).some((a) => SLOT_APPLICATION_TAKEN.has(a.applicationStatus)) || (contracts.data ?? []).some((c) => SLOT_CONTRACT_HELD.has(c.contractStatus));
+  const lat = approved?.addressLatitude ?? null;
+  const lng = approved?.addressLongitude ?? null;
+  const ready = enabled && applications.isSuccess && contracts.isSuccess && !hasSlot;
+  const near = useQuery({
+    queryKey: ['side', userId, 'slots', { lat, lng, radiusMeters: NEAR_RADIUS_METERS }],
+    queryFn: () => sideApi.searchSlots({ lat: lat!, lng: lng!, radiusMeters: NEAR_RADIUS_METERS, take: 50 }),
+    enabled: ready && lat != null && lng != null,
+  });
+
+  if (!ready || !approved) return null;
+  if (lat == null || lng == null) return { registrationId: approved.registrationId, displayName: approved.displayName, count: 0, nearest: null };
+  if (!near.isSuccess) return null;
+  const free = [...near.data].sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity));
+  return {
+    registrationId: approved.registrationId,
+    displayName: approved.displayName,
+    count: free.length,
+    nearest: free[0] ? { zoneId: free[0].zoneId, slotId: free[0].slotId, zoneName: free[0].zoneName } : null,
+  };
 }
 
 /** The vendor's first ACTIVE contract with a permit (the web's useCurrentPermit, same keys). */
@@ -195,7 +238,8 @@ export function VendorHomeScreen() {
   const now = useNow();
   const [expanded, setExpanded] = useState(false);
 
-  const todos = buildTodos(regs.registrations, fees.feeItems, penalties.penalties);
+  const slotsNear = useSlotsNearApproval(regs.registrations);
+  const todos = buildTodos(regs.registrations, fees.feeItems, penalties.penalties, slotsNear);
   const toPay = todos.reduce((n, t) => n + (t.amount ?? 0), 0);
   const latest = [...regs.registrations].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
   const approved = regs.registrations.find((r) => r.registrationStatus === 'APPROVED');
@@ -322,7 +366,8 @@ export function VendorHomeScreen() {
                   <Text style={[text.callout, { color: colors.ink }]}>{s}</Text>
                 </View>
               ))}
-              <Button label="Đăng ký ngay" onPress={() => go('/register-business')} />
+              <Button label="Nói để đăng ký" icon={{ sf: 'mic.fill', md: 'mic' }} onPress={() => go('/register-business/voice')} />
+              <Button label="Tự điền từng bước" variant="secondary" onPress={() => go('/register-business')} />
               <Pressable onPress={() => go('/vendor/home/onboarding')} hitSlop={8} accessibilityRole="link" style={{ alignSelf: 'center', minHeight: 32, justifyContent: 'center' }}>
                 <Text style={{ fontFamily: fonts.heavy, fontSize: 14.5, color: colors.primary }}>Xem các bước bắt đầu</Text>
               </Pressable>

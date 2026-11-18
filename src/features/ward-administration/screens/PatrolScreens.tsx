@@ -32,7 +32,10 @@ import type { PickedFile } from '@/core/api/upload';
 import { statusLabel } from '@/core/constants/status-labels';
 import { Checkbox } from '@/features/authentication/components/auth-parts';
 import { detectPosition } from '@/features/buyer-discovery/geolocation';
+import { parsePermitQr } from '@/features/digital-permits/permit-qr-text';
 import { useOnline } from '@/features/orders/components/order-display';
+import { violationDescriptionFromReport } from '@/features/vendor-reports/report-view';
+import { wardReportKeys, wardReportsApi } from '@/features/vendor-reports/ward-reports-api';
 import { colors, fonts, radius, shadow, sign, tabular, text } from '@/theme';
 import { Pass, Plate, RoundButton, Signboard, useLightStatusBar } from '@/ui';
 import { formatVietnamDate, formatVietnamDateTime, formatVnd } from '@/utils/format';
@@ -44,10 +47,13 @@ import { complianceApi, violationTypeLabels, wardApi, type InspectPermitResult, 
 const go = (href: string) => router.push(href as Href);
 
 async function quickPosition() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([detectPosition(), new Promise<undefined>((r) => setTimeout(() => r(undefined), 5000))]);
+    return await Promise.race([detectPosition(), new Promise<undefined>((r) => (timer = setTimeout(() => r(undefined), 5000)))]);
   } catch {
     return undefined;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -71,7 +77,8 @@ export function PermitScanScreen() {
   const inspect = useMutation({
     mutationFn: async (payload: string) => {
       const [point, uploaded] = await Promise.all([quickPosition(), photo ? complianceApi.uploadEvidence(photo) : Promise.resolve(undefined)]);
-      return complianceApi.inspectPermit(payload, point?.latitude, point?.longitude, uploaded?.fileUrl);
+      // A printed price board's QR is a link wrapping the same signed token: send the token.
+      return complianceApi.inspectPermit(parsePermitQr(payload).token, point?.latitude, point?.longitude, uploaded?.fileUrl);
     },
     onSuccess: (r) => {
       setCheckedAt(Date.now());
@@ -163,7 +170,7 @@ export function PermitScanScreen() {
           <View style={{ alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: colors.line }} />
           {!online ? <Banner tone="warning">Mất kết nối. Giấy phép chỉ được kiểm tra trực tiếp với máy chủ.</Banner> : null}
           {inspect.isError ? <Banner tone="danger" action={{ label: 'Thử lại', onPress: again }}>{errorMessage(inspect.error)}</Banner> : null}
-          <TextField label="Hoặc nhập mã in trên giấy phép" value={code} onChangeText={setCode} autoCapitalize="characters" autoCorrect={false} placeholder="VD: SB-HC1-2026-0815" icon={{ sf: 'number', md: 'tag' }} />
+          <TextField label="Hoặc nhập mã in trên giấy phép" value={code} onChangeText={setCode} autoCapitalize="characters" autoCorrect={false} placeholder="VD: SB-HC1-2026-0815" hint="Dán được cả mã SBP1 và đường link dưới mã QR bảng giá." icon={{ sf: 'number', md: 'tag' }} />
           <Pressable
             onPress={async () => {
               const f = await picker.pick('Ảnh hiện trường', false);
@@ -396,14 +403,26 @@ const WITNESS_ROLES = [
   { key: 'WARD_REPRESENTATIVE', label: 'Đại diện chính quyền' },
 ] as const;
 
+const positiveParam = (value: string | undefined) => {
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n > 0 ? n : undefined;
+};
+
 /**
  * W12 Lập biên bản vi phạm, bước 1 (WARD-12, Mẫu 01 NĐ 118/2021): who, what, a scene photo,
  * witnesses. v5: the two steps of the record shown up front; the household as one large row;
  * each violation type as a choice card with its fine in sign figures and its legal basis.
+ * WARD-19: opened from a citizen report (`sourceReportId`), the household, slot, description,
+ * photo and the rule-based suggested type come from the report; saving the record closes the
+ * report in the same transaction on the server. The officer still checks and decides every field.
  */
 export function RecordViolationScreen() {
-  const params = useLocalSearchParams<{ contractId?: string; slotId?: string; vendorId?: string }>();
-  const fixedVendor = params.vendorId ? Number(params.vendorId) : undefined;
+  const params = useLocalSearchParams<{ contractId?: string; slotId?: string; vendorId?: string; sourceReportId?: string }>();
+  const cache = useQueryClient();
+  const sourceId = positiveParam(params.sourceReportId);
+  const source = useQuery({ queryKey: wardReportKeys.detail(sourceId ?? 0), queryFn: () => wardReportsApi.get(sourceId!), enabled: Boolean(sourceId) });
+  const report = source.data;
+  const fixedVendor = params.vendorId ? Number(params.vendorId) : (report?.vendorId ?? undefined);
   const picker = useFilePicker();
   const vendors = useQuery({
     queryKey: ['ward', 'violation-vendors'],
@@ -418,33 +437,42 @@ export function RecordViolationScreen() {
       }
       return [...byVendor.values()];
     },
-    enabled: !fixedVendor,
+    enabled: !fixedVendor && (!sourceId || source.isFetched),
   });
   const schedules = useQuery({ queryKey: ['ward', 'penalty-schedules', 'today'], queryFn: () => complianceApi.listPenaltySchedules() });
-  const [vendorId, setVendorId] = useState<number | undefined>(fixedVendor);
+  const [pickedVendor, setVendorId] = useState<number | undefined>();
+  const vendorId = fixedVendor ?? pickedVendor;
   const [vendorSheet, setVendorSheet] = useState(false);
   const [typeCode, setTypeCode] = useState<string | null>(null);
-  const [description, setDescription] = useState('');
+  // Untouched (null), the description is the report's own account; once typed in, the officer's.
+  const [typedDescription, setDescription] = useState<string | null>(null);
+  const description = typedDescription ?? (report ? violationDescriptionFromReport(report) : '');
   const [photo, setPhoto] = useState<PickedFile | null>(null);
   const [containment, setContainment] = useState('');
   const [witness, setWitness] = useState({ name: '', role: 'WITNESS' as (typeof WITNESS_ROLES)[number]['key'], occupation: '', address: '' });
   const [explanationRequired, setExplanationRequired] = useState(false);
   const [explanationMethod, setExplanationMethod] = useState<'DIRECT' | 'WRITTEN'>('WRITTEN');
   const types = schedules.data ?? [];
-  const chosenType = typeCode ?? types[0]?.violationType ?? 'UNAUTHORIZED_BUSINESS_USE';
+  // The report's suggested type (rule-based, not AI) leads only when this ward can record it.
+  const suggested = report?.suggestedViolationType;
+  const suggestedAvailable = suggested ? (types.length ? types.some((t) => t.violationType === suggested) : suggested in violationTypeLabels) : false;
+  const chosenType = typeCode ?? (suggestedAvailable ? suggested! : undefined) ?? types[0]?.violationType ?? 'UNAUTHORIZED_BUSINESS_USE';
   const schedule = types.find((s) => s.violationType === chosenType);
-  const vendorName = fixedVendor ? `Mã hộ ${fixedVendor}` : vendors.data?.find((v) => v.vendorId === vendorId)?.displayName;
+  const vendorName = report?.vendorName && report.vendorId === fixedVendor ? report.vendorName : fixedVendor ? `Mã hộ ${fixedVendor}` : vendors.data?.find((v) => v.vendorId === vendorId)?.displayName;
+  const slotId = params.slotId ? Number(params.slotId) : (report?.slotId ?? undefined);
 
   const submit = useMutation({
     mutationFn: async () => {
       const evidence = photo ? await complianceApi.uploadEvidence(photo) : undefined;
       return complianceApi.recordViolation({
         contractId: params.contractId ? Number(params.contractId) : undefined,
-        slotId: params.slotId ? Number(params.slotId) : undefined,
+        slotId,
         vendorId,
         violationType: chosenType,
         description: description.trim(),
-        evidenceUrl: evidence?.fileUrl,
+        // A new scene photo replaces the reporter's; otherwise the report's own photo is the evidence.
+        evidenceUrl: evidence?.fileUrl ?? report?.evidenceUrl ?? undefined,
+        sourceReportId: sourceId,
         witnessName: witness.name.trim() || undefined,
         witnessRole: witness.name.trim() ? witness.role : undefined,
         witnessOccupation: witness.occupation.trim() || undefined,
@@ -456,10 +484,15 @@ export function RecordViolationScreen() {
     },
     onSuccess: (v) => {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast('Đã lập biên bản (bước 1/2)');
+      showToast(sourceId ? `Đã lập biên bản và đóng phản ánh #${sourceId}` : 'Đã lập biên bản (bước 1/2)');
+      if (sourceId) void cache.invalidateQueries({ queryKey: wardReportKeys.all });
       router.replace(`/ward/patrol/violations/${v.violationId}` as Href);
     },
-    onError: (e) => showToast(errorMessage(e), 'error'),
+    onError: (e) => {
+      showToast(errorMessage(e), 'error');
+      // Another officer may have closed the report meanwhile: show where it stands now.
+      if (sourceId) void source.refetch();
+    },
   });
   const send = () => {
     if (!vendorId) return showToast('Chọn hộ kinh doanh vi phạm.', 'error');
@@ -467,11 +500,38 @@ export function RecordViolationScreen() {
     submit.mutate();
   };
 
+  // From a report: wait for it, and never raise a second record from a closed one.
+  if (sourceId && (source.isPending || source.isError || (report && report.status !== 'PENDING'))) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Lập biên bản vi phạm' }} />
+        {source.isPending ? (
+          <ListSkeleton rows={3} height={84} />
+        ) : source.isError ? (
+          <ErrorState error={source.error} onRetry={() => void source.refetch()} />
+        ) : (
+          <StateView
+            icon={{ sf: 'checkmark.seal', md: 'verified' }}
+            tone="neutral"
+            title="Phản ánh đã được xử lý"
+            body={report?.violationId ? 'Phản ánh này đã có biên bản. Mỗi phản ánh chỉ lập được một biên bản.' : 'Phản ánh này đã được đóng, nên không lập biên bản từ đó được nữa.'}
+            action={report?.violationId ? { label: 'Xem biên bản', onPress: () => router.replace(`/ward/patrol/violations/${report.violationId}` as Href) } : { label: 'Quay lại', onPress: () => router.back() }}
+          />
+        )}
+      </Screen>
+    );
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <Screen footer={<Button label="Lập biên bản (bước 1)" variant="sign" size={56} icon={{ sf: 'doc.badge.plus', md: 'note_add' }} loading={submit.isPending} onPress={send} />}>
         <Stack.Screen options={{ title: 'Lập biên bản vi phạm' }} />
         <StepProgress step={1} total={2} title="Biên bản tại hiện trường" hint="Bước 2: quyết định xử phạt, do người có thẩm quyền ký." />
+        {report ? (
+          <Banner tone="info" title={`Lập từ phản ánh #${report.reportId} của người dân`}>
+            Đã điền sẵn người bán, ô, mô tả, ảnh và loại vi phạm gợi ý theo phản ánh; bạn kiểm tra và sửa nếu cần. Khi lưu, phản ánh được đóng là “Đã lập biên bản” trong cùng một lần lưu và người phản ánh nhận thông báo.
+          </Banner>
+        ) : null}
 
         <Heading title="Hộ kinh doanh vi phạm" />
         <Pressable
@@ -520,6 +580,12 @@ export function RecordViolationScreen() {
 
         <Heading title="Hiện trường" />
         <TextField label="Mô tả hành vi tại hiện trường" value={description} onChangeText={setDescription} multiline placeholder="Thời gian, vị trí, diện tích lấn chiếm, tang vật" />
+        {report?.evidenceUrl && !photo ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <ProtectedFileTile fileUrl={report.evidenceUrl} label="Ảnh từ phản ánh" />
+            <Text style={[text.footnote, { flex: 1, color: colors.muted }]}>Ảnh người phản ánh gửi được đính kèm biên bản. Chụp ảnh mới bên dưới để thay.</Text>
+          </View>
+        ) : null}
         <Pressable
           onPress={async () => {
             const f = await picker.pick('Ảnh hiện trường', false);

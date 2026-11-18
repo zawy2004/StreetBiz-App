@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { colors, fonts } from '@/theme';
@@ -18,7 +18,7 @@ type Props = {
  * paste works, and backspace goes back, because there is really only one field.
  */
 export function OtpField({ value, onChange, onComplete, length = 6, error, autoFocus }: Props) {
-  const ref = useRef<TextInput>(null);
+  const ref = useRef<ComponentRef<typeof TextInput>>(null);
   const [focused, setFocused] = useState(false);
   const digits = value.split('');
 

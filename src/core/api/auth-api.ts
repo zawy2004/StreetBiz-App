@@ -1,5 +1,6 @@
 import type { RoleCode } from '@/core/types/role';
-import { apiDelete, apiGet, apiPost } from './client';
+import { appendFile, type PickedFile } from './upload';
+import { apiDelete, apiGet, apiPost, apiUpload } from './client';
 
 /**
  * Mirrors StreetBiz-BE `AuthController` (AUTH-01…AUTH-09).
@@ -22,6 +23,8 @@ export type ApiUser = {
   roleCode: RoleCode;
   wardUnitId: number | null;
   accountStatus: string;
+  /** Public profile photo (`/api/uploads/avatars/...`); null shows the initials. */
+  avatarUrl?: string | null;
 };
 
 export type AuthResult = {
@@ -109,6 +112,16 @@ export const authApi = {
     apiGet<SecurityEvent[]>('/auth/login-history', {
       params: { take, ...(before != null ? { before } : {}) },
     }),
+};
+
+/** The caller's own profile photo. The server crops it to a 256x256 JPEG without metadata. */
+export const accountApi = {
+  uploadAvatar: (file: PickedFile) => {
+    const form = new FormData();
+    appendFile(form, file);
+    return apiUpload<{ avatarUrl: string | null }>('/account/avatar', form);
+  },
+  removeAvatar: () => apiDelete<{ avatarUrl: string | null }>('/account/avatar'),
 };
 
 export type Ward = {

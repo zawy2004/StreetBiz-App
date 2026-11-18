@@ -283,7 +283,7 @@ export function VendorOrdersScreen() {
               <Text style={[text.subhead, { color: colors.ink }, tabular]}>Trang {page}/{totalPages}</Text>
               <Button label="Sau" variant="secondary" disabled={page >= totalPages} onPress={() => setPage((p) => p + 1)} style={{ paddingHorizontal: 18 }} />
             </View>
-          ) : null
+          ) : undefined
         }
       />
       <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 16 }}>

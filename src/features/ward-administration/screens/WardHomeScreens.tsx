@@ -124,7 +124,7 @@ export function WardDashboardScreen() {
 
               {/* Today's waiting work, from the same figures */}
               <Section title="Việc chờ bạn" inset={0}>
-                {pending + d.openViolations === 0 ? (
+                {pending + d.openViolations + (d.openReports ?? 0) === 0 ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.leafTint }}>
                     <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.leaf, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.white }}>
                       <Icon sf="checkmark" md="check" size={22} color={colors.white} weight="bold" />
@@ -139,6 +139,17 @@ export function WardDashboardScreen() {
                     <WorkRow first count={d.pendingRegistrations} title="Hồ sơ đăng ký kinh doanh" note="Thẩm định, đối chiếu CCCD" icon={{ sf: 'doc.text.fill', md: 'description' }} wash={colors.brandTint} ink={colors.primary} onPress={() => router.navigate('/ward/inbox' as Href)} />
                     <WorkRow count={d.pendingApplications} title="Đơn thuê ô vỉa hè" note="Duyệt và cấp giấy phép số" icon={{ sf: 'square.grid.3x3.fill', md: 'grid_view' }} wash={colors.signTint} ink={colors.sign} onPress={() => router.navigate('/ward/inbox' as Href)} />
                     <WorkRow count={d.openViolations} title="Vi phạm đang mở" note="Biên bản chưa khép" icon={{ sf: 'exclamationmark.triangle.fill', md: 'gavel' }} wash={colors.dangerTint} ink={colors.danger} onPress={() => go('/ward/more/reports')} />
+                    {d.openReports != null ? (
+                      <WorkRow
+                        count={d.openReports}
+                        title="Phản ánh của người dân"
+                        note={d.overdueReports ? `${d.overdueReports} quá hạn xử lý` : 'Bán quá giá, không treo bảng giá, khác'}
+                        icon={{ sf: 'exclamationmark.bubble.fill', md: 'feedback' }}
+                        wash={colors.mangoTint}
+                        ink={colors.onMango}
+                        onPress={() => go('/ward/inbox/reports')}
+                      />
+                    ) : null}
                   </View>
                 )}
               </Section>
@@ -286,6 +297,7 @@ type QueueItem = {
  */
 export function WardInboxScreen() {
   const cache = useQueryClient();
+  const dash = useWardDashboard();
   const [category, setCategory] = useState<Category>('ALL');
   const results = useQueries({
     queries: [
@@ -301,7 +313,10 @@ export function WardInboxScreen() {
   const loading = results.some((r) => r.isPending);
   const failed = results.slice(0, 6).every((r) => r.isError);
   const refreshing = results.some((r) => r.isRefetching);
-  const refresh = () => void cache.invalidateQueries({ queryKey: ['ward', 'inbox'] });
+  const refresh = () => {
+    void cache.invalidateQueries({ queryKey: ['ward', 'inbox'] });
+    void dash.refetch();
+  };
   const [enrollments, rentPending, rentReview, rentMore, renPending, renReview, risk] = results.map((r) => r.data ?? []) as [
     Awaited<ReturnType<typeof complianceApi.listEnrollments>>,
     Awaited<ReturnType<typeof complianceApi.listRentalApplications>>,
@@ -393,6 +408,8 @@ export function WardInboxScreen() {
         <DeskTile title="Hồ sơ vị trí" note="Đề xuất ô, xung đột địa chỉ, chuyển nhượng" icon={{ sf: 'mappin.and.ellipse', md: 'location_on' }} wash={colors.signTint} ink={colors.sign} onPress={() => go('/ward/inbox/cases')} />
         <DeskTile title="An toàn thực phẩm" note="Kiểm tra, chuyển Chi cục, ghi kết quả" icon={{ sf: 'checkmark.shield.fill', md: 'verified_user' }} wash={colors.leafTint} ink={colors.onLeaf} onPress={() => go('/ward/inbox/food-safety')} />
       </View>
+      {/* WARD-19: citizens' reports, the third desk, with how many wait and how many are late */}
+      <ReportsDesk open={dash.data?.openReports} overdue={dash.data?.overdueReports} onPress={() => go('/ward/inbox/reports')} />
 
       <View style={{ gap: 12 }}>
         <SectionHeader title="Đăng ký, thuê ô & gia hạn" note="Hồ sơ cần xem kỹ được xếp lên đầu." />
@@ -461,6 +478,29 @@ function DeskTile({ title, note, icon, wash, ink, onPress }: { title: string; no
         <Text style={{ fontFamily: fonts.heavy, fontSize: 15.5, lineHeight: 20, color: colors.ink }}>{title}</Text>
         <Text style={{ fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 17, color: colors.muted }}>{note}</Text>
       </View>
+    </PressableScale>
+  );
+}
+
+/** "Phản ánh": a full-width desk with the pending count in sign figures and the overdue ones in red. */
+function ReportsDesk({ open, overdue, onPress }: { open?: number; overdue?: number; onPress: () => void }) {
+  const late = overdue ?? 0;
+  return (
+    <PressableScale
+      onPress={onPress}
+      accessibilityLabel={`Phản ánh của người dân${open != null ? `: ${open} đang chờ` : ''}${late ? `, ${late} quá hạn` : ''}`}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, minHeight: 84, borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.card, boxShadow: shadow.card, borderLeftWidth: late ? 5 : 0, borderLeftColor: colors.danger }}
+    >
+      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.dangerTint, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon sf="exclamationmark.bubble.fill" md="feedback" size={20} color={colors.danger} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ fontFamily: fonts.heavy, fontSize: 15.5, lineHeight: 20, color: colors.ink }}>Phản ánh của người dân</Text>
+        <Text style={{ fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 17, color: colors.muted }}>Bán quá giá, không treo bảng giá, phản ánh khác</Text>
+        {late ? <StatusPill label={`${late} quá hạn`} tone="danger" style={{ marginTop: 4 }} /> : null}
+      </View>
+      {open != null ? <Text maxFontSizeMultiplier={1.3} style={[sign.title, tabular, { color: open ? colors.danger : colors.muted }]}>{open}</Text> : null}
+      <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
     </PressableScale>
   );
 }

@@ -1,4 +1,4 @@
-import { forwardRef, useState, type ReactNode } from 'react';
+import { forwardRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Pressable, Text, TextInput, View, type TextInputProps } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
@@ -22,7 +22,7 @@ export type TextFieldProps = Omit<TextInputProps, 'style'> & {
  * with an orange rim when focused and red with a message below when wrong. Errors sit next to the field they are
  * about, never only at the top of the form.
  */
-export const TextField = forwardRef<TextInput, TextFieldProps>(function TextField(
+export const TextField = forwardRef<ComponentRef<typeof TextInput>, TextFieldProps>(function TextField(
   { label, error, hint, icon, trailing, optional, editable = true, multiline, ...input },
   ref,
 ) {
@@ -111,7 +111,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
 });
 
 /** Phone number, the account identifier everywhere in StreetBiz (0905 123 456). */
-export const PhoneField = forwardRef<TextInput, Omit<TextFieldProps, 'label'> & { label?: string }>(
+export const PhoneField = forwardRef<ComponentRef<typeof TextInput>, Omit<TextFieldProps, 'label'> & { label?: string }>(
   function PhoneField({ label = 'Số điện thoại', ...props }, ref) {
     return (
       <TextField
@@ -132,7 +132,7 @@ export const PhoneField = forwardRef<TextInput, Omit<TextFieldProps, 'label'> & 
 
 /** Password with a show/hide eye; `isNew` tells the OS to offer a strong password. */
 export const PasswordField = forwardRef<
-  TextInput,
+  ComponentRef<typeof TextInput>,
   Omit<TextFieldProps, 'label'> & { label?: string; isNew?: boolean }
 >(function PasswordField({ label = 'Mật khẩu', isNew, ...props }, ref) {
   const [shown, setShown] = useState(false);

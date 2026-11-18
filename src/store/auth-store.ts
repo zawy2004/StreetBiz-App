@@ -11,8 +11,9 @@ import {
   type AuthResult,
   type RegisterPayload,
 } from '@/core/api';
+import { apiAssetUrl } from '@/core/api/asset-url';
 import { hydrateTokens } from '@/core/api/token-storage';
-import { isWebOnlyRole, WEB_ONLY_SIGN_IN_MESSAGE } from '@/core/auth/role-routes';
+import { unregisterPush } from '@/services/notification/push';
 import type { RoleCode } from '@/core/types/role';
 
 /**
@@ -28,6 +29,8 @@ export type AppUser = {
   role_code: RoleCode;
   wardUnitId?: number;
   account_status: 'ACTIVE' | 'SUSPENDED';
+  /** Absolute URL of the profile photo; undefined shows the initials. */
+  avatarUrl?: string;
 };
 
 const USER_KEY = 'streetbiz-user';
@@ -40,6 +43,7 @@ function toAppUser(apiUser: ApiUser): AppUser {
     role_code: apiUser.roleCode,
     wardUnitId: apiUser.wardUnitId ?? undefined,
     account_status: apiUser.accountStatus === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+    avatarUrl: apiUser.avatarUrl ? apiAssetUrl(apiUser.avatarUrl) : undefined,
   };
 }
 
@@ -52,18 +56,12 @@ function persistUser(user: AppUser | null) {
 }
 
 function applyAuthResult(result: AuthResult): AppUser {
-  const user = toAppUser(result.user);
-  // The phone app holds no web-only session: undo the sign-in and tell the caller why.
-  if (isWebOnlyRole(user.role_code)) {
-    clearTokens();
-    persistUser(null);
-    throw new Error(WEB_ONLY_SIGN_IN_MESSAGE);
-  }
   setTokens({
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
     accessTokenExpiresAtUtc: result.accessTokenExpiresAtUtc,
   });
+  const user = toAppUser(result.user);
   persistUser(user);
   return user;
 }
@@ -81,6 +79,8 @@ type AuthState = {
   register: (payload: RegisterPayload) => Promise<AppUser>;
   signOut: () => Promise<void>;
   clearSessionExpired: () => void;
+  /** After the profile photo changed: the URL the API returned, or null once removed. */
+  setAvatarUrl: (avatarUrl: string | null) => void;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -100,10 +100,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       user = null;
     }
     // A profile without tokens would look signed in while every call fails: drop it.
-    // A web-only role (platform admin) has no area on the phone: drop it too.
-    if (user && (!tokens || isWebOnlyRole(user.role_code))) {
+    if (user && !tokens) {
       user = null;
-      clearTokens();
       persistUser(null);
     }
     set({ user, ready: true });
@@ -131,6 +129,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     // Best effort: an expired or revoked session must not trap the user in a signed-in UI.
     if (getTokens()) {
+      // Stop pushes to this phone first, while the session can still call the API.
+      await unregisterPush();
       try {
         await authApi.logout();
       } catch {
@@ -143,6 +143,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearSessionExpired: () => set({ sessionExpired: false }),
+
+  setAvatarUrl: (avatarUrl) =>
+    set((state) => {
+      if (!state.user) return {};
+      const user = { ...state.user, avatarUrl: avatarUrl ? apiAssetUrl(avatarUrl) : undefined };
+      persistUser(user);
+      return { user };
+    }),
 }));
 
 // When the refresh token is rejected, drop the user so the guards route to sign-in.

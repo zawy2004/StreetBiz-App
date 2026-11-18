@@ -78,7 +78,7 @@ export function PermitPass({ permit, contract, qrSize }: Props) {
           <View style={{ alignItems: 'center', gap: 10 }}>
             <View style={{ padding: 12, borderRadius: radius.photo, borderCurve: 'continuous', backgroundColor: colors.white, borderWidth: 1.5, borderColor: valid ? colors.brandTint : colors.line }}>
               <View style={{ opacity: valid ? 1 : 0.3 }}>
-                <PermitQr value={permit.qrPayload} size={qrSize} />
+                <PermitQr value={permit.qrPayload} url={permit.qrUrl} size={qrSize} />
               </View>
               {valid ? null : (
                 <View

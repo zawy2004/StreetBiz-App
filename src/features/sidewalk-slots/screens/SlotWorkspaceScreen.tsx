@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { router, Stack, type Href } from 'expo-router';
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -59,6 +59,18 @@ export function SlotWorkspaceScreen({ initialMode = 'choose' }: { initialMode?: 
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>(initialMode);
   const mine = useMySlotsData();
+
+  // Opened on a street from elsewhere (the home screen's "ô trống gần chỗ bạn bán"):
+  // /vendor/slots?zone=12&slot=345 focuses that slot once, then drops the params.
+  const params = useLocalSearchParams<{ zone?: string; slot?: string }>();
+  useEffect(() => {
+    const zone = Number(params.zone);
+    if (!Number.isInteger(zone) || zone <= 0) return;
+    const slot = Number(params.slot);
+    if (Number.isInteger(slot) && slot > 0) useWorkspaceStore.getState().focusSlot(zone, slot);
+    else useWorkspaceStore.getState().selectZone(zone);
+    router.setParams({ zone: undefined, slot: undefined });
+  }, [params.zone, params.slot]);
   const waiting =
     (mine.applications.data?.filter((a) => a.applicationStatus === 'MORE_INFORMATION_REQUIRED').length ?? 0) +
     (mine.incoming.data?.filter((t) => t.transferStatus === 'PENDING').length ?? 0);
