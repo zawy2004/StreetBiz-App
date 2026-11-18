@@ -1,11 +1,12 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useRef, type ComponentRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Icon } from '@/components/common/Icon';
 import { KerbStrip } from '@/components/common/KerbStrip';
 import { colors, fonts, radius, shadow, sign, space, tabular, text } from '@/theme';
-import { LEGAL_BASIS, PRIVACY, SLOT_RULES, TERMS, type LegalDocument } from './legal-content';
+import { LEGAL_BASIS, LEGAL_PAGES, PRIVACY, SLOT_RULES, TERMS, type LegalBlock, type LegalDocument } from './legal-content';
+import { readingMinutes } from './reading-time';
 
 const DOCS: Record<string, LegalDocument> = {
   terms: TERMS,
@@ -21,6 +22,72 @@ const DOC_ICON: Record<string, { sf: string; md: string }> = {
   'slot-rules': { sf: 'square.grid.3x3.fill', md: 'grid_view' },
   basis: { sf: 'building.columns.fill', md: 'account_balance' },
 };
+
+const NOTE_TONE = {
+  info: { wash: colors.signTint, ink: colors.sign, sf: 'info.circle.fill', md: 'info' },
+  warn: { wash: colors.dangerTint, ink: colors.danger, sf: 'exclamationmark.triangle.fill', md: 'warning' },
+} as const;
+
+/** One block of a section: paragraph, bullets, numbered steps, a table (as stacked rows) or a note. */
+function Block({ block }: { block: LegalBlock }) {
+  switch (block.kind) {
+    case 'p':
+      return <Text style={[text.body, { color: '#2B3640' }]}>{block.text}</Text>;
+    case 'list':
+      return (
+        <View style={{ gap: 8 }}>
+          {block.items.map((item) => (
+            <View key={item} style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ width: 6, height: 6, borderRadius: radius.full, backgroundColor: colors.brand, marginTop: 9 }} />
+              <Text style={[text.body, { flex: 1, color: '#2B3640' }]}>{item}</Text>
+            </View>
+          ))}
+        </View>
+      );
+    case 'steps':
+      return (
+        <View style={{ gap: 10 }}>
+          {block.items.map((item, i) => (
+            <View key={item} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+              <View style={{ width: 26, height: 26, borderRadius: radius.full, backgroundColor: colors.cta, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+                <Text accessibilityElementsHidden style={[text.caption, tabular, { color: colors.white }]}>{i + 1}</Text>
+              </View>
+              <Text style={[text.body, { flex: 1, color: '#2B3640' }]}>{item}</Text>
+            </View>
+          ))}
+        </View>
+      );
+    case 'table':
+      // A phone has no room for columns: each row becomes a card whose first cell is its title.
+      return (
+        <View style={{ gap: 8 }}>
+          {block.rows.map((row) => (
+            <View key={row[0]} accessible style={{ borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: colors.sunken, padding: 12, gap: 6 }}>
+              <Text style={{ fontFamily: fonts.heavy, fontSize: 15, lineHeight: 20, color: colors.ink }}>{row[0]}</Text>
+              {row.slice(1).map((cell, i) => (
+                <View key={block.head[i + 1]} style={{ gap: 1 }}>
+                  <Text style={[text.caption, { color: colors.muted }]}>{block.head[i + 1]}</Text>
+                  <Text style={[text.callout, { color: '#2B3640' }]}>{cell}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      );
+    case 'note': {
+      const tone = NOTE_TONE[block.tone];
+      return (
+        <View accessible accessibilityLabel={`${block.title}. ${block.text}`} style={{ flexDirection: 'row', gap: 10, borderRadius: radius.pass, borderCurve: 'continuous', backgroundColor: tone.wash, padding: 12 }}>
+          <Icon sf={tone.sf} md={tone.md} size={20} color={tone.ink} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ fontFamily: fonts.heavy, fontSize: 15, lineHeight: 20, color: tone.ink }}>{block.title}</Text>
+            <Text style={[text.callout, { color: colors.ink }]}>{block.text}</Text>
+          </View>
+        </View>
+      );
+    }
+  }
+}
 
 /**
  * L02–L05: the four static legal pages (screens/v5/shared-admin.md). A cover with the painted kerb,
@@ -59,9 +126,22 @@ export function LegalScreen() {
           <Text style={[text.callout, { color: '#2B3640' }]}>{document.summary}</Text>
           <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full, backgroundColor: colors.sunken }}>
             <Icon sf="calendar" md="event" size={13} color={colors.muted} />
-            <Text style={[text.caption, tabular, { color: colors.muted }]}>Cập nhật ngày {document.updatedAt}</Text>
+            <Text style={[text.caption, tabular, { color: colors.muted }]}>
+              Cập nhật ngày {document.updatedAt} · Đọc khoảng {readingMinutes(document)} phút
+            </Text>
           </View>
         </View>
+      </View>
+
+      {/* The points not to miss */}
+      <View style={{ borderRadius: radius.card, borderCurve: 'continuous', backgroundColor: colors.leafTint, padding: 16, gap: 10 }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 17, color: colors.onLeaf }}>Tóm tắt nhanh</Text>
+        {document.highlights.map((point) => (
+          <View key={point} style={{ flexDirection: 'row', gap: 10 }}>
+            <Icon sf="checkmark.circle.fill" md="check_circle" size={18} color={colors.leaf} />
+            <Text style={[text.callout, { flex: 1, color: colors.ink }]}>{point}</Text>
+          </View>
+        ))}
       </View>
 
       {/* Contents: a list that jumps to its section */}
@@ -123,15 +203,31 @@ export function LegalScreen() {
                 {s.title}
               </Text>
             </View>
-            {s.paragraphs.map((p, j) => (
-              <View key={j} style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ width: 6, height: 6, borderRadius: radius.full, backgroundColor: colors.brand, marginTop: 9 }} />
-                <Text style={[text.body, { flex: 1, color: '#2B3640' }]}>{p}</Text>
-              </View>
+            {s.blocks.map((block, j) => (
+              <Block key={`${s.id}-${j}`} block={block} />
             ))}
           </View>
         </View>
       ))}
+
+      <View style={{ gap: 10 }}>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.heavy, fontSize: 19, color: colors.ink, marginLeft: 4 }}>Xem thêm</Text>
+        <View style={{ borderRadius: radius.card, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.card, boxShadow: shadow.card }}>
+          {LEGAL_PAGES.filter((page) => page.title !== document.title).map((page, i) => (
+            <Pressable
+              key={page.to}
+              onPress={() => router.replace(page.to as Href)}
+              accessibilityRole="link"
+              accessibilityLabel={page.title}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: pressed ? colors.pressed : colors.card, borderTopWidth: i ? 1 : 0, borderTopColor: colors.separator })}
+            >
+              <Icon sf="doc.text" md="description" size={18} color={colors.primary} />
+              <Text style={{ flex: 1, fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colors.ink }}>{page.title}</Text>
+              <Icon sf="chevron.right" md="chevron_right" size={13} color={colors.muted} />
+            </Pressable>
+          ))}
+        </View>
+      </View>
     </ScrollView>
   );
 }
